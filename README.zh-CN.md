@@ -1,121 +1,358 @@
 [English](README.md) | **中文**
 
-# 追踪建造者，而非网红
+# Follow-up：AI 信息信号与注意力策展
 
-一个 AI 驱动的信息聚合工具，追踪 AI 领域最顶尖的建造者——研究员、创始人、产品经理和工程师——并将他们的最新动态整理成易于消化的摘要推送给你。
+> 追踪建造者，而非网红——并超越于此。
 
-**理念：** 追踪那些真正在做产品、有独立见解的人，而非只会搬运信息的网红。
+一个 **Skill-first、plugin-enhanced** 的个人 AI 信息策展系统，从全球 AI 与科技领域的 **7 类精选来源** 聚合内容，将信息压缩为可行动 Signal，并通过 IM、邮件或 Agent 对话送达。
+基于 [follow-builders](https://github.com/zarazhangrui/follow-builders) 架构构建，
+扩展覆盖学术研究、Newsletter、中文科技媒体和行业报告。
+
+**核心理念：** 追踪那些真正在做产品、写原创研究、有独立见解的人，而非只会搬运信息的网红。
+融合中西视角，构建统一、低噪声的个人注意力信息流。
+
+## 产品定位
+
+> Follow-up 是一个 Skill-first、plugin-enhanced 的个人 AI Signal / Attention 策展系统。Skill 是跨 Agent 的通用入口；DeepSeek Harness 插件是规划中的富交互信息中心；抓取、状态、调度和投递由独立组件承担。
+
+Follow-up 默认产出的是 **Signal，不是 Knowledge**：
+
+```text
+抓取到 ≠ 可信
+摘要完成 ≠ 你看过
+推送成功 ≠ 你理解
+收藏内容 ≠ 经实践验证
+```
+
+### 产品结构
+
+| 组件 | 职责 |
+|---|---|
+| Follow-up Skill | 安装、Onboarding、配置、按需摘要和自然语言反馈 |
+| DeepSeek Harness Plugin（规划中） | 高度个性化的多平台信息中心、主题聚合、推荐解释和批量反馈 |
+| Follow-up Core / Contract（规划中） | 统一 Signal、Topic、Digest、Feedback、Delivery 和 Handoff 语义 |
+| Feed Pipeline | 抓取、解析、去重、缓存和来源健康 |
+| Delivery Runtime | 定时、IM/邮件投递、重试和投递回执 |
+| Local User State（规划中） | 打开、忽略、稍后读以及学习/项目/知识候选请求事件 |
+
+DeepSeek Harness 插件只投影共享的 Follow-up Core / State，不重新抓取 Feed、不维护平行阅读状态，也不成为新的 Knowledge Authority。
+
+### 与个人 AI 系统的关系
+
+| 系统 | 职责 |
+|---|---|
+| LifeSub | Evidence：现实中真实发生过什么 |
+| Follow-up | Signal / Attention：外部世界有什么值得注意 |
+| Malow | Work：哪些 Signal 要进入 Project / Matter、行动或决策 |
+| GoldenWave | Memory：什么值得成为长期、可审计的个人上下文 |
+
+Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。未来集成也只提交可审计 proposal，由下游系统决定是否接纳和晋升。完整边界见[产品定位设计](docs/superpowers/specs/2026-08-28-skill-first-positioning-design.md)。
+
+## 7 类来源策略
+
+当前已经生成 6 类实时 Feed：X、播客、官方博客、Newsletter、学术论文和中文科技。行业报告属于低频来源规划，尚未形成稳定实时 Feed。
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                   Follow-up 信息信号摘要                            │
+├──────────────────────────────────────────────────────────────────┤
+│ 频道 1 │ AI 建造者 & 思想领袖（X/Twitter）                          │
+│ 频道 2 │ 顶级 AI 播客 & 视频                                       │
+│ 频道 3 │ 公司官方博客                                               │
+│ 频道 4 │ 高质量 Newsletter                                         │
+│ 频道 5 │ 学术论文 & 前沿研究                                        │
+│ 频道 6 │ 中文科技生态                                               │
+│ 频道 7 │ 行业报告 & 深度分析                                        │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### 频道 1：AI 建造者 & 思想领袖（X/Twitter）
+
+追踪那些真正在创造未来的人——一线 AI 实验室和创业公司的研究员、创始人、产品经理和工程师。
+他们的推文是即将到来的趋势的最早信号。
+
+**30+ 位精选建造者**，包括：
+
+| 类别 | 人物 |
+|------|------|
+| AI 实验室领导者 | Sam Altman (OpenAI), Dario Amodei (Anthropic), Demis Hassabis (DeepMind) |
+| 研究员-建造者 | Andrej Karpathy, Amanda Askell, Boris Cherny, Swyx |
+| 产品领导者 | Josh Woodward (Google Labs), Thariq (Claude Code), Thibault Sottiaux (OpenAI) |
+| 创始人/投资人 | Amjad Masad (Replit), Guillermo Rauch (Vercel), Garry Tan (YC), Matt Turck (FirstMark) |
+| 独立声音 | Dan Shipper (Every), Zara Zhang, Peter Steinberger, Aaron Levie (Box) |
+
+### 频道 2：顶级 AI 播客 & 视频
+
+与 AI 建造者的深度对话。每期节目文稿被提炼为关键洞察——无需观看完整 2 小时视频。
+
+**10+ 播客**，包括：
+
+- **Latent Space** — AI 工程师必听播客
+- **Training Data**（Sequoia）— 创始人视角
+- **No Priors**（Elad Gil & Sarah Guo）— VC 视角看 AI
+- **Unsupervised Learning**（Redpoint）— AI 创业深度分析
+- **The MAD Podcast**（Matt Turck）— 数据与 AI 生态
+- **AI & I**（Dan Shipper / Every）— AI 如何改变工作
+- **Lex Fridman Podcast** — 与 AI 领袖的长篇对话
+- **The Cognitive Revolution**（Nathan Labenz）— AI 建造者与研究者
+- **Lightcone**（YC）— 创业建设建议
+- **Acquired** — 伟大科技公司深度剖析
+
+### 频道 3：公司官方博客
+
+来自 AI 实验室和科技公司的一手信息源。无中间商，无滤镜——只有技术细节和产品公告。
+
+**8+ 官方博客：**
+
+| 公司 | 博客 | 关注点 |
+|------|------|--------|
+| OpenAI | openai.com/research | 研究、产品、安全 |
+| Anthropic | anthropic.com/engineering | 工程深度文章 |
+| Anthropic | claude.com/blog | Claude 产品更新 |
+| Google DeepMind | deepmind.google/blog | 研究突破 |
+| Google AI | ai.googleblog.com | 应用 AI 研究 |
+| Meta AI | ai.meta.com/blog | 开源 AI、Llama |
+| Microsoft Research | microsoft.com/research | 系统与应用 AI |
+| NVIDIA | blogs.nvidia.com | 硬件、CUDA、AI 基础设施 |
+| Mistral AI | mistral.ai/news | 开源模型 |
+
+### 频道 4：高质量 Newsletter
+
+由领域专家撰写的精选通讯，将 AI 新闻洪流提炼为结构化、可操作的简报。
+这些人替你读了所有东西。
+
+| Newsletter | 作者 | 频率 | 关注点 |
+|------------|------|------|--------|
+| **The Batch** | Andrew Ng / DeepLearning.AI | 每周 | AI 新闻 + 专家点评 |
+| **Ben's Bites** | Ben Tossell | 每日 | 5 分钟读完最新 AI 工具 |
+| **TLDR AI** | TLDR 团队 | 每日 | 结构化 AI 新闻简报 |
+| **Import AI** | Jack Clark (Anthropic) | 每周 | AI 政策、研究、产业 |
+| **The Algorithmic Bridge** | Alberto Romero | 每周 | 批判性 AI 分析 |
+| **AI Snake Oil** | Arvind Narayanan & Sayash Kapoor | 每月 | AI 炒作揭秘 |
+| **Stratechery** | Ben Thompson | 每日 | 科技战略分析 |
+| **The Gradient** | The Gradient 团队 | 每周 | AI 研究综述 |
+
+### 频道 5：学术论文 & 前沿研究
+
+追踪 AI 研究的最前沿——从 arXiv 预印本和顶级会议论文到重大奖项公告。
+
+**数据源：**
+
+- **arXiv** — cs.AI, cs.CL, cs.CV, cs.LG, cs.MA（多智能体）, stat.ML
+- **Papers With Code** — 热门论文 + SOTA 基准
+- **Semantic Scholar** — 高引用最新论文、作者提醒
+- **会议论文** — NeurIPS, ICML, ICLR, CVPR, ACL, EMNLP, AAAI, SIGGRAPH
+- **重大奖项** — 图灵奖、NeurIPS 最佳论文、ICML 杰出论文
+
+**筛选策略：** 仅推送符合以下条件的论文：
+1. 高引用或热门（下载/提及量前 5%）
+2. 来自顶级会议（NeurIPS/ICML/ICLR/CVPR/ACL）
+3. 来自主要实验室（OpenAI, Anthropic, DeepMind, Meta FAIR 等）
+4. 与 AI 产品管理、智能体、LLM 或多模态 AI 直接相关
+
+### 频道 6：中文科技生态
+
+中国 AI 生态以不同的节奏和方向演进。通过官方媒体、独立博客和微信公众号追踪中文视角。
+
+**数据源：**
+
+| 类型 | 来源 | 关注点 |
+|------|------|--------|
+| 科技媒体 | 机器之心 (jiqizhixin) | AI 新闻 + 技术分析 |
+| 科技媒体 | 量子位 (QbitAI) | AI 行业新闻 |
+| 科技媒体 | 少数派 (sspai) | 生产力与工具 |
+| 深度分析 | 36氪 (36Kr) | 创业与科技产业 |
+| 学术媒体 | 新智元 (AI Era) | AI 研究与产业 |
+| 微信公众号 | 李开复、陆奇等 | 个人思想领袖 |
+| 微信公众号 | 各 AI 公司官方号 | 公司公告 |
+| 学术机构 | 清北 AI 实验室、中科院自动化所 | 中国学术研究 |
+
+### 频道 7：行业报告 & 深度分析
+
+来自投行、咨询公司和研究机构的深度报告，提供宏观层面的背景分析。
+
+**数据源：**
+
+- VC 年度报告：a16z, Sequoia, FirstMark, Bessemer
+- State of AI Report（Nathan Benaich / Air Street Capital）
+- McKinsey / BCG / Gartner AI 报告
+- CB Insights AI 趋势
+- Stanford HAI AI Index Report
+- 亿欧智库 / 艾瑞咨询（中国行业报告）
 
 ## 你会得到什么
 
-每日或每周推送到你常用的通讯工具（Telegram、Discord、WhatsApp 等），包含：
+每日或每周推送到你常用通讯工具的可行动 Signal 摘要，包含：
 
-- 顶级 AI 播客新节目的精华摘要
-- 26 位精选 AI 建造者在 X/Twitter 上的关键观点和洞察
-- AI 公司官方博客的完整文章（Anthropic Engineering、Claude Blog）
-- 所有原始内容的链接
-- 支持英文、中文或双语版本
+- **AI 建造者脉搏** — 顶级建造者在 X 上的最新动态（每人 1-2 句）
+- **播客深度解析** — 最新节目的核心要点（200-400 字）
+- **官方博客更新** — 新产品发布、研究发现、政策变化
+- **Newsletter 汇总** — 所有追踪 Newsletter 的交叉引用亮点
+- **论文聚焦** — 1-2 篇值得关注的论文，附通俗解释
+- **中文科技简报** — 中文 AI 媒体精选亮点
+- **报告提醒（规划中）** — 重大行业报告发布通知
+
+所有内容均附原始链接。支持英文、中文或双语版本。Digest 默认不会写入 GoldenWave，也不代表你已经阅读、理解或认可其中内容。
 
 ## 快速开始
 
-1. 在你的 AI agent 中安装此 skill（OpenClaw 或 Claude Code）
+1. 在你的 AI agent 中安装此 skill（Hermes、OpenClaw 或 Claude Code）
 2. 输入 "set up follow builders" 或执行 `/follow-builders`
-3. Agent 会以对话方式引导你完成设置——不需要手动编辑任何配置文件
+3. Agent 会以对话方式引导你完成设置
 
 Agent 会询问你：
 - 推送频率（每日或每周）和时间
-- 语言偏好
-- 推送方式（Telegram、邮件或直接在聊天中显示）
+- 语言偏好（英文、中文或双语）
+- 推送方式（聊天中显示、Telegram、邮件）
 
-不需要任何 API key——所有内容由中心化服务统一抓取。
-设置完成后，你的第一期摘要会立即推送。
+不需要用户提供来源抓取 API key，内容由中心化服务统一抓取。Telegram 或邮件等外部投递仍需要用户自己的投递凭据。
 
-## 修改设置
+> 当前版本会读取全部 6 类实时 Feed。按用户配置真正执行频道开关仍在规划中；配置界面不应宣称已完成筛选。
 
-通过对话即可修改推送偏好。直接告诉你的 agent：
+## 自定义摘要
 
-- "改成每周一早上推送"
-- "语言换成中文"
-- "把摘要写得更简短一些"
-- "显示我当前的设置"
+Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
+你可以通过对话或直接编辑来定制。
 
-信息源列表（建造者和播客）由中心化统一管理和更新——你无需做任何操作即可获得最新的信息源。
+### Prompt 文件
 
-## 自定义摘要风格
+| 文件 | 控制内容 |
+|------|----------|
+| `prompts/digest-intro.md` | 整体摘要格式和语气 |
+| `prompts/summarize-tweets.md` | X/Twitter 帖子摘要方式 |
+| `prompts/summarize-podcast.md` | 播客节目摘要方式 |
+| `prompts/summarize-blogs.md` | 博客文章摘要方式 |
+| `prompts/summarize-newsletter.md` | Newsletter 摘要方式 |
+| `prompts/summarize-paper.md` | 学术论文摘要方式 |
+| `prompts/summarize-zh-sources.md` | 中文源摘要方式 |
+| `prompts/translate.md` | 英文内容翻译为中文的方式 |
 
-Skill 使用纯文本 prompt 文件来控制内容的摘要方式。你可以通过两种方式自定义：
+### 频道节奏（目标策略）
 
-**通过对话（推荐）：**
-直接告诉你的 agent——"摘要写得更简练一些"、"多关注可操作的洞察"、"用更轻松的语气"。Agent 会自动帮你更新 prompt。
-
-**直接编辑（高级用户）：**
-编辑 `prompts/` 文件夹中的文件：
-- `summarize-podcast.md` — 播客节目的摘要方式
-- `summarize-tweets.md` — X/Twitter 帖子的摘要方式
-- `summarize-blogs.md` — 博客文章的摘要方式
-- `digest-intro.md` — 整体摘要的格式和语气
-- `translate.md` — 英文内容翻译为中文的方式
-
-这些都是纯文本指令，不是代码。修改后下次推送即生效。
+目标上，不同来源应采用不同节奏：
+- **每日：** 建造者 + Newsletter + 博客（快速信号）
+- **每周：** 播客 + 论文 + 中文科技（深度内容）
+- **每月：** 行业报告 + 会议综述（宏观背景）
 
 ## 默认信息源
 
-### 播客（6个）
+### X 上的 AI 建造者（30+ 位）
+[Andrej Karpathy](https://x.com/karpathy), [Swyx](https://x.com/swyx), [Josh Woodward](https://x.com/joshwoodward), [Boris Cherny](https://x.com/bcherny), [Thibault Sottiaux](https://x.com/thsottiaux), [Peter Yang](https://x.com/petergyang), [Nan Yu](https://x.com/thenanyu), [Madhu Guru](https://x.com/realmadhuguru), [Amanda Askell](https://x.com/AmandaAskell), [Cat Wu](https://x.com/_catwu), [Thariq](https://x.com/trq212), [Google Labs](https://x.com/GoogleLabs), [Amjad Masad](https://x.com/amasad), [Guillermo Rauch](https://x.com/rauchg), [Alex Albert](https://x.com/alexalbert__), [Aaron Levie](https://x.com/levie), [Ryo Lu](https://x.com/ryolu_), [Garry Tan](https://x.com/garrytan), [Matt Turck](https://x.com/mattturck), [Zara Zhang](https://x.com/zarazhangrui), [Nikunj Kothari](https://x.com/nikunj), [Peter Steinberger](https://x.com/steipete), [Dan Shipper](https://x.com/danshipper), [Aditya Agarwal](https://x.com/adityaag), [Sam Altman](https://x.com/sama), [Claude](https://x.com/claudeai), [Dario Amodei](https://x.com/dario_amodei_h), [Nathan Labenz](https://x.com/nathanlabenz), [Jack Clark](https://x.com/jackclarksf), [Ben Tossell](https://x.com/bentossell)
+
+### 播客（10+）
 - [Latent Space](https://www.youtube.com/@LatentSpacePod)
 - [Training Data](https://www.youtube.com/playlist?list=PLOhHNjZItNnMm5tdW61JpnyxeYH5NDDx8)
 - [No Priors](https://www.youtube.com/@NoPriorsPodcast)
 - [Unsupervised Learning](https://www.youtube.com/@RedpointAI)
 - [The MAD Podcast with Matt Turck](https://www.youtube.com/@DataDrivenNYC)
 - [AI & I by Every](https://www.youtube.com/playlist?list=PLuMcoKK9mKgHtW_o9h5sGO2vXrffKHwJL)
+- [Lex Fridman Podcast](https://www.youtube.com/@lexfridman)
+- [The Cognitive Revolution](https://www.youtube.com/@CognitiveRevolutionPodcast)
+- [Lightcone (YC)](https://www.youtube.com/@ycombinator)
+- [Acquired](https://www.youtube.com/@AcquiredFM)
 
-### X 上的 AI 建造者（26位）
-[Andrej Karpathy](https://x.com/karpathy), [Swyx](https://x.com/swyx), [Josh Woodward](https://x.com/joshwoodward), [Boris Cherny](https://x.com/bcherny), [Thibault Sottiaux](https://x.com/thsottiaux), [Peter Yang](https://x.com/petergyang), [Nan Yu](https://x.com/thenanyu), [Madhu Guru](https://x.com/realmadhuguru), [Amanda Askell](https://x.com/AmandaAskell), [Cat Wu](https://x.com/_catwu), [Thariq](https://x.com/trq212), [Google Labs](https://x.com/GoogleLabs), [Amjad Masad](https://x.com/amasad), [Guillermo Rauch](https://x.com/rauchg), [Alex Albert](https://x.com/alexalbert__), [Aaron Levie](https://x.com/levie), [Ryo Lu](https://x.com/ryolu_), [Garry Tan](https://x.com/garrytan), [Matt Turck](https://x.com/mattturck), [Zara Zhang](https://x.com/zarazhangrui), [Nikunj Kothari](https://x.com/nikunj), [Peter Steinberger](https://x.com/steipete), [Dan Shipper](https://x.com/danshipper), [Aditya Agarwal](https://x.com/adityaag), [Sam Altman](https://x.com/sama), [Claude](https://x.com/claudeai)
+### 官方博客（8+）
+- [OpenAI Research](https://openai.com/research)
+- [Anthropic Engineering](https://www.anthropic.com/engineering)
+- [Claude Blog](https://claude.com/blog)
+- [Google DeepMind](https://deepmind.google/blog)
+- [Meta AI](https://ai.meta.com/blog)
+- [Microsoft Research](https://www.microsoft.com/en-us/research/blog)
+- [NVIDIA Blog](https://blogs.nvidia.com)
+- [Mistral AI News](https://mistral.ai/news)
 
-### 官方博客（2个）
-- [Anthropic Engineering](https://www.anthropic.com/engineering) — Anthropic 团队的技术深度文章
-- [Claude Blog](https://claude.com/blog) — Claude 的产品公告与更新
+### Newsletter（8 个）
+- [The Batch by Andrew Ng](https://www.deeplearning.ai/the-batch)
+- [Ben's Bites](https://bensbites.beehiiv.com)
+- [TLDR AI](https://tldr.tech/ai)
+- [Import AI by Jack Clark](https://importai.substack.com)
+- [The Algorithmic Bridge](https://www.thealgorithmicbridge.com)
+- [AI Snake Oil](https://www.aisnakeoil.com)
+- [Stratechery by Ben Thompson](https://stratechery.com)
+- [The Gradient](https://thegradient.pub)
+
+### 学术源
+- [arXiv cs.AI / cs.CL / cs.LG / cs.CV](https://arxiv.org)
+- [Papers With Code](https://paperswithcode.com)
+- [Semantic Scholar](https://www.semanticscholar.org)
+- [NeurIPS Proceedings](https://proceedings.neurips.cc)
+- [ICML Proceedings](https://proceedings.mlr.press)
+- [ICLR Papers](https://openreview.net/group?id=ICLR.cc)
+- [CVPR / ACL / EMNLP / AAAI](https://openaccess.thecvf.com)
+
+### 中文科技生态
+- [机器之心 (jiqizhixin.com)](https://www.jiqizhixin.com)
+- [量子位 (QbitAI)](https://www.qbitai.com)
+- [少数派 (sspai.com)](https://sspai.com)
+- [36氪 (36kr.com)](https://36kr.com)
+- [新智元 (AI Era)](https://www.aiera.com.cn)
+
+### 行业报告
+- [State of AI Report](https://www.stateof.ai)
+- [Stanford HAI AI Index](https://hai.stanford.edu/ai-index)
+- [a16z AI Canon](https://a16z.com/ai-canon)
+- [CB Insights AI Research](https://www.cbinsights.com/research/artificial-intelligence)
+
+## 工作原理
+
+1. **中心化 Feed 生成：** GitHub Actions 每日运行，从 6 类实时来源抓取内容
+   （X/Twitter API、YouTube 字幕通过 Pod2Text、博客和 Newsletter 的 RSS、
+   arXiv API、中文源的网页抓取）
+2. **你的 Agent 获取 Feed：** 一次 HTTP 请求，无需 API key
+3. **AI 混编 Signal：** Agent 使用 prompt 文件将原始内容重组为结构化、
+   可扫描的摘要，根据你的偏好定制
+4. **摘要推送：** 到通讯工具或直接在聊天中显示
+5. **反馈与 Handoff（规划中）：** DeepSeek Harness 信息中心承载深度浏览与显式操作，再向 Malow 或 GoldenWave 提交 proposal
 
 ## 安装
 
+### Hermes Agent
+```bash
+git clone https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
+cd ~/Documents/MyProject/Follow-up/scripts && npm install
+```
+
 ### OpenClaw
 ```bash
-# 从 ClawhHub 安装（即将上线）
 clawhub install follow-builders
-
-# 或手动安装
-git clone https://github.com/zarazhangrui/follow-builders.git ~/skills/follow-builders
-cd ~/skills/follow-builders/scripts && npm install
 ```
 
 ### Claude Code
 ```bash
-git clone https://github.com/zarazhangrui/follow-builders.git ~/.claude/skills/follow-builders
+git clone https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
 cd ~/.claude/skills/follow-builders/scripts && npm install
 ```
 
-## 系统要求
+## 配置
 
-- 一个 AI agent（OpenClaw、Claude Code 或类似工具）
-- 网络连接（用于获取中心化 feed）
+所有设置存储在 `~/.follow-builders/config.json`：
 
-仅此而已。不需要任何 API key。所有内容（博客文章 + YouTube 字幕 + X/Twitter 帖子）由中心化服务每日抓取更新。
-
-## 工作原理
-
-1. 中心化 feed 每日更新，抓取所有信息源的最新内容（博客文章通过网页抓取，YouTube 字幕通过 Supadata，X/Twitter 通过官方 API）
-2. 你的 agent 获取 feed——一次 HTTP 请求，不需要 API key
-3. 你的 agent 根据你的偏好将原始内容重新混编为易消化的摘要
-4. 摘要推送到你的通讯工具（或直接在聊天中显示）
-
-查看 [examples/sample-digest.md](examples/sample-digest.md) 了解输出示例。
+```json
+{
+  "platform": "other",
+  "language": "bilingual",
+  "timezone": "Asia/Shanghai",
+  "frequency": "daily",
+  "deliveryTime": "08:00",
+  "delivery": {
+    "method": "stdout"
+  }
+}
+```
 
 ## 隐私
 
-- 不发送任何 API key——所有内容由中心化服务获取
+- 不需要把来源抓取 API key 交给 Skill，公开内容由中心化服务获取
 - 如果你使用 Telegram/邮件推送，相关 key 仅存储在本地 `~/.follow-builders/.env`
-- Skill 只读取公开内容（公开的博客文章、YouTube 视频和 X 帖子）
-- 你的配置、偏好和阅读记录都保留在你自己的设备上
+- Skill 只读取公开内容
+- 你的配置和自定义 Prompt 保留在自己的设备上
+- 阅读与反馈状态尚未正式实现；未来必须使用本地用户状态，不与公共 Feed 或代码一起提交
 
 ## 许可证
 
 MIT
+
+---
+
+*原始项目：[follow-builders](https://github.com/zarazhangrui/follow-builders) by Zara Zhang*
+*由 GoldenWave 扩展为多来源 Signal / Attention 策展策略*
