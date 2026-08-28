@@ -92,6 +92,16 @@ External Sources
 
 Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。未来 Contract 实现后，显式用户动作也只能产生带来源、幂等键和审计信息的 Handoff / Candidate proposal；是否接纳、写入或晋升仍由下游系统决定。
 
+### `learn_requested` 的下游边界
+
+Capability Alignment 的状态与治理归 GoldenWave，学习任务、实践和 Outcome Review 由 Malow 执行。Follow-up 对学习链路只负责：
+
+- 保存用户针对某个 Signal 发起的 `learn_requested` 事件；
+- 携带 Signal Ref、Source Ref、选择理由、请求时间和幂等信息提交 Learning Handoff；
+- 展示下游是否已接收、拒绝或需要补充信息的回执。
+
+Follow-up 不生成正式 `human_state` / `agent_state`，不因打开、收藏、阅读时长或完成摘要而标记 `understood`、`practiced` 或 `validated`。教学材料可以通过外部 Tutor Capability 生成，但学习状态由 GoldenWave 治理，实践证据由 Malow 产生。
+
 ## 知识膨胀护栏
 
 1. Digest、Feed Item 和普通摘要默认不进入个人知识库。
@@ -120,6 +130,7 @@ Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。�
 - DeepSeek Harness 信息中心插件与统一 Follow-up Core / Contract；
 - Malow Handoff Contract；
 - GoldenWave Candidate Contract；
+- Learning Handoff 与 Capability Alignment 回执 Contract；
 - 基于真实反馈的排序学习；
 - 知识预算和专题聚合。
 
