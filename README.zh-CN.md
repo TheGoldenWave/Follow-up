@@ -48,6 +48,29 @@ DeepSeek Harness 插件只投影共享的 Follow-up Core / State，不重新抓�
 
 Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。未来集成也只提交可审计 proposal，由下游系统决定是否接纳和晋升。完整边界见[产品定位设计](docs/superpowers/specs/2026-08-28-skill-first-positioning-design.md)。
 
+### 当前状态与目标方向
+
+当前版本仍然消费由维护者集中生成的公共 Feed。在各来源通过 shadow 验收前，
+这仍是项目对外描述的真实运行方式。
+
+下一阶段将信息采集迁移到每位用户的本地环境：
+
+```text
+本地调度器 -> Acquisition Runtime -> Source Adapter / Sidecar
+           -> 版本化 Signal Batch -> Follow-up Core -> Digest / 投递
+```
+
+- 来源 API Key、Cookie、登录会话、配额和平台账号风险由用户自行拥有与承担。
+- Follow-up 维护者不托管共享来源凭据，也不承担来源 API 费用。
+- 优先通过经过审计的 Vendor 快照复用许可兼容的成熟实现，不无谓重写平台协议。
+- GitHub、Hacker News、Reddit、RSS、YouTube、Techmeme、Digg AI 1000 和 arXiv
+  通过本地 Adapter 或由 Follow-up 管理的本地工具运行。
+- 小红书和微信公众号使用仅在本机运行的 Sidecar 维护长期登录态，不依赖
+  Follow-up 维护者运营的服务。
+
+详细设计见[本地采集架构](docs/superpowers/specs/2026-09-01-local-acquisition-adapters-design.md)，
+实施顺序见[开发计划](docs/superpowers/plans/2026-09-02-local-acquisition-adapters.md)。
+
 ## 7 类来源策略
 
 当前已经生成 6 类实时 Feed：X、播客、官方博客、Newsletter、学术论文和中文科技。行业报告属于低频来源规划，尚未形成稳定实时 Feed。
@@ -295,6 +318,8 @@ Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
 
 ## 工作原理
 
+### 当前版本
+
 1. **中心化 Feed 生成：** GitHub Actions 每日运行，从 6 类实时来源抓取内容
    （X/Twitter API、YouTube 字幕通过 Pod2Text、博客和 Newsletter 的 RSS、
    arXiv API、中文源的网页抓取）
@@ -303,6 +328,18 @@ Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
    可扫描的摘要，根据你的偏好定制
 4. **摘要推送：** 到通讯工具或直接在聊天中显示
 5. **反馈与 Handoff（规划中）：** DeepSeek Harness 信息中心承载深度浏览与显式操作，再向 Malow 或 GoldenWave 提交 proposal
+
+### 后续开发路线
+
+1. **运行底座：** 建立 Python Acquisition Runtime、版本化 Signal Batch、来源健康状态、
+   本地配置和上游来源追踪机制。
+2. **免登录来源：** 将 RSS、GitHub、Hacker News 和免密 Reddit 接入 shadow 模式。
+3. **本地工具来源：** 通过 `yt-dlp` 接入 YouTube，通过固定版本 Printing Press CLI
+   接入 Digg、Techmeme 和 arXiv。
+4. **授权来源：** 在用户明确授权后接入 X、小红书和微信公众号，并隔离 Sidecar 登录态。
+5. **逐来源切换：** 每个来源独立通过质量、安全和稳定性门槛，再进入正式 Digest，
+   切换后保留 14 天回滚窗口。
+6. **中心层下线：** 现有来源全部完成本地迁移与观察后，才删除公共 Feed 运行时。
 
 ## 安装
 
@@ -342,7 +379,10 @@ cd ~/.claude/skills/follow-builders/scripts && npm install
 
 ## 隐私
 
-- 不需要把来源抓取 API key 交给 Skill，公开内容由中心化服务获取
+- 当前版本：公开内容由中心服务获取，因此不需要向 Skill 提供来源 API Key
+- 目标本地采集：来源凭据和调用成本归用户，凭据只保留在用户机器上
+- Follow-up 不运营共享登录会话、共享来源凭据或采集 Sidecar
+- 小红书和微信公众号 Sidecar 只监听本机，不提供凭据导出接口
 - 如果你使用 Telegram/邮件推送，相关 key 仅存储在本地 `~/.follow-builders/.env`
 - Skill 只读取公开内容
 - 你的配置和自定义 Prompt 保留在自己的设备上

@@ -51,6 +51,30 @@ The DeepSeek Harness plugin only projects shared Follow-up Core / State. It does
 
 Follow-up never directly or automatically writes authoritative Malow or GoldenWave state. Future integrations may only submit auditable proposals for downstream acceptance and promotion. See the [positioning design](docs/superpowers/specs/2026-08-28-skill-first-positioning-design.md).
 
+### Current Status and Target Direction
+
+The current release still consumes centrally generated public Feeds. This remains the
+documented runtime truth until each replacement source passes shadow-mode acceptance.
+
+The next architecture moves acquisition into each user's local environment:
+
+```text
+Local Scheduler -> Acquisition Runtime -> Source Adapters / Sidecars
+                -> Versioned Signal Batch -> Follow-up Core -> Digest / Delivery
+```
+
+- Users own source API keys, cookies, login sessions, quotas, and related platform risk.
+- Follow-up maintainers do not host shared source credentials or pay source API costs.
+- Mature, license-compatible implementations are reused through audited vendor snapshots;
+  Follow-up does not reimplement platform protocols without a concrete need.
+- GitHub, Hacker News, Reddit, RSS, YouTube, Techmeme, Digg AI 1000, and arXiv run
+  through local Adapters or managed local tools.
+- Xiaohongshu and WeChat Official Accounts use local-only Sidecars for persistent login
+  state. They never rely on a Follow-up-operated service.
+
+See the [local acquisition design](docs/superpowers/specs/2026-09-01-local-acquisition-adapters-design.md)
+and [implementation plan](docs/superpowers/plans/2026-09-02-local-acquisition-adapters.md).
+
 ## The 7-Category Source Strategy
 
 Six live Feed categories are currently generated: X, podcasts, official blogs, newsletters, academic papers, and Chinese tech. Industry reports remain a low-frequency source plan and do not yet have a stable live Feed.
@@ -305,6 +329,8 @@ The target cadence differs by source category:
 
 ## How It Works
 
+### Current release
+
 1. **Central Feed generation:** GitHub Actions run daily to fetch content from six
    live categories (X/Twitter API, YouTube transcripts via Pod2Text, RSS feeds for
    blogs and newsletters, arXiv API for papers, web scraping for Chinese sources)
@@ -313,6 +339,20 @@ The target cadence differs by source category:
    into a structured, scannable digest tailored to your preferences
 4. **Digest delivered:** To your messaging app or directly in chat
 5. **Feedback and handoff (planned):** A DeepSeek Harness information center supports deeper review and explicit actions, then submits proposals to Malow or GoldenWave
+
+### Development roadmap
+
+1. **Foundation:** introduce the Python Acquisition Runtime, versioned Signal Batch,
+   health taxonomy, local configuration, and audited upstream provenance.
+2. **Keyless sources:** migrate RSS, GitHub, Hacker News, and keyless Reddit into shadow mode.
+3. **Managed local tools:** add YouTube via `yt-dlp` and Digg, Techmeme, and arXiv via
+   pinned Printing Press CLIs.
+4. **Authorized sources:** add X, Xiaohongshu, and WeChat Official Accounts with explicit
+   user authorization and local Sidecar isolation.
+5. **Per-source cutover:** switch sources independently after quality, security, and
+   stability gates; retain a 14-day rollback window.
+6. **Central retirement:** remove the public Feed runtime only after all existing sources
+   complete local migration and observation.
 
 ## Installation
 
@@ -352,7 +392,10 @@ All settings are stored in `~/.follow-builders/config.json`:
 
 ## Privacy
 
-- No source-fetching API keys need to be provided to the Skill; public content is fetched centrally
+- Current release: no source-fetching API keys are provided to the Skill because public content is fetched centrally
+- Target local acquisition: source credentials and costs belong to the user and remain on the user's machine
+- Follow-up will not operate shared login sessions, source credentials, or acquisition Sidecars
+- Xiaohongshu and WeChat Sidecars bind only to the local machine and expose no credential-export API
 - If you use Telegram/email delivery, those keys are stored locally in `~/.follow-builders/.env`
 - The skill only reads public content
 - Your configuration and custom prompts stay on your machine

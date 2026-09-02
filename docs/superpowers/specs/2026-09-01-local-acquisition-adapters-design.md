@@ -1,6 +1,6 @@
 # Follow-up 用户本地采集与 Adapter 复刻方向
 
-状态：方向已确认，具体实现边界待设计
+状态：方向与首阶段实现边界已确认
 
 日期：2026-09-01
 
@@ -48,7 +48,15 @@ User / Local Scheduler
 - 所有引入代码必须记录上游仓库、版本或提交号、本地修改和后续同步策略。
 - 不自动追随上游更新。安全修复和平台协议变化经审查后再同步。
 
-`last30days` 的部分来源并非完全内置：Digg AI 1000、Techmeme 和 arXiv Adapter 会调用外部 CLI；小红书依赖已登录的本地 MCP 服务。复刻时必须逐项决定是继续使用本地运行组件，还是把许可兼容的实现一并纳入 Follow-up，不能把外部运行时依赖误写成内置能力。
+`last30days` 的部分来源并非完全内置：Digg AI 1000、Techmeme 和 arXiv Adapter 会调用外部 CLI；小红书依赖已登录的本地 MCP 服务。首阶段保留这些成熟的本地运行组件，由 Follow-up 安装器固定版本、校验哈希并管理兼容性，不能把它们误写成 Follow-up 内置的平台实现。
+
+### 3.1 复用与运行时边界
+
+- 采用受控 Vendor 快照，而不是 Git subtree 或零散复制。Vendor 清单记录上游仓库、提交、许可证、导入文件、本地补丁和同步历史。
+- Acquisition Runtime 与 Adapter 使用 Python 3.12，以最大程度复用 `last30days` 和 `we-mp-rss` 的实现及测试。
+- 现有 Digest 准备与投递继续使用 Node.js，通过版本化 Signal Batch 与 Python 采集层连接。
+- `yt-dlp`、`digg-pp-cli`、`techmeme-pp-cli` 和 `arxiv-pp-cli` 由本地安装器托管固定版本，不要求用户自行处理版本兼容。
+- Reddit 默认采用免密公开来源降级链；用户配置 ScrapeCreators API Key 后才启用深度搜索与评论增强。
 
 ### 4. 登录态平台采用本地 Sidecar
 
@@ -209,13 +217,10 @@ error
 - 旧 Feed 文件可作为测试 Fixture 或迁移样本保留，但不再作为运行时内容服务。
 - README、SKILL 和 Onboarding 只有在实现切换后，才从“中心 Feed”改为“用户本地采集与用户自有凭据”。
 
-## 尚待确认
+## 首阶段默认策略
 
-以下问题尚未在本轮讨论中最终确认：
-
-1. `last30days` 代码采用 Git subtree、受控 Vendor 目录还是人工选择性移植。
-2. Digg AI 1000、Techmeme 和 arXiv 的外部 CLI 是否继续作为本地依赖，还是复刻其底层实现。
-3. 各来源的默认启用策略、抓取频率、调用预算和用户配置 Schema。
-4. YouTube 字幕、播客转录、付费 Newsletter 和平台内容的本地保存期限与版权边界。
-
-这些问题需要在实施计划前完成设计确认。
+- 无需登录的来源默认开启；需要 API Key、Cookie 或扫码授权的来源默认关闭，用户明确启用后再配置。
+- 来源配置至少包括 `enabled`、`cadence`、`depth`、`budget` 和来源特定的非秘密输入；配置文件只存凭据引用。
+- 原文片段、YouTube 字幕和播客转录默认缓存 7 天；候选元数据和用户状态默认保存 90 天。
+- 付费 Newsletter 不持久化全文，只保留来源元数据、用户可合法访问的链接和摘要所需的短期本地输入。
+- 用户可以显式缩短或延长本地保存期限，但产品不得默认形成长期平台内容镜像。
