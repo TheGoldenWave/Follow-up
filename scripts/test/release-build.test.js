@@ -299,6 +299,25 @@ test('release workflow separates read-only build from guarded write-only publica
   assert.doesNotMatch(workflow, /--clobber|release upload .*--clobber/);
 });
 
+test('release workflow pins every action to the reviewed full commit SHA', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const expectedActions = new Map([
+    ['actions/checkout', '11d5960a326750d5838078e36cf38b85af677262'],
+    ['actions/setup-node', '49933ea5288caeca8642d1e84afbd3f7d6820020'],
+    ['actions/upload-artifact', 'ea165f8d65b6e75b540449e92b4886f43607fa02'],
+    ['actions/download-artifact', 'd3f86a106a0bac45b974a628896c90dbdf5c8093'],
+  ]);
+  const uses = [...workflow.matchAll(/^\s*-?\s*uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#\s*(.+))?$/gm)];
+
+  assert.equal(uses.length, expectedActions.size);
+  for (const [, action, revision, comment] of uses) {
+    assert.equal(revision, expectedActions.get(action), action);
+    assert.match(revision, /^[a-f0-9]{40}$/);
+    assert.match(comment ?? '', /^v4(?:\.|$)/, action);
+  }
+  assert.equal(uses.some(([, action]) => action === 'actions/download-artifact'), true);
+});
+
 test('reinstall and archive smoke tests use ordinary npm ci with isolated HOME', async () => {
   const source = await readFile(new URL(import.meta.url), 'utf8');
   assert.doesNotMatch(source, /\['ci', '--ignore-scripts'\]/);
