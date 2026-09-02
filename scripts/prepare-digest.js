@@ -53,8 +53,11 @@ const PROMPT_FILES = [
 
 // -- Fetch helpers -----------------------------------------------------------
 
-async function fetchJSON(url) {
-  const res = await fetch(url);
+export async function fetchJSON(
+  url,
+  { fetchImpl = fetch, timeoutMs = 15000 } = {},
+) {
+  const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) return null;
   return res.json();
 }

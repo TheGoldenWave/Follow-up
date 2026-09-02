@@ -143,9 +143,7 @@ function parseRssFeed(xml) {
 
     // Extract publish date
     const pubDateMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
-    const publishedAt = pubDateMatch
-      ? new Date(pubDateMatch[1].trim()).toISOString()
-      : null;
+    const publishedAt = normalizePublishedAt(pubDateMatch?.[1]?.trim());
 
     // Extract item link (for the feed output URL and fallback GUID)
     const linkMatch =
@@ -1062,7 +1060,7 @@ async function fetchRssFeeds(
   errors,
   filterKeywords,
   excludeKeywords,
-  { fetchImpl = fetch, now = Date.now } = {},
+  { fetchImpl = fetch, namespace = "rss", now = Date.now } = {},
 ) {
   const results = [];
   const nowMs = now();
@@ -1099,9 +1097,10 @@ async function fetchRssFeeds(
       const newItems = [];
       for (const item of items) {
         // Dedup: use guid as key, fall back to item link
-        const dedupKey = item.guid || item.link;
-        if (!dedupKey) continue;
-        if (state.seenArticles[dedupKey]) {
+        const legacyKey = item.guid || item.link;
+        if (!legacyKey) continue;
+        const dedupKey = `${namespace}:${source.rss}:${legacyKey}`;
+        if (state.seenArticles[dedupKey] || state.seenArticles[legacyKey]) {
           console.error(`    Skipping "${item.title}" (already seen)`);
           continue;
         }
@@ -1305,6 +1304,9 @@ async function main() {
       MAX_NEWSLETTERS_PER_SOURCE,
       state,
       errors,
+      undefined,
+      undefined,
+      { namespace: "newsletters" },
     );
     console.error(`  Found ${newsletterContent.length} new newsletter(s)`);
 
@@ -1338,6 +1340,7 @@ async function main() {
       errors,
       filterKeywords,
       excludeKeywords,
+      { namespace: "academic" },
     );
     console.error(`  Found ${academicContent.length} categories with new papers`);
 
@@ -1368,6 +1371,9 @@ async function main() {
       MAX_ZH_ARTICLES_PER_SOURCE,
       state,
       errors,
+      undefined,
+      undefined,
+      { namespace: "zh-tech" },
     );
     console.error(`  Found ${zhTechContent.length} sources with new articles`);
 

@@ -13,7 +13,11 @@ import {
   normalizePublishedAt,
   parseRssFeed,
 } from '../generate-feed.js';
-import { CENTRAL_FEEDS, loadCentralFeedData } from '../prepare-digest.js';
+import {
+  CENTRAL_FEEDS,
+  fetchJSON as fetchDigestJSON,
+  loadCentralFeedData,
+} from '../prepare-digest.js';
 
 const repositoryRoot = new URL('../../', import.meta.url);
 
@@ -131,6 +135,19 @@ test('RSS parsing uses a CDATA link as the stable fallback when GUID is missing'
   assert.equal(item.link, 'https://zh.example/posts/1');
 });
 
+test('RSS parsing keeps valid siblings when one item has a malformed publish date', () => {
+  const xml = `<rss><channel>
+    <item><title>Malformed date</title><guid>bad-date</guid><link>https://example.com/bad</link><pubDate>not-a-date</pubDate></item>
+    <item><title>Valid date</title><guid>good-date</guid><link>https://example.com/good</link><pubDate>Tue, 02 Sep 2026 08:00:00 GMT</pubDate></item>
+  </channel></rss>`;
+
+  const items = parseRssFeed(xml);
+
+  assert.equal(items.length, 2);
+  assert.equal(items[0].publishedAt, null);
+  assert.equal(items[1].publishedAt, '2026-09-02T08:00:00.000Z');
+});
+
 test('RSS fetching filters old and previously seen items before applying the source limit', async () => {
   const xml = `<rss><channel>
     <item><title>Seen item</title><guid>seen-1</guid><link>https://example.com/seen</link><pubDate>Tue, 02 Sep 2026 08:30:00 GMT</pubDate></item>
@@ -155,7 +172,10 @@ test('RSS fetching filters old and previously seen items before applying the sou
   );
 
   assert.deepEqual(result[0].items.map((item) => item.guid), ['fresh-1']);
-  assert.equal(typeof state.seenArticles['fresh-1'], 'number');
+  assert.equal(
+    typeof state.seenArticles['rss:https://example.com/rss:fresh-1'],
+    'number',
+  );
   assert.equal(state.seenArticles['old-1'], undefined);
   assert.deepEqual(errors, []);
 });
@@ -175,6 +195,60 @@ test('RSS fetching reports actionable source-specific HTTP errors', async () => 
 
   assert.deepEqual(result, []);
   assert.deepEqual(errors, ['RSS: Failed to fetch Broken Newsletter: HTTP 503']);
+});
+
+test('RSS dedupe namespaces identical GUIDs by category and source', async () => {
+  const xml = `<rss><channel><item>
+    <title>Shared GUID</title><guid>post-1</guid><link>https://example.com/post-1</link>
+    <pubDate>Tue, 02 Sep 2026 08:00:00 GMT</pubDate>
+  </item></channel></rss>`;
+  const state = { seenArticles: {} };
+  const result = await fetchRssFeeds(
+    [
+      { name: 'Source A', rss: 'https://a.example/rss', url: 'https://a.example' },
+      { name: 'Source B', rss: 'https://b.example/rss', url: 'https://b.example' },
+    ],
+    72,
+    1,
+    state,
+    [],
+    undefined,
+    undefined,
+    {
+      namespace: 'newsletters',
+      now: () => Date.parse('2026-09-02T09:00:00.000Z'),
+      fetchImpl: async () => ({ ok: true, text: async () => xml }),
+    },
+  );
+
+  assert.equal(result.length, 2);
+  assert.equal(Object.keys(state.seenArticles).length, 2);
+  assert.equal(state.seenArticles['post-1'], undefined);
+});
+
+test('RSS dedupe recognizes legacy bare keys while migrating future writes', async () => {
+  const state = { seenArticles: { 'legacy-guid': 123 } };
+  const xml = `<rss><channel><item>
+    <title>Legacy item</title><guid>legacy-guid</guid><link>https://example.com/legacy</link>
+    <pubDate>Tue, 02 Sep 2026 08:00:00 GMT</pubDate>
+  </item></channel></rss>`;
+
+  const result = await fetchRssFeeds(
+    [{ name: 'Legacy Source', rss: 'https://legacy.example/rss', url: 'https://legacy.example' }],
+    72,
+    1,
+    state,
+    [],
+    undefined,
+    undefined,
+    {
+      namespace: 'academic',
+      now: () => Date.parse('2026-09-02T09:00:00.000Z'),
+      fetchImpl: async () => ({ ok: true, text: async () => xml }),
+    },
+  );
+
+  assert.deepEqual(result, []);
 });
 
 test('category feed errors exclude failures recorded by earlier collectors', () => {
@@ -229,6 +303,63 @@ test('released RSS source configurations contain only public HTTPS sources', asy
       !`${rss} ${url}`.includes('localhost')
     )), filename);
   }
+});
+
+test('runtime blog configuration contains only sources with implemented collectors', async () => {
+  const config = await readJson('config/default-sources.json');
+
+  assert.deepEqual(config.blogs.map(({ name }) => name), [
+    'Anthropic Engineering',
+    'Claude Blog',
+  ]);
+});
+
+test('checked-in state prevents every published tweet and podcast from republishing', async () => {
+  const [state, xFeed, podcastFeed] = await Promise.all([
+    readJson('state-feed.json'),
+    readJson('feed-x.json'),
+    readJson('feed-podcasts.json'),
+  ]);
+
+  for (const account of xFeed.x) {
+    for (const tweet of account.tweets) {
+      assert.equal(typeof state.seenTweets[tweet.id], 'number', tweet.id);
+    }
+  }
+  for (const podcast of podcastFeed.podcasts) {
+    assert.equal(typeof state.seenVideos[podcast.guid], 'number', podcast.guid);
+  }
+});
+
+test('package and generation workflow run the unified test suite before generation', async () => {
+  const [packageJson, workflow] = await Promise.all([
+    readJson('scripts/package.json'),
+    readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8'),
+  ]);
+
+  assert.equal(packageJson.scripts.test, 'node --test test/*.test.js');
+  const testStep = workflow.indexOf('npm test');
+  const generateStep = workflow.indexOf('node generate-feed.js');
+  assert.ok(testStep >= 0);
+  assert.ok(generateStep > testStep);
+});
+
+test('digest JSON fetch aborts stalled requests using a bounded timeout', async (t) => {
+  const startedAt = Date.now();
+  const keepAlive = setInterval(() => {}, 100);
+  t.after(() => clearInterval(keepAlive));
+  const stalledFetch = (_url, { signal }) => new Promise((resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+
+  await assert.rejects(
+    fetchDigestJSON('https://feed.example/data.json', {
+      fetchImpl: stalledFetch,
+      timeoutMs: 10,
+    }),
+    (error) => error?.name === 'TimeoutError',
+  );
+  assert.ok(Date.now() - startedAt < 1000);
 });
 
 test('workflow dispatch and generated-file tracking cover exactly the six live categories', async () => {

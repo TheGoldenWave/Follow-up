@@ -45,13 +45,7 @@
   ],
   "blogs": [
     { "name": "Anthropic Engineering", "type": "scrape", "indexUrl": "https://www.anthropic.com/engineering", "articleBaseUrl": "https://www.anthropic.com/engineering/", "fetchMethod": "http" },
-    { "name": "Claude Blog", "type": "scrape", "indexUrl": "https://claude.com/blog", "articleBaseUrl": "https://claude.com/blog/", "fetchMethod": "http" },
-    { "name": "OpenAI Research", "type": "scrape", "indexUrl": "https://openai.com/research", "articleBaseUrl": "https://openai.com/", "fetchMethod": "http" },
-    { "name": "Google DeepMind", "type": "scrape", "indexUrl": "https://deepmind.google/blog", "articleBaseUrl": "https://deepmind.google/", "fetchMethod": "http" },
-    { "name": "Meta AI", "type": "scrape", "indexUrl": "https://ai.meta.com/blog", "articleBaseUrl": "https://ai.meta.com/", "fetchMethod": "http" },
-    { "name": "Microsoft Research", "type": "scrape", "indexUrl": "https://www.microsoft.com/en-us/research/blog", "articleBaseUrl": "https://www.microsoft.com/en-us/research/", "fetchMethod": "http" },
-    { "name": "NVIDIA Blog", "type": "scrape", "indexUrl": "https://blogs.nvidia.com", "articleBaseUrl": "https://blogs.nvidia.com/", "fetchMethod": "http" },
-    { "name": "Mistral AI News", "type": "scrape", "indexUrl": "https://mistral.ai/news", "articleBaseUrl": "https://mistral.ai/", "fetchMethod": "http" }
+    { "name": "Claude Blog", "type": "scrape", "indexUrl": "https://claude.com/blog", "articleBaseUrl": "https://claude.com/blog/", "fetchMethod": "http" }
   ],
   "newsletters": [
     { "name": "The Batch (Andrew Ng)", "rssUrl": "https://www.deeplearning.ai/the-batch/rss/", "url": "https://www.deeplearning.ai/the-batch" },
