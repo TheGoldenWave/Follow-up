@@ -62,19 +62,32 @@ for installation and upgrade and contains:
 - product version, release date, channel, minimum supported prior product version,
   and release notes URL;
 - each component's version, artifact, SHA-256 digest, supported operating systems and
-  architectures, license/provenance reference, and compatibility constraints;
+  architectures, license/provenance reference, compatibility constraints, minimum
+  secure version, and revoked versions;
 - configuration migrations and supported Signal Batch and Sidecar protocol versions;
 - whether a component requires user authorization, a login refresh, or sensitive-data
   migration;
-- package-level integrity information and the release signing identity.
+- package-level integrity information and, when supported by that release's declared
+  trust mode, the release signing identity.
 
 The manifest schema is versioned. Installers reject unknown required fields,
-unsupported platforms, invalid signatures, digest mismatches, incompatible component
-ranges, and missing migration paths before changing the active installation.
+unsupported platforms, signatures that are missing or invalid when the declared trust
+mode requires them, digest mismatches, incompatible or revoked component ranges, and
+missing migration paths before changing the active installation.
 
-GitHub's release assets and immutable Git tag establish the initial trust root.
-Artifact signing should be added before local executable and Sidecar artifacts are
-distributed; until then, SHA-256 values in the immutable tagged manifest are required.
+`v0.1.0` uses a transitional `github-tag-sha256` trust mode: the user obtains the
+release from the canonical `TheGoldenWave/Follow-up` repository over GitHub HTTPS,
+confirms that the release tag resolves to the documented commit, and verifies archive
+digests against the manifest stored in that tag. This detects corruption and accidental
+replacement but does not protect against compromise of the GitHub repository or owner
+account. `v0.1.0` therefore distributes source and JavaScript only, not prebuilt native
+executables or Sidecar images.
+
+Before distributing managed executable or Sidecar artifacts, a later release must
+introduce a stronger trust mode with a pinned verification identity, documented key or
+identity rotation, revocation handling, and CI-produced attestations or signatures.
+The upgrader applies the trust policy declared by the installed release; it must not
+silently downgrade from a signature-required mode to `github-tag-sha256`.
 
 ## Installation layout and atomic activation
 
@@ -88,7 +101,8 @@ Installed product and mutable user data are separated:
   adapters/<version>/         # immutable Adapter bundles
   tools/<tool>/<version>/     # pinned managed tools
   sidecars/<name>/<version>/  # wrappers and immutable program content
-  config/                     # user-owned configuration
+  config/generations/<id>/    # immutable-at-activation configuration generations
+  config/current              # convenience pointer resolved from active.json
   state/                      # user-owned state and reading history
   credentials/                # local secret references/material
   sidecar-data/<name>/        # persistent login/session data
@@ -96,9 +110,12 @@ Installed product and mutable user data are separated:
 ```
 
 An upgrade downloads into staging, verifies the manifest and artifacts, creates new
-immutable component directories, copies and migrates configuration in staging, and
-runs `doctor`. Only then does it atomically replace `active.json`. Mutable state,
-credentials, and Sidecar login data are never stored inside a release directory.
+immutable component directories, copies and migrates configuration into a new
+generation, and runs `doctor`. `active.json` identifies both the executable component
+set and its configuration generation; one atomic replacement activates them together.
+`config/current` is repaired from `active.json` and is not an independent source of
+truth. Mutable state, credentials, and Sidecar login data are never stored inside a
+release directory.
 
 The prior active manifest and release directories remain available through the
 post-upgrade observation window. Garbage collection retains at least the active and
@@ -130,6 +147,12 @@ Partial activation is allowed only when the new product manifest explicitly decl
 the old component compatible. If it does not, the source stays disabled or the whole
 activation is refused. The installer must never guess compatibility.
 
+Compatibility cannot override security revocation. If the release manifest marks the
+installed component below its minimum secure version or lists it as revoked, the
+affected source is disabled until the secure component is installed and any required
+authorization is completed. Other sources may continue upgrading. The Skill explains
+that the source was disabled for security rather than presenting it as merely offline.
+
 After the user completes authorization, the new Sidecar is started against a copy or
 explicitly supported reuse of its data directory, checked through the authenticated
 localhost proxy, and switched independently. A failed authorization or health check
@@ -141,10 +164,14 @@ leaves the old component and session untouched.
 - Migrations are ordered, deterministic functions that advance exactly one version.
 - Every migration is tested against representative old fixtures and is idempotent or
   protected from double execution by recorded migration state.
-- The upgrader copies configuration and applicable metadata before migration; it never
-  mutates the only copy in place.
-- Downgrade uses a restored pre-migration copy when the old runtime cannot read the new
-  schema. It does not attempt a lossy reverse migration.
+- The upgrader creates a new configuration generation before migration; it never
+  mutates the active generation in place.
+- Rollback atomically restores the previous executable set and its previous
+  configuration generation from the old `active.json`. It does not attempt a lossy
+  reverse migration.
+- User edits made after activation remain preserved in the failed generation. They are
+  not silently replayed into the old schema; the Skill may offer an explicit,
+  compatibility-checked recovery after rollback.
 - Unknown user fields are preserved unless a documented migration explicitly replaces
   them. Credentials remain references and must not appear in backups or logs as clear
   text beyond their already protected local store.
@@ -160,12 +187,48 @@ reported per source and do not become a false global success.
 
 After activation, the first real run is an observation run. A crash, unreadable
 configuration, contract failure, manifest mismatch, or failure to start the core
-runtime automatically restores the previous `active.json`. Source-specific network,
+runtime automatically restores the previous `active.json`, which restores the prior
+executable and configuration generation together. Source-specific network,
 rate-limit, or expired-login states do not roll back unrelated components; they use
 the source status and fallback rules defined by the local-acquisition design.
 
-Automatic rollback changes executable selection only. It does not silently restore
-stale content, roll credentials backward, or overwrite mutable user state.
+Automatic rollback does not silently restore stale content, roll credentials backward,
+or overwrite mutable user state outside the versioned configuration generation.
+
+## First installation
+
+`v0.1.0` does not depend on an updater that has not yet been built. Its supported first
+installation path is intentionally simple:
+
+1. The user opens the canonical GitHub Release and downloads the source archive and
+   checksum file for `v0.1.0`, or asks an Agent capable of installing a repository Skill
+   to install that exact tag.
+2. The user or Agent verifies the archive using the `github-tag-sha256` trust mode and
+   extracts it to a user-selected local directory.
+3. The Agent registers the tagged `SKILL.md` using its normal local Skill mechanism.
+   Follow-up does not modify an Agent's global Skill registry without user approval.
+4. When local Digest or delivery scripts are needed, the installer runs `npm ci` in
+   the tagged `scripts/` directory using Node.js 20 or a compatible supported runtime.
+5. The installation reports the product version from the root `VERSION` file and the
+   release manifest. A mismatch is an installation error.
+
+The `v0.1.0` release notes document these steps. Automatic discovery, staging,
+activation, and rollback are delivered with the upgrade foundation in `v0.2.0`.
+
+## Runtime content compatibility
+
+Release code and executable Prompt behavior are immutable. `v0.1.0` loads Prompt files
+from its tagged local installation by default; it must not automatically replace them
+from a mutable `main` branch. An explicitly configured custom Prompt is user data and
+is reported separately in diagnostics.
+
+Central Feeds remain mutable content services during the migration period, but each
+Feed carries a schema version. The released consumer declares the Feed schema versions
+it supports, validates every Feed before use, and reports an incompatible future schema
+instead of guessing. A schema change that remains compatible may increment a minor Feed
+schema version; an incompatible schema requires a new product release with a transition
+window in which the central generator can publish both representations or the consumer
+can read both. Feed payload changes do not alter the installed product version.
 
 ## Release pipeline
 
@@ -194,6 +257,8 @@ superseded by a new patch version.
 - Digest preparation and current delivery behavior;
 - `VERSION`, `CHANGELOG.md`, the first release manifest, manifest validation, a tracked
   release archive/checksum build path, and a Stable GitHub Release;
+- release-local Prompt loading and versioned/validated central Feed contracts so the
+  tagged consumer does not execute mutable `main`-branch Prompt behavior;
 - documentation that local acquisition, Adapter management, authorized Sidecars,
   automated configuration migration, and Skill-driven upgrades are planned rather
   than present capabilities.
