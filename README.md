@@ -367,9 +367,12 @@ not include automatic update discovery or upgrading.
 ```bash
 curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0.tar.gz
 curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/release-manifest.json
 shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
 tar -xzf Follow-up-v0.1.0.tar.gz
+cmp release-manifest.json Follow-up-v0.1.0/release-manifest.json
 cd Follow-up-v0.1.0/scripts
+node release/validate-release.js --archive-critical-only
 npm ci
 npm run validate-release:archive
 npm run test:archive
@@ -387,6 +390,20 @@ Archive validation checks the schema, version, package lock, runtime, changelog,
 and Prompt contracts, and every critical-file SHA-256. The tracked content digest is
 tag/checkout-only because an exact source archive intentionally contains no `.git`
 object database; validate it from the matching tag checkout with `npm run validate-release`.
+The dependency-free critical-file preflight runs before `npm ci`, but it necessarily
+executes the validator while checking the validator's own hash. That self-verification
+cannot establish trust by itself; the separately downloaded manifest asset, checksum,
+and resolved protected tag are the external trust anchors.
+
+### Release maintainer precondition
+
+The tag workflow does not make GitHub assets or tags immutable by itself. Before Task 6
+publishes a release, a repository administrator must enable a ruleset that protects
+`v*` tags and enable GitHub immutable releases, verify both settings externally, then
+set repository variable `RELEASE_IMMUTABILITY_CONFIRMED` to `true`. The workflow refuses
+publication without that confirmation and still refuses any already-existing release
+as defense in depth. Task 6 must re-check the external settings rather than treating the
+repository variable as proof.
 
 ### Hermes Agent
 ```bash

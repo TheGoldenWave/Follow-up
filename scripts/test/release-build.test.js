@@ -101,7 +101,7 @@ async function createReleaseRepository(t) {
       },
     });
   }
-  await run('npm', ['ci', '--ignore-scripts'], {
+  await run('npm', ['ci'], {
     cwd: join(root, 'scripts'),
     env: { ...process.env, npm_config_cache: join(root, '.npm-cache') },
   });
@@ -194,13 +194,13 @@ test('reinstalling the same archive leaves existing user configuration and crede
   const archive = join(output, 'Follow-up-v0.1.0.tar.gz');
   await run('tar', ['-xzf', archive, '-C', installRoot]);
   const program = join(installRoot, 'Follow-up-v0.1.0');
-  await run('npm', ['ci', '--ignore-scripts'], {
+  await run('npm', ['ci'], {
     cwd: join(program, 'scripts'),
     env: { ...process.env, HOME: fixtureHome, npm_config_cache: join(root, '.npm-cache') },
   });
   await rm(join(program, 'scripts', 'node_modules'), { recursive: true, force: true });
   await run('tar', ['-xzf', archive, '-C', installRoot]);
-  await run('npm', ['ci', '--ignore-scripts'], {
+  await run('npm', ['ci'], {
     cwd: join(program, 'scripts'),
     env: { ...process.env, HOME: fixtureHome, npm_config_cache: join(root, '.npm-cache') },
   });
@@ -225,7 +225,15 @@ test('the exact archive installs and passes archive-supported validation and con
   const program = join(installRoot, 'Follow-up-v0.1.0');
   const { NODE_TEST_CONTEXT: _nodeTestContext, ...archiveEnvironment } = process.env;
   await assert.rejects(stat(join(program, '.git')));
-  await run('npm', ['ci', '--ignore-scripts'], {
+  const preflight = await run('node', [
+    'release/validate-release.js',
+    '--archive-critical-only',
+  ], {
+    cwd: join(program, 'scripts'),
+    env: archiveEnvironment,
+  });
+  assert.match(preflight.stdout, /critical file SHA-256 hashes are valid/i);
+  await run('npm', ['ci'], {
     cwd: join(program, 'scripts'),
     env: { ...archiveEnvironment, npm_config_cache: join(root, '.npm-cache') },
   });
@@ -248,28 +256,71 @@ test('the exact archive installs and passes archive-supported validation and con
   assert.match(contractOutput, /fail 0/);
 });
 
-test('tag workflow is the sole immutable Stable publisher with constrained permissions', async () => {
+test('release workflow separates read-only build from guarded write-only publication', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
+  const buildStart = workflow.indexOf('\n  build:');
+  const publishStart = workflow.indexOf('\n  publish:');
+  assert.ok(buildStart > 0);
+  assert.ok(publishStart > buildStart);
+  const build = workflow.slice(buildStart, publishStart);
+  const publish = workflow.slice(publishStart);
 
   assert.match(workflow, /tags:\s*\n\s*- ['"]v\*['"]/);
-  assert.match(workflow, /permissions:\s*\n\s*contents: write/);
-  assert.match(workflow, /node-version: ['"]20['"]/);
-  assert.match(workflow, /gh release view/);
+  assert.match(workflow, /concurrency:\s*\n\s*group: .*github\.ref_name.*\n\s*cancel-in-progress: false/);
+  assert.doesNotMatch(workflow.slice(0, buildStart), /contents: write/);
+
+  assert.match(build, /permissions:\s*\n\s*contents: read/);
+  assert.match(build, /persist-credentials: false/);
+  assert.match(build, /node-version: ['"]20['"]/);
+  assert.match(build, /actions\/upload-artifact@/);
+  assert.doesNotMatch(build, /contents: write|gh release create/);
+  assert.match(build, /npm run validate-release/);
+  assert.match(build, /npm run validate-feeds/);
+  assert.match(build, /npm test/);
+  assert.match(build, /npm run test:archive/);
+  assert.match(build, /npm run validate-release:archive/);
+  assert.match(build, /--archive-critical-only/);
+  const archiveSmoke = build.slice(build.indexOf('archive-smoke'));
+  assert.ok(archiveSmoke.indexOf('--archive-critical-only') < archiveSmoke.indexOf('npm ci'));
+  assert.match(build, /build-release\.sh/);
+
+  assert.match(publish, /needs: build/);
+  assert.match(publish, /permissions:\s*\n\s*contents: write/);
+  assert.match(publish, /actions\/download-artifact@/);
+  assert.doesNotMatch(publish, /actions\/checkout|actions\/setup-node|npm (ci|test|run)/);
+  assert.match(publish, /shasum -a 256 -c/);
+  assert.match(publish, /cmp .*release-manifest\.json/);
+  assert.match(publish, /RELEASE_IMMUTABILITY_CONFIRMED/);
+  assert.match(publish, /repos\/\$GITHUB_REPOSITORY\/git\/ref\/tags/);
+  assert.match(publish, /git\/tags/);
+  assert.match(publish, /GITHUB_SHA/);
+  assert.match(publish, /gh release view/);
   assert.equal((workflow.match(/gh release create/g) ?? []).length, 1);
-  assert.match(workflow, /npm run validate-release/);
-  assert.match(workflow, /npm run validate-feeds/);
-  assert.match(workflow, /npm test/);
-  assert.match(workflow, /npm run test:archive/);
-  assert.match(workflow, /npm run validate-release:archive/);
-  assert.match(workflow, /build-release\.sh/);
   assert.doesNotMatch(workflow, /--clobber|release upload .*--clobber/);
+});
+
+test('reinstall and archive smoke tests use ordinary npm ci with isolated HOME', async () => {
+  const source = await readFile(new URL(import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /\['ci', '--ignore-scripts'\]/);
+  assert.match(source, /HOME: fixtureHome/);
+
+  const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /\n\s+npm ci\n/);
+  assert.doesNotMatch(workflow, /npm ci --ignore-scripts/);
 });
 
 test('installation docs use archive-safe validation commands after extraction', async () => {
   for (const path of ['README.md', 'README.zh-CN.md']) {
     const documentation = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
     assert.match(documentation, /npm run validate-release:archive/);
+    assert.match(documentation, /--archive-critical-only/);
+    assert.match(documentation, /releases\/download\/v0\.1\.0\/release-manifest\.json/);
+    assert.match(documentation, /cmp release-manifest\.json/);
     assert.match(documentation, /npm run test:archive/);
     assert.match(documentation, /tracked content digest/i);
+    assert.match(documentation, /RELEASE_IMMUTABILITY_CONFIRMED/);
+    assert.match(documentation, /protect(?:s|ed)[\s\S]{0,40}v\*/i);
+    assert.match(documentation, /immutable\s+releases/i);
+    assert.match(documentation, /self-verif/i);
   }
 });

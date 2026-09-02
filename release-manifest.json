@@ -30,7 +30,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "47edf214bd2c89bf10130efe7f53113b1ddc10d091e2315f6062b8afe83d6267"
+      "digest": "6919fb22c1b2b42a386579610b1989f051afa36988d891ee42f9292f70d1bff9"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -38,9 +38,21 @@
         "SKILL.md": "2b0d9cac6344e335416c55e47fcb4473893792471882eb2d76a894cda58643b8",
         "VERSION": "e9dd8507f4bf0c6f42458e41aea833ad0bd3f6127272335eee9bf4d58541ed67",
         "contracts/central-feed.schema.json": "555b2fa536db5a90989eea416ac01651d419e92934bbc11cc9b404694ab058d2",
-        "contracts/release-manifest.schema.json": "94d449134467766e2b7a2da0c416eaf5804e71965d34a5271e46da2f7a82abc1",
+        "contracts/release-manifest.schema.json": "7654443ef8c7ad14535c6488857fc78aa7af7d6cbb00ba8c46ba68590dde5dd3",
+        "prompts/digest-intro.md": "5d25f2184b8bbacd910fcbe4547f02b83af76eb03f57f3b0bef02c8d2e1b91c5",
+        "prompts/summarize-blogs.md": "58bfb1da427305b118ffcceabe8830f54566a142896e3c8605e556b98a5d2424",
+        "prompts/summarize-newsletter.md": "8a5dac287bfc02707ce5d20669336a84e777692744ba12ab73ee47fd047b9514",
+        "prompts/summarize-paper.md": "d1be88f1e315f0e6d3e6b48bab901573226668703878b117dc103b747b23ebf7",
+        "prompts/summarize-podcast.md": "e9d6267b4b6b92b55aa813d22a91ecfe9e09bcb44586f030ce6f64477e11180a",
+        "prompts/summarize-tweets.md": "e30e9f172a5673ccb9a6220d5379cdb69b42e1eb67194f9ebc493c88a5b18578",
+        "prompts/summarize-zh-sources.md": "a1969b5f82b876be63f1d73100a316fc7e0b24a3eb147b9709d6da3a82192217",
+        "prompts/translate.md": "96bd5896fa1792d95c0df189fbe92433f1bc50e5d7d49b71323a3afccf5f72ed",
         "scripts/feed-contract.js": "db47477c1e3a11c5a42e8d91fe8161cb98df8bec73ad646b4be5b32ebc965e00",
-        "scripts/prepare-digest.js": "fdf1979beeb4ba9bfd24ef1f376ed7114f25a16ffc3beefc6f5a39f16e5e9fb8"
+        "scripts/package-lock.json": "8690ff0ca61213a702d14864e6718b59e9ea8f270cb3c4f8a847b56831443ad5",
+        "scripts/package.json": "44b97059abb9f199e5b7e442a7774ec3e8b3b7ac7e1801a01d56dc99ef730ad6",
+        "scripts/prepare-digest.js": "fdf1979beeb4ba9bfd24ef1f376ed7114f25a16ffc3beefc6f5a39f16e5e9fb8",
+        "scripts/release/build-release.sh": "a96dd85222d22237986caaa198a390b511bf96f46885224f4a78e5b1257178c8",
+        "scripts/release/validate-release.js": "ed4959affe606771296fc051888a7a498e417fe7d975e0c5341dccb2f049985f"
       }
     }
   }

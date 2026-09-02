@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 
@@ -10,6 +10,7 @@ import {
   computeCriticalFileHashes,
   computeTrackedContentDigest,
   EXPECTED_FEEDS,
+  validateArchiveCriticalFiles,
   validateManifest,
   validateRelease,
 } from '../release/validate-release.js';
@@ -25,22 +26,18 @@ async function readJson(relativePath) {
 async function createReleaseFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'follow-up-release-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  await mkdir(join(root, 'scripts'));
-  await mkdir(join(root, 'contracts'));
-
-  const files = [
+  const manifest = await readJson('release-manifest.json');
+  const files = new Set([
     'VERSION',
     'CHANGELOG.md',
     'release-manifest.json',
-    'SKILL.md',
-    'contracts/central-feed.schema.json',
     'contracts/release-manifest.schema.json',
-    'scripts/feed-contract.js',
     'scripts/package.json',
     'scripts/package-lock.json',
-    'scripts/prepare-digest.js',
-  ];
+    ...Object.keys(manifest.integrity.criticalFiles.files),
+  ]);
   for (const file of files) {
+    await mkdir(dirname(join(root, file)), { recursive: true });
     await writeFile(join(root, file), await readFile(new URL(file, repositoryRoot)));
   }
   return root;
@@ -87,6 +84,23 @@ test('manifest records non-circular tracked content and critical-file integrity'
   assert.match(manifest.integrity.trackedContent.digest, /^[a-f0-9]{64}$/);
   assert.equal(manifest.integrity.criticalFiles.algorithm, 'sha256');
   assert.equal(Object.hasOwn(manifest.integrity.criticalFiles.files, 'release-manifest.json'), false);
+  const requiredCriticalFiles = [
+    'scripts/release/validate-release.js',
+    'scripts/release/build-release.sh',
+    'scripts/package.json',
+    'scripts/package-lock.json',
+    'prompts/digest-intro.md',
+    'prompts/summarize-blogs.md',
+    'prompts/summarize-newsletter.md',
+    'prompts/summarize-paper.md',
+    'prompts/summarize-podcast.md',
+    'prompts/summarize-tweets.md',
+    'prompts/summarize-zh-sources.md',
+    'prompts/translate.md',
+  ];
+  for (const path of requiredCriticalFiles) {
+    assert.ok(Object.hasOwn(manifest.integrity.criticalFiles.files, path), path);
+  }
   assert.deepEqual(
     manifest.integrity.trackedContent,
     await computeTrackedContentDigest(repositoryRoot),
@@ -194,6 +208,8 @@ test('validator rejects missing feeds, unknown fields, and implemented planned c
     ...manifest,
     capabilities: { ...manifest.capabilities, sidecars: true },
   };
+  const withMissingCriticalFile = structuredClone(manifest);
+  delete withMissingCriticalFile.integrity.criticalFiles.files['scripts/release/build-release.sh'];
 
   assert.ok(validateManifest(withUnknownField, '0.1.0').some(
     (error) => error.includes('unknown field'),
@@ -203,6 +219,10 @@ test('validator rejects missing feeds, unknown fields, and implemented planned c
   ));
   assert.ok(validateManifest(withPlannedClaim, '0.1.0').some(
     (error) => error.includes('sidecars'),
+  ));
+  assert.ok(validateManifest(withMissingCriticalFile, '0.1.0').some(
+    (error) => error.includes('required critical file')
+      && error.includes('scripts/release/build-release.sh'),
   ));
 });
 
@@ -214,6 +234,19 @@ test('archive mode validates critical files without Git metadata and rejects tam
   const root = await createReleaseFixture(t);
   assert.deepEqual(await validateRelease(root, { mode: 'archive' }), []);
 
+  const manifestPath = join(root, 'release-manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  delete manifest.integrity.criticalFiles.files['scripts/package-lock.json'];
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  assert.ok((await validateArchiveCriticalFiles(root)).some(
+    (error) => error.includes('required critical file')
+      && error.includes('scripts/package-lock.json'),
+  ));
+
+  await writeFile(
+    manifestPath,
+    await readFile(new URL('release-manifest.json', repositoryRoot)),
+  );
   await writeFile(join(root, 'SKILL.md'), 'tampered archive content\n');
   assert.ok((await validateRelease(root, { mode: 'archive' })).some(
     (error) => error.includes('critical file hash') && error.includes('SKILL.md'),

@@ -353,9 +353,12 @@ Digest 前验证 Feed Schema；除非用户存在本地覆盖，否则使用安�
 ```bash
 curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0.tar.gz
 curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/release-manifest.json
 shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
 tar -xzf Follow-up-v0.1.0.tar.gz
+cmp release-manifest.json Follow-up-v0.1.0/release-manifest.json
 cd Follow-up-v0.1.0/scripts
+node release/validate-release.js --archive-critical-only
 npm ci
 npm run validate-release:archive
 npm run test:archive
@@ -371,6 +374,17 @@ checksums 资产验证完整归档在既定 GitHub 信任边界内未被替换�
 契约，以及每个关键文件的 SHA-256。跟踪内容摘要（tracked content digest）只能在
 标签或 checkout 中重新计算，因为精确源码归档按设计不包含 `.git` object database；
 请在对应标签 checkout 中运行 `npm run validate-release` 完成这项验证。
+无依赖的关键文件预检会在 `npm ci` 前运行，但它检查 validator 自身哈希时必然已经
+执行了 validator，因此这种 self-verification 不能独立建立信任；单独下载的 manifest
+资产、checksum 与解析后的受保护标签才是外部信任锚点。
+
+### 发布维护者前置条件
+
+标签 workflow 本身不能让 GitHub 资产或标签变得不可变。Task 6 发布前，仓库管理员
+必须启用保护 `v*` 的 tag ruleset（protected `v*` tags），并启用 GitHub immutable
+releases；在外部核实两项设置后，再把仓库变量 `RELEASE_IMMUTABILITY_CONFIRMED`
+设为 `true`。未确认时 workflow 会拒绝发布，同时仍会拒绝覆盖已有 Release，作为
+纵深防御。Task 6 必须重新核实外部设置，不能把该变量本身当成证明。
 
 ### Hermes Agent
 ```bash

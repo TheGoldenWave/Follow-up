@@ -2,6 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/release-manifest.schema.json",
   "title": "Follow-up release manifest",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -116,13 +122,50 @@
             "files": {
               "type": "object",
               "minProperties": 1,
+              "required": [
+                "SKILL.md",
+                "VERSION",
+                "contracts/central-feed.schema.json",
+                "contracts/release-manifest.schema.json",
+                "prompts/digest-intro.md",
+                "prompts/summarize-blogs.md",
+                "prompts/summarize-newsletter.md",
+                "prompts/summarize-paper.md",
+                "prompts/summarize-podcast.md",
+                "prompts/summarize-tweets.md",
+                "prompts/summarize-zh-sources.md",
+                "prompts/translate.md",
+                "scripts/feed-contract.js",
+                "scripts/package-lock.json",
+                "scripts/package.json",
+                "scripts/prepare-digest.js",
+                "scripts/release/build-release.sh",
+                "scripts/release/validate-release.js"
+              ],
+              "properties": {
+                "SKILL.md": { "$ref": "#/$defs/sha256" },
+                "VERSION": { "$ref": "#/$defs/sha256" },
+                "contracts/central-feed.schema.json": { "$ref": "#/$defs/sha256" },
+                "contracts/release-manifest.schema.json": { "$ref": "#/$defs/sha256" },
+                "prompts/digest-intro.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-blogs.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-newsletter.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-paper.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-podcast.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-tweets.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-zh-sources.md": { "$ref": "#/$defs/sha256" },
+                "prompts/translate.md": { "$ref": "#/$defs/sha256" },
+                "scripts/feed-contract.js": { "$ref": "#/$defs/sha256" },
+                "scripts/package-lock.json": { "$ref": "#/$defs/sha256" },
+                "scripts/package.json": { "$ref": "#/$defs/sha256" },
+                "scripts/prepare-digest.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/build-release.sh": { "$ref": "#/$defs/sha256" },
+                "scripts/release/validate-release.js": { "$ref": "#/$defs/sha256" }
+              },
               "propertyNames": {
                 "not": { "const": "release-manifest.json" }
               },
-              "additionalProperties": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              }
+              "additionalProperties": { "$ref": "#/$defs/sha256" }
             }
           }
         }

@@ -14,6 +14,7 @@
     "prepare-digest": "node prepare-digest.js",
     "test:release": "node --test test/release-manifest.test.js test/release-build.test.js",
     "validate-release": "node release/validate-release.js",
+    "validate-release:archive-critical": "node release/validate-release.js --archive-critical-only",
     "validate-release:archive": "node release/validate-release.js --archive"
   },
   "dependencies": {

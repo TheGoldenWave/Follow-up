@@ -6,8 +6,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import Ajv2020 from 'ajv/dist/2020.js';
-import addFormats from 'ajv-formats';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,6 +16,27 @@ export const EXPECTED_FEEDS = [
   'newsletters',
   'academic-papers',
   'chinese-tech',
+];
+
+export const REQUIRED_CRITICAL_FILES = [
+  'SKILL.md',
+  'VERSION',
+  'contracts/central-feed.schema.json',
+  'contracts/release-manifest.schema.json',
+  'prompts/digest-intro.md',
+  'prompts/summarize-blogs.md',
+  'prompts/summarize-newsletter.md',
+  'prompts/summarize-paper.md',
+  'prompts/summarize-podcast.md',
+  'prompts/summarize-tweets.md',
+  'prompts/summarize-zh-sources.md',
+  'prompts/translate.md',
+  'scripts/feed-contract.js',
+  'scripts/package-lock.json',
+  'scripts/package.json',
+  'scripts/prepare-digest.js',
+  'scripts/release/build-release.sh',
+  'scripts/release/validate-release.js',
 ];
 
 const PRODUCT_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -139,6 +158,57 @@ export async function computeArchiveCriticalFileHashes(root, paths) {
   return hashes;
 }
 
+async function verifyReleaseIntegrity(rootPath, manifest, mode, treeish) {
+  const errors = [];
+  try {
+    const criticalPaths = Object.keys(manifest.integrity?.criticalFiles?.files ?? {});
+    let criticalFiles;
+    if (mode === 'archive') {
+      criticalFiles = await computeArchiveCriticalFileHashes(rootPath, criticalPaths);
+    } else if (mode === 'checkout') {
+      const trackedContent = await computeTrackedContentDigest(rootPath, treeish);
+      if (trackedContent.digest !== manifest.integrity.trackedContent?.digest) {
+        errors.push(`manifest tracked content digest does not match ${treeish}`);
+      }
+      criticalFiles = await computeCriticalFileHashes(rootPath, criticalPaths, treeish);
+    } else {
+      return [`unknown release validation mode: ${mode}`];
+    }
+    for (const path of criticalPaths) {
+      if (criticalFiles[path] !== manifest.integrity.criticalFiles.files[path]) {
+        const source = mode === 'archive' ? path : `${treeish}:${path}`;
+        errors.push(`manifest critical file hash does not match ${source}`);
+      }
+    }
+  } catch (error) {
+    const source = mode === 'archive' ? 'archive' : treeish;
+    errors.push(`release integrity could not be verified for ${source}: ${error.message}`);
+  }
+  return errors;
+}
+
+export async function validateArchiveCriticalFiles(
+  root = resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
+) {
+  const rootPath = toPath(root);
+  try {
+    const manifest = JSON.parse(await readFile(resolve(rootPath, 'release-manifest.json'), 'utf8'));
+    if (!isObject(manifest.integrity?.criticalFiles?.files)
+        || Object.keys(manifest.integrity.criticalFiles.files).length === 0) {
+      return ['manifest critical file list is missing or empty'];
+    }
+    const missing = REQUIRED_CRITICAL_FILES.filter(
+      (path) => !Object.hasOwn(manifest.integrity.criticalFiles.files, path),
+    );
+    if (missing.length > 0) {
+      return missing.map((path) => `manifest is missing required critical file ${path}`);
+    }
+    return verifyReleaseIntegrity(rootPath, manifest, 'archive', 'HEAD');
+  } catch (error) {
+    return [`archive critical-file preflight failed: ${error.message}`];
+  }
+}
+
 export function validateManifest(manifest, repositoryVersion) {
   const errors = [];
   if (!validateFields(manifest, 'manifest', TOP_LEVEL_FIELDS, TOP_LEVEL_FIELDS, errors)) {
@@ -245,6 +315,11 @@ export function validateManifest(manifest, repositoryVersion) {
       if (!isObject(files) || Object.keys(files).length === 0) {
         errors.push('manifest.integrity.criticalFiles.files must be a non-empty object');
       } else {
+        for (const path of REQUIRED_CRITICAL_FILES) {
+          if (!Object.hasOwn(files, path)) {
+            errors.push(`manifest.integrity.criticalFiles.files is missing required critical file ${path}`);
+          }
+        }
         for (const [path, digest] of Object.entries(files)) {
           if (path === 'release-manifest.json') {
             errors.push('manifest.integrity.criticalFiles.files cannot include release-manifest.json');
@@ -289,8 +364,17 @@ export async function validateRelease(
   }
   if (!PRODUCT_VERSION_PATTERN.test(version)) errors.push('VERSION must be a plain semantic version');
 
-  const [manifest, packageJson, packageLock, schema] = await Promise.all([
-    readJson(resolve(rootPath, 'release-manifest.json'), 'release-manifest.json', errors),
+  const manifest = await readJson(
+    resolve(rootPath, 'release-manifest.json'),
+    'release-manifest.json',
+    errors,
+  );
+  if (manifest) errors.push(...validateManifest(manifest, version));
+  if (verifyIntegrity && manifest?.integrity) {
+    errors.push(...await verifyReleaseIntegrity(rootPath, manifest, mode, treeish));
+  }
+
+  const [packageJson, packageLock, schema] = await Promise.all([
     readJson(resolve(rootPath, 'scripts/package.json'), 'scripts/package.json', errors),
     readJson(resolve(rootPath, 'scripts/package-lock.json'), 'scripts/package-lock.json', errors),
     readJson(
@@ -302,6 +386,10 @@ export async function validateRelease(
 
   if (manifest && schema) {
     try {
+      const [{ default: Ajv2020 }, { default: addFormats }] = await Promise.all([
+        import('ajv/dist/2020.js'),
+        import('ajv-formats'),
+      ]);
       const ajv = new Ajv2020({ allErrors: true, strict: true });
       addFormats(ajv, { mode: 'full' });
       const validateSchema = ajv.compile(schema);
@@ -315,7 +403,6 @@ export async function validateRelease(
       errors.push(`contracts/release-manifest.schema.json is invalid: ${error.message}`);
     }
   }
-  if (manifest) errors.push(...validateManifest(manifest, version));
   if (packageJson?.version !== version) {
     errors.push(`scripts/package.json version ${packageJson?.version} does not match VERSION ${version}`);
   }
@@ -330,34 +417,6 @@ export async function validateRelease(
   }
   if (schema?.$id !== 'https://github.com/TheGoldenWave/Follow-up/contracts/release-manifest.schema.json') {
     errors.push('contracts/release-manifest.schema.json has an unexpected $id');
-  }
-
-  if (verifyIntegrity && manifest?.integrity) {
-    try {
-      const criticalPaths = Object.keys(manifest.integrity.criticalFiles?.files ?? {});
-      let criticalFiles;
-      if (mode === 'archive') {
-        criticalFiles = await computeArchiveCriticalFileHashes(rootPath, criticalPaths);
-      } else if (mode === 'checkout') {
-        const trackedContent = await computeTrackedContentDigest(rootPath, treeish);
-        if (trackedContent.digest !== manifest.integrity.trackedContent?.digest) {
-          errors.push(`manifest tracked content digest does not match ${treeish}`);
-        }
-        criticalFiles = await computeCriticalFileHashes(rootPath, criticalPaths, treeish);
-      } else {
-        errors.push(`unknown release validation mode: ${mode}`);
-        criticalFiles = {};
-      }
-      for (const path of criticalPaths) {
-        if (criticalFiles[path] !== manifest.integrity.criticalFiles.files[path]) {
-          const source = mode === 'archive' ? path : `${treeish}:${path}`;
-          errors.push(`manifest critical file hash does not match ${source}`);
-        }
-      }
-    } catch (error) {
-      const source = mode === 'archive' ? 'archive' : treeish;
-      errors.push(`release integrity could not be verified for ${source}: ${error.message}`);
-    }
   }
 
   try {
@@ -387,6 +446,16 @@ if (isCli) {
   if (treeishIndex >= 0 && !treeish) {
     console.error('--treeish requires a Git revision');
     process.exit(2);
+  }
+
+  if (args.includes('--archive-critical-only')) {
+    const errors = await validateArchiveCriticalFiles();
+    if (errors.length > 0) {
+      for (const error of errors) console.error(`- ${error}`);
+      process.exit(1);
+    }
+    console.log('Archive critical file SHA-256 hashes are valid.');
+    process.exit(0);
   }
 
   if (args.includes('--write-integrity')) {

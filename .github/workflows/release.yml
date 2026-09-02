@@ -5,16 +5,20 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -24,15 +28,6 @@ jobs:
 
       - name: Require tag and product version to agree
         run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
-
-      - name: Refuse to replace an existing release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists; assets are immutable." >&2
-            exit 1
-          fi
 
       - name: Install locked dependencies
         working-directory: scripts
@@ -48,6 +43,7 @@ jobs:
       - name: Build and inspect tracked-only archive
         run: |
           sh scripts/release/build-release.sh "$GITHUB_SHA" dist
+          cp CHANGELOG.md dist/release-notes.md
           cd dist
           shasum -a 256 -c "Follow-up-${GITHUB_REF_NAME}-checksums.txt"
           tar -tzf "Follow-up-${GITHUB_REF_NAME}.tar.gz" > archive-contents.txt
@@ -61,14 +57,74 @@ jobs:
           mkdir archive-smoke
           tar -xzf "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz" -C archive-smoke
           cd "archive-smoke/Follow-up-${GITHUB_REF_NAME}/scripts"
+          node release/validate-release.js --archive-critical-only
           npm ci
           npm run validate-release:archive
           npm run test:archive
 
-      - name: Publish immutable Stable assets
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            dist/Follow-up-${{ github.ref_name }}.tar.gz
+            dist/Follow-up-${{ github.ref_name }}-checksums.txt
+            dist/release-manifest.json
+            dist/release-notes.md
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release assets
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.ref_name }}
+          path: dist
+
+      - name: Verify external immutability controls and publish
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.RELEASE_IMMUTABILITY_CONFIRMED }}
         run: |
+          if [ "$RELEASE_IMMUTABILITY_CONFIRMED" != "true" ]; then
+            echo "Repository variable RELEASE_IMMUTABILITY_CONFIRMED must be true after external release protections are verified." >&2
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; refusing replacement." >&2
+            exit 1
+          fi
+          (
+            cd dist
+            shasum -a 256 -c "Follow-up-${GITHUB_REF_NAME}-checksums.txt"
+            tar -xOzf "Follow-up-${GITHUB_REF_NAME}.tar.gz" \
+              "Follow-up-${GITHUB_REF_NAME}/release-manifest.json" > archive-manifest.json
+            cmp release-manifest.json archive-manifest.json
+          )
+
+          REF_JSON=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME")
+          OBJECT_TYPE=$(printf '%s' "$REF_JSON" | jq -r '.object.type')
+          RESOLVED_SHA=$(printf '%s' "$REF_JSON" | jq -r '.object.sha')
+          PEEL_COUNT=0
+          while [ "$OBJECT_TYPE" = "tag" ]; do
+            PEEL_COUNT=$((PEEL_COUNT + 1))
+            if [ "$PEEL_COUNT" -gt 10 ]; then
+              echo "Tag reference nesting exceeds the supported limit." >&2
+              exit 1
+            fi
+            TAG_JSON=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$RESOLVED_SHA")
+            OBJECT_TYPE=$(printf '%s' "$TAG_JSON" | jq -r '.object.type')
+            RESOLVED_SHA=$(printf '%s' "$TAG_JSON" | jq -r '.object.sha')
+          done
+          if [ "$OBJECT_TYPE" != "commit" ] || [ "$RESOLVED_SHA" != "$GITHUB_SHA" ]; then
+            echo "Tag $GITHUB_REF_NAME resolves to $OBJECT_TYPE $RESOLVED_SHA, expected commit $GITHUB_SHA." >&2
+            exit 1
+          fi
           gh release create "$GITHUB_REF_NAME" \
             "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz" \
             "dist/Follow-up-${GITHUB_REF_NAME}-checksums.txt" \
@@ -76,4 +132,4 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "Follow-up $GITHUB_REF_NAME" \
-            --notes-file CHANGELOG.md
+            --notes-file dist/release-notes.md
