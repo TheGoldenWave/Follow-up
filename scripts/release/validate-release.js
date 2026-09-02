@@ -19,10 +19,12 @@ export const EXPECTED_FEEDS = [
 ];
 
 export const REQUIRED_CRITICAL_FILES = [
+  'THIRD_PARTY_NOTICES.md',
   'SKILL.md',
   'VERSION',
   'contracts/central-feed.schema.json',
   'contracts/release-manifest.schema.json',
+  'docs/third-party/v0.1.0-dependencies.md',
   'prompts/digest-intro.md',
   'prompts/summarize-blogs.md',
   'prompts/summarize-newsletter.md',
@@ -37,7 +39,10 @@ export const REQUIRED_CRITICAL_FILES = [
   'scripts/prepare-digest.js',
   'scripts/validate-feed-artifact.js',
   'scripts/release/build-release.sh',
+  'scripts/release/check-provenance.js',
+  'scripts/release/scan-secrets.js',
   'scripts/release/validate-release.js',
+  'scripts/release/verify-dependency-licenses.js',
 ];
 
 const PRODUCT_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;

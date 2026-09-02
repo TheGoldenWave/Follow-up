@@ -219,7 +219,7 @@ Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。�
 
 ## 快速开始
 
-1. 在你的 AI agent 中安装此 skill（Hermes、OpenClaw 或 Claude Code）
+1. 按下方说明安装经过验证的精确 GitHub Release
 2. 输入 "set up follow builders" 或执行 `/follow-builders`
 3. Agent 会以对话方式引导你完成设置
 
@@ -386,22 +386,10 @@ releases；在外部核实两项设置后，再把仓库变量 `RELEASE_IMMUTABI
 设为 `true`。未确认时 workflow 会拒绝发布，同时仍会拒绝覆盖已有 Release，作为
 纵深防御。Task 6 必须重新核实外部设置，不能把该变量本身当成证明。
 
-### Hermes Agent
-```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
-cd ~/Documents/MyProject/Follow-up/scripts && npm ci
-```
-
-### OpenClaw
-```bash
-clawhub install follow-builders
-```
-
-### Claude Code
-```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
-cd ~/.claude/skills/follow-builders/scripts && npm ci
-```
+验证完成后，通过 Agent 的本地 Skill 机制注册解压后的 `Follow-up-v0.1.0` 目录。
+在 `v0.1.0` 中，这个精确 GitHub Release 归档是 Hermes、OpenClaw、Claude Code
+及其他受支持 Agent 唯一记录在案的首次安装来源。项目目前不提供经过验证的
+ClawHub 安装路径。
 
 升级到后续版本时，需要手动验证并安装该版本的精确标签。`v0.1.0` 不会自动替换
 程序文件，也不会自动修改 `~/.follow-builders`。
@@ -434,9 +422,12 @@ cd ~/.claude/skills/follow-builders/scripts && npm ci
 - 你的配置和自定义 Prompt 保留在自己的设备上
 - 阅读与反馈状态尚未正式实现；未来必须使用本地用户状态，不与公共 Feed 或代码一起提交
 
-## 许可证
+## 发布授权
 
-MIT
+发布目前因来源授权待确认而被阻止。Follow-up 派生自
+`zarazhangrui/follow-builders`，其上游 GitHub 仓库当前未提供许可证文件。
+再分发授权状态仍为 `pending-user-confirmation`；详见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ---
 

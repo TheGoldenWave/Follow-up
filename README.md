@@ -230,7 +230,7 @@ All with links to original content. Available in English, Chinese, or bilingual.
 
 ## Quick Start
 
-1. Install the skill in your AI agent (Hermes, OpenClaw, or Claude Code)
+1. Install the exact verified GitHub Release using the instructions below
 2. Say "set up follow builders" or invoke `/follow-builders`
 3. The agent walks you through setup conversationally
 
@@ -405,22 +405,10 @@ publication without that confirmation and still refuses any already-existing rel
 as defense in depth. Task 6 must re-check the external settings rather than treating the
 repository variable as proof.
 
-### Hermes Agent
-```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
-cd ~/Documents/MyProject/Follow-up/scripts && npm ci
-```
-
-### OpenClaw
-```bash
-clawhub install follow-builders
-```
-
-### Claude Code
-```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
-cd ~/.claude/skills/follow-builders/scripts && npm ci
-```
+After verification, register the extracted `Follow-up-v0.1.0` directory through your
+agent's local Skill mechanism. This exact GitHub Release archive is the only documented
+first-install source for Hermes, OpenClaw, Claude Code, and other supported agents in
+`v0.1.0`. The project does not provide a verified ClawHub installation path.
 
 To move to a later release, verify and install that release's exact tag manually.
 `v0.1.0` never replaces program files or changes `~/.follow-builders` automatically.
@@ -453,9 +441,12 @@ All settings are stored in `~/.follow-builders/config.json`:
 - Your configuration and custom prompts stay on your machine
 - Reading and feedback state is not implemented yet; future state must remain local and separate from public Feeds and product code
 
-## License
+## Release authorization
 
-MIT
+Release publication is blocked pending provenance authorization. Follow-up is derived
+from `zarazhangrui/follow-builders`, whose upstream GitHub repository currently exposes
+no license file. The redistribution authorization status remains
+`pending-user-confirmation`; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 

@@ -23,6 +23,10 @@ The six centralized Feed envelopes are schema-validated before Digest preparatio
 an invalid or unsupported Feed is reported as a source-specific error and contributes
 no payload.
 
+For `v0.1.0`, use only the exact GitHub Release or matching tag after verifying the
+separate checksum and manifest assets. Do not recommend or run `clawhub install` as a
+first-install path; no verified ClawHub artifact is part of this release baseline.
+
 ## Product Boundary
 
 Follow-up has multiple surfaces and runtime responsibilities:

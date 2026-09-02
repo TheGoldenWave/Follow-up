@@ -123,10 +123,12 @@
               "type": "object",
               "minProperties": 1,
               "required": [
+                "THIRD_PARTY_NOTICES.md",
                 "SKILL.md",
                 "VERSION",
                 "contracts/central-feed.schema.json",
                 "contracts/release-manifest.schema.json",
+                "docs/third-party/v0.1.0-dependencies.md",
                 "prompts/digest-intro.md",
                 "prompts/summarize-blogs.md",
                 "prompts/summarize-newsletter.md",
@@ -141,13 +143,18 @@
                 "scripts/prepare-digest.js",
                 "scripts/validate-feed-artifact.js",
                 "scripts/release/build-release.sh",
-                "scripts/release/validate-release.js"
+                "scripts/release/check-provenance.js",
+                "scripts/release/scan-secrets.js",
+                "scripts/release/validate-release.js",
+                "scripts/release/verify-dependency-licenses.js"
               ],
               "properties": {
+                "THIRD_PARTY_NOTICES.md": { "$ref": "#/$defs/sha256" },
                 "SKILL.md": { "$ref": "#/$defs/sha256" },
                 "VERSION": { "$ref": "#/$defs/sha256" },
                 "contracts/central-feed.schema.json": { "$ref": "#/$defs/sha256" },
                 "contracts/release-manifest.schema.json": { "$ref": "#/$defs/sha256" },
+                "docs/third-party/v0.1.0-dependencies.md": { "$ref": "#/$defs/sha256" },
                 "prompts/digest-intro.md": { "$ref": "#/$defs/sha256" },
                 "prompts/summarize-blogs.md": { "$ref": "#/$defs/sha256" },
                 "prompts/summarize-newsletter.md": { "$ref": "#/$defs/sha256" },
@@ -162,7 +169,10 @@
                 "scripts/prepare-digest.js": { "$ref": "#/$defs/sha256" },
                 "scripts/validate-feed-artifact.js": { "$ref": "#/$defs/sha256" },
                 "scripts/release/build-release.sh": { "$ref": "#/$defs/sha256" },
-                "scripts/release/validate-release.js": { "$ref": "#/$defs/sha256" }
+                "scripts/release/check-provenance.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/scan-secrets.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/validate-release.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/verify-dependency-licenses.js": { "$ref": "#/$defs/sha256" }
               },
               "propertyNames": {
                 "not": { "const": "release-manifest.json" }
