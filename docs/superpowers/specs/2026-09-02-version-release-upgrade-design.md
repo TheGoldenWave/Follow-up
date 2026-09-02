@@ -265,7 +265,8 @@ superseded by a new patch version.
 
 The draft WeChat Docker integration is excluded from `v0.1.0`: it uses an unpinned
 image and exposes a host port outside the approved authenticated localhost-proxy model.
-It must be replaced by the planned Sidecar implementation before release.
+It must be absent from `v0.1.0` release artifacts and replaced before WeChat is
+released as a supported capability.
 
 ## Planned product milestones
 
@@ -296,7 +297,26 @@ Milestones describe intended scope, not deadlines or already delivered capabilit
 - Release notes separate user-visible changes, source behavior changes, migration
   actions, authorization actions, security changes, and known limitations.
 
-## Acceptance criteria
+## `v0.1.0` acceptance criteria
+
+- The release is built from tracked files at a clean, immutable commit.
+- The source archive, manifest, checksums, Tag, and GitHub Release all report `0.1.0`
+  consistently.
+- A clean installation can identify its product version offline and run the documented
+  centralized-Feed preparation path using release-local Prompts.
+- Every published central Feed has a declared schema version, and the released consumer
+  rejects unsupported schemas with an actionable error.
+- The six documented live Feed categories are present; planned local acquisition and
+  Sidecars are not represented as implemented.
+- The release archive contains no untracked files, local credentials, generated login
+  state, unsafe WeChat Docker draft, or unrelated development artifacts.
+- Release verification includes syntax/configuration checks, secret scanning, manifest
+  validation, checksum verification, and a clean-install smoke test.
+
+## Upgrade-foundation acceptance criteria
+
+These criteria become release gates when the upgrade foundation is introduced in
+`v0.2.0`; they do not block the initial `v0.1.0` baseline:
 
 - A clean installation can identify its product and component versions offline.
 - Upgrade discovery exposes only newer Stable releases and requires confirmation.
