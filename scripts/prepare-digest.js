@@ -20,7 +20,7 @@ import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { pathToFileURL } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 import { validateFeed } from './feed-contract.js';
 
@@ -99,9 +99,21 @@ export async function loadCentralFeedData({ fetchJson = fetchJSON } = {}) {
   return { data, feeds, errors };
 }
 
+export function resolveInstalledPromptsDir(moduleUrl = import.meta.url) {
+  return fileURLToPath(new URL('../prompts/', moduleUrl));
+}
+
+async function readPrompt(path) {
+  try {
+    return { content: await readFile(path, 'utf-8') };
+  } catch (error) {
+    return { error };
+  }
+}
+
 export async function loadPrompts({
   userPromptsDir = join(USER_DIR, 'prompts'),
-  localPromptsDir = join(decodeURIComponent(new URL('.', import.meta.url).pathname), '..', 'prompts'),
+  localPromptsDir = resolveInstalledPromptsDir(),
   promptFiles = PROMPT_FILES,
 } = {}) {
   const prompts = {};
@@ -111,15 +123,35 @@ export async function loadPrompts({
     const key = filename.replace('.md', '').replace(/-/g, '_');
     const userPath = join(userPromptsDir, filename);
     const localPath = join(localPromptsDir, filename);
+    const userDisplayPath = `~/.follow-builders/prompts/${filename}`;
+    const localDisplayPath = `prompts/${filename}`;
 
-    if (existsSync(userPath)) {
-      prompts[key] = await readFile(userPath, 'utf-8');
-    } else if (existsSync(localPath)) {
-      prompts[key] = await readFile(localPath, 'utf-8');
+    const userPrompt = await readPrompt(userPath);
+    if (userPrompt.content !== undefined) {
+      prompts[key] = userPrompt.content;
+      continue;
+    }
+    if (userPrompt.error?.code !== 'ENOENT') {
+      errors.push(
+        `Could not read custom prompt ${userDisplayPath}; `
+        + `trying installed prompt ${localDisplayPath} instead.`,
+      );
+    }
+
+    const localPrompt = await readPrompt(localPath);
+    if (localPrompt.content !== undefined) {
+      prompts[key] = localPrompt.content;
+      continue;
+    }
+    if (localPrompt.error?.code === 'ENOENT') {
+      errors.push(
+        `Could not load prompt ${filename}. Add a custom prompt at ${userDisplayPath} `
+        + `or reinstall Follow-up to restore ${localDisplayPath}.`,
+      );
     } else {
       errors.push(
-        `Could not load prompt ${filename}. Add a custom prompt at ${userPath} `
-        + `or reinstall Follow-up to restore ${localPath}.`,
+        `Could not read installed prompt ${localDisplayPath}. Reinstall Follow-up `
+        + `or add a custom prompt at ${userDisplayPath}.`,
       );
     }
   }

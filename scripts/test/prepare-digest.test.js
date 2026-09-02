@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import { loadPrompts } from '../prepare-digest.js';
+import {
+  loadPrompts,
+  resolveInstalledPromptsDir,
+} from '../prepare-digest.js';
 
 async function createPromptFixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'follow-up-prompts-'));
@@ -47,6 +51,27 @@ test('the installed release prompt is used when no user override exists', async 
   });
 });
 
+test('the default installed prompt directory resolves from the module URL', () => {
+  const moduleUrl = new URL('file:///C:/Program%20Files/Follow-up/scripts/prepare-digest.js');
+
+  assert.equal(
+    resolveInstalledPromptsDir(moduleUrl),
+    fileURLToPath(new URL('../prompts/', moduleUrl)),
+  );
+});
+
+test('prompt loading uses the default installed prompt directory', async (t) => {
+  const { userPromptsDir } = await createPromptFixture(t);
+
+  const result = await loadPrompts({
+    userPromptsDir,
+    promptFiles: ['digest-intro.md'],
+  });
+
+  assert.match(result.prompts.digest_intro, /digest/i);
+  assert.deepEqual(result.errors, []);
+});
+
 test('prompt loading does not make a mutable-branch network request', async (t) => {
   const paths = await createPromptFixture(t);
   await writeFile(join(paths.localPromptsDir, 'translate.md'), 'local only');
@@ -77,8 +102,43 @@ test('a missing user and installed prompt returns an actionable error', async (t
 
   assert.deepEqual(result.prompts, {});
   assert.equal(result.errors.length, 1);
-  assert.match(result.errors[0], /digest-intro\.md/);
-  assert.match(result.errors[0], new RegExp(paths.userPromptsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(result.errors[0], new RegExp(paths.localPromptsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(result.errors[0], /~\/\.follow-builders\/prompts\/digest-intro\.md/);
+  assert.match(result.errors[0], /prompts\/digest-intro\.md/);
   assert.match(result.errors[0], /custom prompt|reinstall/i);
+  assert.doesNotMatch(result.errors[0], new RegExp(paths.userPromptsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(result.errors[0], new RegExp(paths.localPromptsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('an unreadable user override reports a sanitized error and falls back locally', async (t) => {
+  const paths = await createPromptFixture(t);
+  await mkdir(join(paths.userPromptsDir, 'digest-intro.md'));
+  await writeFile(join(paths.localPromptsDir, 'digest-intro.md'), 'installed fallback');
+
+  const result = await loadPrompts({
+    ...paths,
+    promptFiles: ['digest-intro.md'],
+  });
+
+  assert.equal(result.prompts.digest_intro, 'installed fallback');
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0], /~\/\.follow-builders\/prompts\/digest-intro\.md/);
+  assert.match(result.errors[0], /installed prompt/i);
+  assert.doesNotMatch(result.errors[0], new RegExp(paths.userPromptsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('a broken installed prompt is non-fatal and later prompts still load', async (t) => {
+  const paths = await createPromptFixture(t);
+  await mkdir(join(paths.localPromptsDir, 'digest-intro.md'));
+  await writeFile(join(paths.localPromptsDir, 'translate.md'), 'translate prompt');
+
+  const result = await loadPrompts({
+    ...paths,
+    promptFiles: ['digest-intro.md', 'translate.md'],
+  });
+
+  assert.deepEqual(result.prompts, { translate: 'translate prompt' });
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0], /prompts\/digest-intro\.md/);
+  assert.match(result.errors[0], /reinstall/i);
+  assert.doesNotMatch(result.errors[0], new RegExp(paths.localPromptsDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
