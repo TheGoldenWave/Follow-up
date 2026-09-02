@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-08-28T06:10:33.830Z",
+  "lookbackHours": 72,
+  "newsletters": [
+    {
+      "source": "Stratechery (Ben Thompson)",
+      "url": "https://stratechery.com/",
+      "tags": [
+        "newsletter",
+        "tech-strategy",
+        "daily"
+      ],
+      "items": [
+        {
+          "title": "Apple Updates Mini and Studio, AI Computers, OpenAI Jalapeño",
+          "url": "https://stratechery.com/2026/apple-updates-mini-and-studio-ai-computers-openai-jalapeno/",
+          "publishedAt": "2026-08-26T10:00:00.000Z",
+          "guid": "https://stratechery.com/?p=19806",
+          "source": "Stratechery (Ben Thompson)",
+          "language": "en"
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "newsletterSources": 1
+  },
+  "errors": [
+    "RSS: Error fetching One Useful Thing (Ethan Mollick): fetch failed",
+    "RSS: Error fetching The Algorithmic Bridge: fetch failed",
+    "RSS: Error fetching AI Snake Oil: fetch failed"
+  ]
+}

@@ -1,60 +1,70 @@
 # Sample Digest Output
 
-This is an example of what your AI Builders Digest looks like.
+This is an example of what your GoldenWave Knowledge & News Digest looks like.
 
 ---
 
-AI Builders Digest — March 14, 2026
+GoldenWave Knowledge Digest — August 28, 2026
 
-PODCASTS
+═══════════════════════════════════════
+🤖 AI BUILDERS (X/Twitter)
+═══════════════════════════════════════
 
-Latent Space — "Why Agents Keep Failing (And How to Fix Them)"
-Bottom line: Most agent failures aren't intelligence failures — they're tool-use failures.
-The system can reason fine, it just can't reliably call the right API at the right time.
+OpenAI Codex lead Thibault Sottiaux reflects on the pace at OpenAI: "A few weeks
+at OpenAI feel like years at other companies in terms of how much gets done."
+https://x.com/thsottiaux/status/2092756702349398036
 
-Key insights:
-- Tool selection accuracy drops from 95% to 60% when agents have more than 15 tools
-  available. The fix isn't smarter models — it's better tool curation per task.
-- "Eval-driven development" is replacing vibe-driven prompt iteration at serious
-  AI companies. If you're not measuring, you're guessing.
-- The hosts predict 2026 is the year agent frameworks consolidate from 50+ to 3-4
-  winners. Their bet: OpenAI Agents SDK, Claude Code, and LangGraph.
-https://youtube.com/watch?v=example123
+Claude Code PM Thariq shipped a new SendFeedback tool so users can ask Claude to
+draft and approve feedback reports directly, rather than using the /feedback command.
+https://x.com/trq212/status/2092696449616376140
 
-No Priors — "Scaling Laws Are Dead, Long Live Scaling Laws" (with Ilya Sutskever)
-Bottom line: Pre-training scaling laws have hit diminishing returns, but post-training
-and inference-time compute scaling are just getting started.
+Vercel CEO Guillermo Rauch announced global compute for agents: multiple regions,
+failover, up to 10,000 concurrent sandboxes and 5,000 vCPUs/min ramp by default.
+https://x.com/rauchg/status/2092735785460277627
 
-Key insights:
-- Ilya argues the next 10x improvement comes from models that can "think longer"
-  at inference time, not from bigger pre-training runs.
-- Synthetic data quality matters more than quantity. "One perfect textbook is worth
-  a million Reddit comments."
-- He's surprisingly bullish on open-source: "The gap will narrow to months, not years."
-https://youtube.com/watch?v=example456
+═══════════════════════════════════════
+📢 OFFICIAL BLOGS
+═══════════════════════════════════════
 
+Claude Blog: Claude in Chrome is generally available
+Claude's Chrome extension is now GA on all paid plans. Claude can now take actions
+autonomously in the browser without needing approval for every action, with a safety
+classifier validating each action. Also announced a built-in browser in Claude Cowork
+on the desktop app — separate from your own browser, no extension needed.
+https://claude.com/blog/claude-in-chrome-generally-available
+https://claude.com/blog/cowork-built-in-browser
 
-X / TWITTER
+═══════════════════════════════════════
+📧 NEWSLETTERS
+═══════════════════════════════════════
 
-Andrej Karpathy (@karpathy)
-Shared a deep thread on why he thinks "Software 3.0" (natural language programming)
-will make traditional coding a niche skill within 5 years. Key argument: the compile
-target is changing from machine code to LLM prompts. Sparked massive debate.
-Also released a new Eureka Labs tutorial on building a code interpreter from scratch.
-https://x.com/karpathy/status/example1
-https://x.com/karpathy/status/example2
+The Batch by Andrew Ng: "When to Fine-Tune vs. RAG"
+Ng argues that the fine-tuning vs. RAG decision is the most important architectural
+choice in LLM applications. His heuristic: fine-tune when you need style/behavior
+change, RAG when you need factual grounding. Most production systems will need both.
+https://www.deeplearning.ai/the-batch/issue-xxx
 
-Guillermo Rauch (@rauchg)
-Announced Vercel's new "v0 Teams" — collaborative AI prototyping where multiple
-people can prompt and iterate on the same UI simultaneously. Called it "Google Docs
-for vibe coding." Ships next week.
-https://x.com/rauchg/status/example3
+═══════════════════════════════════════
+📄 ACADEMIC PAPERS
+═══════════════════════════════════════
 
-Amanda Askell (@AmandaAskell)
-Published a nuanced take on AI safety benchmarks: "We're measuring what's easy to
-measure, not what matters. Capability evals tell you what the model CAN do.
-Alignment evals should tell you what it WILL do unprompted." Linked to a new
-Anthropic research paper on behavioral evaluations.
-https://x.com/AmandaAskell/status/example4
+"Tool-Augmented LLMs: A Survey" — Li et al., arXiv 2026
+Problem: How do LLMs use external tools effectively?
+Approach: Comprehensive survey of 200+ papers on tool-augmented LLMs, categorizing
+methods into tool creation, tool selection, and tool execution.
+Why it matters: As agents become the dominant LLM application, tool use is the
+bottleneck. The paper identifies that tool selection accuracy drops from 95% to 60%
+when agents have more than 15 tools — a critical finding for agent design.
+https://arxiv.org/abs/2608.xxxxx
 
-Reply to adjust your settings, sources, or summary style.
+═══════════════════════════════════════
+🇨🇳 CHINESE TECH
+═══════════════════════════════════════
+
+机器之心：DeepSeek 发布下一代推理模型预览
+DeepSeek 发布了其下一代推理模型的预览版，在 MATH 和 GSM8K 基准测试中刷新了记录。
+新模型采用改进的思维链推理架构，在保持开源的同时大幅缩小了与闭源模型的差距。
+https://www.jiqizhixin.com/articles/2026-08-28-xx
+
+───────────────────────────────────────
+Generated through the GoldenWave Knowledge Digest: https://github.com/TheGoldenWave/Follow-up

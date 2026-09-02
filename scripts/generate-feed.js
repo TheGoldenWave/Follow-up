@@ -16,6 +16,9 @@
 import { readFile, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
+import { pathToFileURL } from "url";
+
+import { createFeedEnvelope } from "./feed-contract.js";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -30,6 +33,12 @@ const PODCAST_LOOKBACK_HOURS = 336; // 14 days — podcasts publish weekly/biwee
 const BLOG_LOOKBACK_HOURS = 72;
 const MAX_TWEETS_PER_USER = 3;
 const MAX_ARTICLES_PER_BLOG = 3;
+const NEWSLETTER_LOOKBACK_HOURS = 72;
+const ACADEMIC_LOOKBACK_HOURS = 168; // 7 days for papers
+const ZH_TECH_LOOKBACK_HOURS = 72;
+const MAX_NEWSLETTERS_PER_SOURCE = 1;
+const MAX_PAPERS_PER_SOURCE = 5;
+const MAX_ZH_ARTICLES_PER_SOURCE = 3;
 const X_USER_LOOKUP_BATCH_SIZE = 5;
 const X_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const X_RETRY_ATTEMPTS = 3;
@@ -37,6 +46,18 @@ const X_RETRY_ATTEMPTS = 3;
 // State file lives in the repo root so it gets committed by GitHub Actions
 const SCRIPT_DIR = decodeURIComponent(new URL(".", import.meta.url).pathname);
 const STATE_PATH = join(SCRIPT_DIR, "..", "state-feed.json");
+
+function normalizePublishedAt(value) {
+  if (!value) return null;
+  const timestamp = Date.parse(
+    /^[A-Z][a-z]{2} \d{1,2}, \d{4}$/.test(value) ? `${value} UTC` : value,
+  );
+  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
+}
+
+function errorsSince(errors, startIndex) {
+  return errors.slice(startIndex).filter((error) => error.startsWith("RSS"));
+}
 
 // -- State Management --------------------------------------------------------
 
@@ -76,7 +97,24 @@ async function saveState(state) {
 
 async function loadSources() {
   const sourcesPath = join(SCRIPT_DIR, "..", "config", "default-sources.json");
-  return JSON.parse(await readFile(sourcesPath, "utf-8"));
+  const sources = JSON.parse(await readFile(sourcesPath, "utf-8"));
+
+  // Load additional feed configs for newsletters, academic, and zh-tech
+  const newslettersPath = join(SCRIPT_DIR, "..", "config", "feed-newsletters.json");
+  const academicPath = join(SCRIPT_DIR, "..", "config", "feed-academic.json");
+  const zhTechPath = join(SCRIPT_DIR, "..", "config", "feed-zh-tech.json");
+
+  sources.newsletters = existsSync(newslettersPath)
+    ? JSON.parse(await readFile(newslettersPath, "utf-8")).sources
+    : [];
+  sources.academic = existsSync(academicPath)
+    ? JSON.parse(await readFile(academicPath, "utf-8"))
+    : { sources: [] };
+  sources.zhTech = existsSync(zhTechPath)
+    ? JSON.parse(await readFile(zhTechPath, "utf-8")).sources
+    : [];
+
+  return sources;
 }
 
 // -- Podcast Fetching (RSS + pod2txt) ----------------------------------------
@@ -101,7 +139,7 @@ function parseRssFeed(xml) {
     const guidMatch =
       block.match(/<guid[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/guid>/) ||
       block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/);
-    const guid = guidMatch ? guidMatch[1].trim() : null;
+    let guid = guidMatch ? guidMatch[1].trim() : null;
 
     // Extract publish date
     const pubDateMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
@@ -109,9 +147,15 @@ function parseRssFeed(xml) {
       ? new Date(pubDateMatch[1].trim()).toISOString()
       : null;
 
-    // Extract episode link (for the feed output URL)
-    const linkMatch = block.match(/<link>([\s\S]*?)<\/link>/);
+    // Extract item link (for the feed output URL and fallback GUID)
+    const linkMatch =
+      block.match(/<link><!\[CDATA\[([\s\S]*?)\]\]><\/link>/) ||
+      block.match(/<link>([\s\S]*?)<\/link>/);
     const link = linkMatch ? linkMatch[1].trim() : null;
+
+    // Use link as GUID fallback when GUID is missing
+    // Some RSS feeds (e.g. 少数派, 36kr) don't include GUID elements
+    if (!guid) guid = link;
 
     if (guid) {
       episodes.push({ title, guid, publishedAt, link });
@@ -975,7 +1019,9 @@ async function fetchBlogContent(blogs, state, errors) {
             name: blog.name,
             title: extracted.title || article.title || "Untitled",
             url: article.url,
-            publishedAt: extracted.publishedAt || article.publishedAt || null,
+            publishedAt: normalizePublishedAt(
+              extracted.publishedAt || article.publishedAt,
+            ),
             author: extracted.author || "",
             description: article.description || "",
             content: extracted.content,
@@ -1000,6 +1046,124 @@ async function fetchBlogContent(blogs, state, errors) {
   return results;
 }
 
+// -- Generic RSS Feed Fetcher (Newsletters, Academic, Chinese Tech) ----------
+
+// Unified RSS-based feed fetching for newsletters, academic papers, and
+// Chinese tech media. All three share the same pattern: RSS feed → parse
+// items → filter by lookback → dedup → output.
+//
+// For academic feeds, an optional keyword filter is applied to surface only
+// the most relevant papers (e.g. LLM, agent, reasoning).
+async function fetchRssFeeds(
+  sources,
+  lookbackHours,
+  maxPerSource,
+  state,
+  errors,
+  filterKeywords,
+  excludeKeywords,
+  { fetchImpl = fetch, now = Date.now } = {},
+) {
+  const results = [];
+  const nowMs = now();
+  const cutoff = new Date(nowMs - lookbackHours * 60 * 60 * 1000);
+
+  for (const source of sources) {
+    if (!source.rss) {
+      console.error(`  ${source.name}: No RSS URL configured, skipping`);
+      continue;
+    }
+
+    try {
+      console.error(`  Fetching RSS for ${source.name}...`);
+      const res = await fetchImpl(source.rss, {
+        headers: {
+          "User-Agent": RSS_USER_AGENT,
+          Accept: "application/rss+xml, application/xml, text/xml, */*",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        signal: AbortSignal.timeout(30000),
+      });
+
+      if (!res.ok) {
+        errors.push(`RSS: Failed to fetch ${source.name}: HTTP ${res.status}`);
+        console.error(`  ${source.name}: HTTP ${res.status}`);
+        continue;
+      }
+
+      const xml = await res.text();
+      const items = parseRssFeed(xml);
+      console.error(`  ${source.name}: ${items.length} items in feed`);
+
+      // Filter by lookback, dedup, and optional keywords
+      const newItems = [];
+      for (const item of items) {
+        // Dedup: use guid as key, fall back to item link
+        const dedupKey = item.guid || item.link;
+        if (!dedupKey) continue;
+        if (state.seenArticles[dedupKey]) {
+          console.error(`    Skipping "${item.title}" (already seen)`);
+          continue;
+        }
+        if (item.publishedAt && new Date(item.publishedAt) < cutoff) {
+          console.error(`    Skipping "${item.title}" (outside lookback window)`);
+          continue;
+        }
+
+        // Optional keyword filter for academic papers
+        if (filterKeywords && filterKeywords.length > 0) {
+          const title = (item.title || "").toLowerCase();
+          const hasKeyword = filterKeywords.some((kw) =>
+            title.includes(kw.toLowerCase())
+          );
+          if (!hasKeyword) {
+            console.error(`    Skipping "${item.title}" (no keyword match)`);
+            continue;
+          }
+        }
+        if (excludeKeywords && excludeKeywords.length > 0) {
+          const title = (item.title || "").toLowerCase();
+          const hasExclude = excludeKeywords.some((kw) =>
+            title.includes(kw.toLowerCase())
+          );
+          if (hasExclude) {
+            console.error(`    Skipping "${item.title}" (excluded keyword match)`);
+            continue;
+          }
+        }
+
+        newItems.push({
+          title: item.title || "Untitled",
+          url: item.link || source.url,
+          publishedAt: item.publishedAt || null,
+          guid: item.guid || item.link,
+          source: source.name,
+          language: source.language || "en",
+        });
+
+        state.seenArticles[dedupKey] = nowMs;
+
+        if (newItems.length >= maxPerSource) break;
+      }
+
+      if (newItems.length > 0) {
+        results.push({
+          source: source.name,
+          url: source.url,
+          tags: source.tags || [],
+          items: newItems,
+        });
+        console.error(`  ${source.name}: ${newItems.length} new items`);
+      }
+    } catch (err) {
+      errors.push(`RSS: Error fetching ${source.name}: ${err.message}`);
+      console.error(`  ${source.name}: ${err.message}`);
+    }
+  }
+
+  return results;
+}
+
 // -- Main --------------------------------------------------------------------
 
 async function main() {
@@ -1007,12 +1171,19 @@ async function main() {
   const tweetsOnly = args.includes("--tweets-only");
   const podcastsOnly = args.includes("--podcasts-only");
   const blogsOnly = args.includes("--blogs-only");
+  const newslettersOnly = args.includes("--newsletters-only");
+  const academicOnly = args.includes("--academic-only");
+  const zhTechOnly = args.includes("--zh-tech-only");
 
   // If a specific --*-only flag is set, only that feed type runs.
-  // If no flag is set, all three run.
-  const runTweets = tweetsOnly || (!podcastsOnly && !blogsOnly);
-  const runPodcasts = podcastsOnly || (!tweetsOnly && !blogsOnly);
-  const runBlogs = blogsOnly || (!tweetsOnly && !podcastsOnly);
+  // If no flag is set, all feed types run.
+  const anyOnly = tweetsOnly || podcastsOnly || blogsOnly || newslettersOnly || academicOnly || zhTechOnly;
+  const runTweets = tweetsOnly || !anyOnly;
+  const runPodcasts = podcastsOnly || !anyOnly;
+  const runBlogs = blogsOnly || !anyOnly;
+  const runNewsletters = newslettersOnly || !anyOnly;
+  const runAcademic = academicOnly || !anyOnly;
+  const runZhTech = zhTechOnly || !anyOnly;
 
   const xBearerToken = process.env.X_BEARER_TOKEN;
   const pod2txtKey = process.env.POD2TXT_API_KEY;
@@ -1057,13 +1228,13 @@ async function main() {
       );
     }
 
-    const xFeed = {
+    const xFeed = createFeedEnvelope({
       generatedAt: new Date().toISOString(),
       lookbackHours: TWEET_LOOKBACK_HOURS,
       x: xContent,
       stats: { xBuilders: xContent.length, totalTweets },
       errors: xErrors.length > 0 ? xErrors : undefined,
-    };
+    });
     await writeFile(
       join(SCRIPT_DIR, "..", "feed-x.json"),
       JSON.stringify(xFeed, null, 2),
@@ -1084,7 +1255,7 @@ async function main() {
     );
     console.error(`  Found ${podcasts.length} new episodes`);
 
-    const podcastFeed = {
+    const podcastFeed = createFeedEnvelope({
       generatedAt: new Date().toISOString(),
       lookbackHours: PODCAST_LOOKBACK_HOURS,
       podcasts,
@@ -1093,7 +1264,7 @@ async function main() {
         errors.filter((e) => e.startsWith("Podcast")).length > 0
           ? errors.filter((e) => e.startsWith("Podcast"))
           : undefined,
-    };
+    });
     await writeFile(
       join(SCRIPT_DIR, "..", "feed-podcasts.json"),
       JSON.stringify(podcastFeed, null, 2),
@@ -1107,7 +1278,7 @@ async function main() {
     const blogContent = await fetchBlogContent(sources.blogs, state, errors);
     console.error(`  Found ${blogContent.length} new blog post(s)`);
 
-    const blogFeed = {
+    const blogFeed = createFeedEnvelope({
       generatedAt: new Date().toISOString(),
       lookbackHours: BLOG_LOOKBACK_HOURS,
       blogs: blogContent,
@@ -1116,12 +1287,105 @@ async function main() {
         errors.filter((e) => e.startsWith("Blog")).length > 0
           ? errors.filter((e) => e.startsWith("Blog"))
           : undefined,
-    };
+    });
     await writeFile(
       join(SCRIPT_DIR, "..", "feed-blogs.json"),
       JSON.stringify(blogFeed, null, 2),
     );
     console.error(`  feed-blogs.json: ${blogContent.length} posts`);
+  }
+
+  // Fetch newsletters (RSS-based)
+  if (runNewsletters && sources.newsletters && sources.newsletters.length > 0) {
+    console.error("Fetching newsletter content (RSS)...");
+    const errorStart = errors.length;
+    const newsletterContent = await fetchRssFeeds(
+      sources.newsletters,
+      NEWSLETTER_LOOKBACK_HOURS,
+      MAX_NEWSLETTERS_PER_SOURCE,
+      state,
+      errors,
+    );
+    console.error(`  Found ${newsletterContent.length} new newsletter(s)`);
+
+    const newsletterFeed = createFeedEnvelope({
+      generatedAt: new Date().toISOString(),
+      lookbackHours: NEWSLETTER_LOOKBACK_HOURS,
+      newsletters: newsletterContent,
+      stats: { newsletterSources: newsletterContent.length },
+      errors: errorsSince(errors, errorStart).length > 0
+        ? errorsSince(errors, errorStart)
+        : undefined,
+    });
+    await writeFile(
+      join(SCRIPT_DIR, "..", "feed-newsletters.json"),
+      JSON.stringify(newsletterFeed, null, 2),
+    );
+    console.error(`  feed-newsletters.json: ${newsletterContent.length} sources with new content`);
+  }
+
+  // Fetch academic papers (RSS from arXiv)
+  if (runAcademic && sources.academic && sources.academic.sources && sources.academic.sources.length > 0) {
+    console.error("Fetching academic papers (arXiv RSS)...");
+    const errorStart = errors.length;
+    const filterKeywords = sources.academic.filters?.minKeywords || [];
+    const excludeKeywords = sources.academic.filters?.excludeKeywords || [];
+    const academicContent = await fetchRssFeeds(
+      sources.academic.sources,
+      ACADEMIC_LOOKBACK_HOURS,
+      MAX_PAPERS_PER_SOURCE,
+      state,
+      errors,
+      filterKeywords,
+      excludeKeywords,
+    );
+    console.error(`  Found ${academicContent.length} categories with new papers`);
+
+    const totalPapers = academicContent.reduce((sum, src) => sum + src.items.length, 0);
+    const academicFeed = createFeedEnvelope({
+      generatedAt: new Date().toISOString(),
+      lookbackHours: ACADEMIC_LOOKBACK_HOURS,
+      papers: academicContent,
+      stats: { categories: academicContent.length, totalPapers },
+      errors: errorsSince(errors, errorStart).length > 0
+        ? errorsSince(errors, errorStart)
+        : undefined,
+    });
+    await writeFile(
+      join(SCRIPT_DIR, "..", "feed-academic.json"),
+      JSON.stringify(academicFeed, null, 2),
+    );
+    console.error(`  feed-academic.json: ${totalPapers} papers across ${academicContent.length} categories`);
+  }
+
+  // Fetch Chinese tech media (RSS-based)
+  if (runZhTech && sources.zhTech && sources.zhTech.length > 0) {
+    console.error("Fetching Chinese tech media (RSS)...");
+    const errorStart = errors.length;
+    const zhTechContent = await fetchRssFeeds(
+      sources.zhTech,
+      ZH_TECH_LOOKBACK_HOURS,
+      MAX_ZH_ARTICLES_PER_SOURCE,
+      state,
+      errors,
+    );
+    console.error(`  Found ${zhTechContent.length} sources with new articles`);
+
+    const totalArticles = zhTechContent.reduce((sum, src) => sum + src.items.length, 0);
+    const zhTechFeed = createFeedEnvelope({
+      generatedAt: new Date().toISOString(),
+      lookbackHours: ZH_TECH_LOOKBACK_HOURS,
+      articles: zhTechContent,
+      stats: { sources: zhTechContent.length, totalArticles },
+      errors: errorsSince(errors, errorStart).length > 0
+        ? errorsSince(errors, errorStart)
+        : undefined,
+    });
+    await writeFile(
+      join(SCRIPT_DIR, "..", "feed-zh-tech.json"),
+      JSON.stringify(zhTechFeed, null, 2),
+    );
+    console.error(`  feed-zh-tech.json: ${totalArticles} articles from ${zhTechContent.length} sources`);
   }
 
   // Save dedup state
@@ -1132,7 +1396,17 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("Feed generation failed:", err.message);
-  process.exit(1);
-});
+export {
+  errorsSince,
+  fetchRssFeeds,
+  main,
+  normalizePublishedAt,
+  parseRssFeed,
+};
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error("Feed generation failed:", err.message);
+    process.exit(1);
+  });
+}

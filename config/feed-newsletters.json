@@ -1,0 +1,37 @@
+{
+  "lookbackHours": 72,
+  "sources": [
+    {
+      "name": "Stratechery (Ben Thompson)",
+      "rss": "https://stratechery.com/feed/",
+      "url": "https://stratechery.com/",
+      "tags": ["newsletter", "tech-strategy", "daily"],
+      "cadence": "daily",
+      "maxArticles": 2
+    },
+    {
+      "name": "One Useful Thing (Ethan Mollick)",
+      "rss": "https://oneusefulthing.org/feed",
+      "url": "https://oneusefulthing.org/",
+      "tags": ["newsletter", "ai-practice", "weekly"],
+      "cadence": "weekly",
+      "maxArticles": 2
+    },
+    {
+      "name": "The Algorithmic Bridge",
+      "rss": "https://thealgorithmicbridge.com/feed",
+      "url": "https://thealgorithmicbridge.com/",
+      "tags": ["newsletter", "ai-analysis", "weekly"],
+      "cadence": "weekly",
+      "maxArticles": 2
+    },
+    {
+      "name": "AI Snake Oil",
+      "rss": "https://aisnakeoil.substack.com/feed",
+      "url": "https://aisnakeoil.substack.com/",
+      "tags": ["newsletter", "ai-critique", "weekly"],
+      "cadence": "weekly",
+      "maxArticles": 2
+    }
+  ]
+}
