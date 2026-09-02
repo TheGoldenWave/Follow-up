@@ -3,6 +3,8 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
 
 export const EXPECTED_FEEDS = [
   'x',
@@ -14,7 +16,6 @@ export const EXPECTED_FEEDS = [
 ];
 
 const PRODUCT_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const RELEASE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TOP_LEVEL_FIELDS = [
   '$schema',
   'schemaVersion',
@@ -37,6 +38,24 @@ const PLANNED_CAPABILITIES = [
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isGregorianDate(value) {
+  const match = typeof value === 'string'
+    ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+    : null;
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth[month - 1];
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function validateFields(value, path, allowed, required, errors) {
@@ -73,9 +92,8 @@ export function validateManifest(manifest, repositoryVersion) {
   if (manifest.productVersion !== repositoryVersion) {
     errors.push(`manifest.productVersion ${manifest.productVersion} does not match VERSION ${repositoryVersion}`);
   }
-  if (typeof manifest.releaseDate !== 'string'
-      || !RELEASE_DATE_PATTERN.test(manifest.releaseDate)) {
-    errors.push('manifest.releaseDate must use YYYY-MM-DD');
+  if (!isGregorianDate(manifest.releaseDate)) {
+    errors.push('manifest.releaseDate must be a real Gregorian date using YYYY-MM-DD');
   }
   if (manifest.channel !== 'stable') errors.push('manifest.channel must be stable');
   if (manifest.minimumSupportedVersion !== null) {
@@ -165,6 +183,21 @@ export async function validateRelease(root = resolve(dirname(fileURLToPath(impor
     ),
   ]);
 
+  if (manifest && schema) {
+    try {
+      const ajv = new Ajv2020({ allErrors: true, strict: true });
+      addFormats(ajv, { mode: 'full' });
+      const validateSchema = ajv.compile(schema);
+      if (!validateSchema(manifest)) {
+        for (const error of validateSchema.errors ?? []) {
+          const location = error.instancePath || '/';
+          errors.push(`release-manifest.json schema validation failed at ${location}: ${error.message}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`contracts/release-manifest.schema.json is invalid: ${error.message}`);
+    }
+  }
   if (manifest) errors.push(...validateManifest(manifest, version));
   if (packageJson?.version !== version) {
     errors.push(`scripts/package.json version ${packageJson?.version} does not match VERSION ${version}`);
@@ -172,15 +205,24 @@ export async function validateRelease(root = resolve(dirname(fileURLToPath(impor
   if (packageLock?.version !== version || packageLock?.packages?.['']?.version !== version) {
     errors.push(`scripts/package-lock.json versions do not match VERSION ${version}`);
   }
+  if (packageJson?.engines?.node !== manifest?.runtime?.node) {
+    errors.push('scripts/package.json engines.node does not match manifest.runtime.node');
+  }
+  if (packageLock?.packages?.['']?.engines?.node !== manifest?.runtime?.node) {
+    errors.push('scripts/package-lock.json engines.node does not match manifest.runtime.node');
+  }
   if (schema?.$id !== 'https://github.com/TheGoldenWave/Follow-up/contracts/release-manifest.schema.json') {
     errors.push('contracts/release-manifest.schema.json has an unexpected $id');
   }
 
   try {
     const changelog = await readFile(resolve(rootPath, 'CHANGELOG.md'), 'utf8');
-    const escapedVersion = version.replaceAll('.', '\\.');
-    if (!new RegExp(`^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`, 'm').test(changelog)) {
-      errors.push(`CHANGELOG.md has no dated section for VERSION ${version}`);
+    const heading = new RegExp(
+      `^## \\[${escapeRegExp(version)}\\] - ${escapeRegExp(manifest?.releaseDate ?? '')}$`,
+      'm',
+    );
+    if (!heading.test(changelog)) {
+      errors.push(`CHANGELOG.md date does not match manifest.releaseDate for VERSION ${version}`);
     }
   } catch (error) {
     errors.push(`CHANGELOG.md is not readable: ${error.message}`);

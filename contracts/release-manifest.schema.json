@@ -41,7 +41,7 @@
     "releaseNotesUrl": {
       "type": "string",
       "format": "uri",
-      "pattern": "/releases/tag/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+      "pattern": "^https://github\\.com/TheGoldenWave/Follow-up/releases/tag/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
     },
     "trustMode": {
       "const": "github-tag-sha256"

@@ -16,6 +16,26 @@ async function readJson(relativePath) {
   return JSON.parse(await readFile(new URL(relativePath, repositoryRoot), 'utf8'));
 }
 
+async function createReleaseFixture(t) {
+  const root = await mkdtemp(join(tmpdir(), 'follow-up-release-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'scripts'));
+  await mkdir(join(root, 'contracts'));
+
+  const files = [
+    'VERSION',
+    'CHANGELOG.md',
+    'release-manifest.json',
+    'contracts/release-manifest.schema.json',
+    'scripts/package.json',
+    'scripts/package-lock.json',
+  ];
+  for (const file of files) {
+    await writeFile(join(root, file), await readFile(new URL(file, repositoryRoot)));
+  }
+  return root;
+}
+
 test('repository release identity agrees on version 0.1.0', async () => {
   const version = (await readFile(new URL('VERSION', repositoryRoot), 'utf8')).trim();
   const packageJson = await readJson('scripts/package.json');
@@ -56,6 +76,24 @@ test('validator rejects malformed and mismatched product versions', async () => 
   ));
   assert.ok(validateManifest(manifest, '0.1.1').some(
     (error) => error.includes('does not match VERSION'),
+  ));
+});
+
+test('validator and schema reject non-Gregorian release dates', async (t) => {
+  const manifest = await readJson('release-manifest.json');
+
+  assert.ok(validateManifest({ ...manifest, releaseDate: '2026-02-30' }, '0.1.0').some(
+    (error) => error.includes('releaseDate'),
+  ));
+
+  const root = await createReleaseFixture(t);
+  manifest.releaseDate = '2026-02-30';
+  await writeFile(
+    join(root, 'release-manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  assert.ok((await validateRelease(root)).some(
+    (error) => error.includes('schema validation failed') && error.includes('releaseDate'),
   ));
 });
 
@@ -103,22 +141,7 @@ test('repository release validator accepts the checked-in release metadata', asy
 });
 
 test('repository release validator rejects package, lockfile, and changelog version drift', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'follow-up-release-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  await mkdir(join(root, 'scripts'));
-  await mkdir(join(root, 'contracts'));
-
-  const files = [
-    'VERSION',
-    'CHANGELOG.md',
-    'release-manifest.json',
-    'contracts/release-manifest.schema.json',
-    'scripts/package.json',
-    'scripts/package-lock.json',
-  ];
-  for (const file of files) {
-    await writeFile(join(root, file), await readFile(new URL(file, repositoryRoot)));
-  }
+  const root = await createReleaseFixture(t);
 
   const packageJson = JSON.parse(await readFile(join(root, 'scripts/package.json'), 'utf8'));
   packageJson.version = '0.1.1';
@@ -137,4 +160,54 @@ test('repository release validator rejects package, lockfile, and changelog vers
   assert.ok((await validateRelease(root)).some(
     (error) => error.includes('scripts/package-lock.json'),
   ));
+});
+
+test('repository validator applies the checked-in Draft 2020-12 schema', async (t) => {
+  const root = await createReleaseFixture(t);
+  const schemaPath = join(root, 'contracts/release-manifest.schema.json');
+  const schema = JSON.parse(await readFile(schemaPath, 'utf8'));
+  schema.properties.productVersion.const = '9.9.9';
+  await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`);
+
+  assert.ok((await validateRelease(root)).some(
+    (error) => error.includes('schema validation failed') && error.includes('productVersion'),
+  ));
+});
+
+test('schema rejects release note URLs outside the canonical GitHub release origin', async (t) => {
+  const root = await createReleaseFixture(t);
+  const manifestPath = join(root, 'release-manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.releaseNotesUrl = 'https://example.com/releases/tag/v0.1.0';
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+  assert.ok((await validateRelease(root)).some(
+    (error) => error.includes('schema validation failed') && error.includes('releaseNotesUrl'),
+  ));
+});
+
+test('repository validator requires changelog and manifest release dates to agree', async (t) => {
+  const root = await createReleaseFixture(t);
+  await writeFile(join(root, 'CHANGELOG.md'), '# Changelog\n\n## [0.1.0] - 2026-09-01\n');
+
+  assert.ok((await validateRelease(root)).some(
+    (error) => error.includes('CHANGELOG.md') && error.includes('releaseDate'),
+  ));
+});
+
+test('repository validator requires package and lockfile Node engines to match the manifest', async (t) => {
+  const root = await createReleaseFixture(t);
+  const packagePath = join(root, 'scripts/package.json');
+  const packageJson = JSON.parse(await readFile(packagePath, 'utf8'));
+  packageJson.engines.node = '>=22.0.0';
+  await writeFile(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+  const lockPath = join(root, 'scripts/package-lock.json');
+  const packageLock = JSON.parse(await readFile(lockPath, 'utf8'));
+  packageLock.packages[''].engines.node = '>=18.0.0';
+  await writeFile(lockPath, `${JSON.stringify(packageLock, null, 2)}\n`);
+
+  const errors = await validateRelease(root);
+  assert.ok(errors.some((error) => error.includes('scripts/package.json engines.node')));
+  assert.ok(errors.some((error) => error.includes('scripts/package-lock.json engines.node')));
 });
