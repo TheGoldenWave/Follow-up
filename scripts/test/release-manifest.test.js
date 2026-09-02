@@ -85,6 +85,7 @@ test('manifest records non-circular tracked content and critical-file integrity'
   assert.equal(manifest.integrity.criticalFiles.algorithm, 'sha256');
   assert.equal(Object.hasOwn(manifest.integrity.criticalFiles.files, 'release-manifest.json'), false);
   const requiredCriticalFiles = [
+    'LICENSE',
     'THIRD_PARTY_NOTICES.md',
     'docs/third-party/v0.1.0-dependencies.md',
     'scripts/release/check-provenance.js',

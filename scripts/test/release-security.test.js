@@ -71,26 +71,37 @@ test('dependency license verification rejects report drift and unapproved licens
   assert.ok(errors.some((error) => error.includes('report does not match')));
 });
 
-test('provenance gate explicitly blocks publication while authorization is pending', async () => {
+test('provenance gate accepts maintainer-attested MIT authorization and project license', async () => {
   const errors = await checkProvenance(repositoryRoot);
-  assert.ok(errors.some((error) => error.includes('pending-user-confirmation')));
-  assert.ok(errors.some((error) => error.includes('LICENSE')));
+  assert.deepEqual(errors, []);
 
   const notices = await readFile(new URL('../../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8');
   assert.match(notices, /zarazhangrui\/follow-builders/);
   assert.match(notices, /upstream GitHub.*no license/i);
-  assert.match(notices, /redistribution authorization status:\s*`pending-user-confirmation`/i);
+  assert.match(notices, /maintainer explicitly confirmed on 2026-09-02/i);
+  assert.match(notices, /maintainer attestation in this project release process/i);
+  assert.match(notices, /MIT redistribution authorization/i);
+  assert.match(notices, /redistribution authorization status:\s*`authorized`/i);
+  assert.doesNotMatch(notices, /upstream (?:public )?repo(?:sitory)? (?:is|was) MIT/i);
+
+  const license = await readFile(new URL('../../LICENSE', import.meta.url), 'utf8');
+  assert.match(license, /Copyright \(c\) 2026 Zara Zhang/);
+  assert.match(license, /Copyright \(c\) 2026 GoldenWave/);
+  assert.match(license, /Permission is hereby granted, free of charge/);
+  assert.match(license, /THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND/);
 });
 
-test('v0.1.0 installation docs do not offer an unverified ClawHub path or claim MIT', async () => {
+test('v0.1.0 docs avoid unverified ClawHub and state the authorized MIT terms accurately', async () => {
   for (const path of ['README.md', 'README.zh-CN.md', 'SKILL.md']) {
     const content = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
     assert.doesNotMatch(content, /clawhub install follow-builders/i, path);
   }
   for (const path of ['README.md', 'README.zh-CN.md']) {
     const content = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
-    assert.doesNotMatch(content, /^MIT$/m, path);
-    assert.match(content, /pending provenance authorization|来源授权.*待确认/i, path);
+    assert.match(content, /distributed under (?:the )?MIT|按 MIT 许可证分发/i, path);
+    assert.match(content, /confirmed MIT authorization|已确认的 MIT 授权/i, path);
+    assert.match(content, /\[LICENSE\]\(LICENSE\)/, path);
+    assert.match(content, /\[THIRD_PARTY_NOTICES\.md\]\(THIRD_PARTY_NOTICES\.md\)/, path);
   }
 });
 

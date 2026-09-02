@@ -422,11 +422,12 @@ ClawHub 安装路径。
 - 你的配置和自定义 Prompt 保留在自己的设备上
 - 阅读与反馈状态尚未正式实现；未来必须使用本地用户状态，不与公共 Feed 或代码一起提交
 
-## 发布授权
+## 许可证与授权
 
-发布目前因来源授权待确认而被阻止。Follow-up 派生自
-`zarazhangrui/follow-builders`，其上游 GitHub 仓库当前未提供许可证文件。
-再分发授权状态仍为 `pending-user-confirmation`；详见
+Follow-up 按 MIT 许可证分发，全文见 [LICENSE](LICENSE)。来自 `zarazhangrui/follow-builders` 的
+上游派生代码依据已确认的 MIT 授权纳入；该授权由项目维护者于 2026-09-02 在本项目
+发布流程中作出证明。公开上游 GitHub 仓库在审查时未提供许可证文件，本项目不声称
+该公开仓库本身采用 MIT 许可证。详见
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ---

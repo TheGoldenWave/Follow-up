@@ -441,12 +441,13 @@ All settings are stored in `~/.follow-builders/config.json`:
 - Your configuration and custom prompts stay on your machine
 - Reading and feedback state is not implemented yet; future state must remain local and separate from public Feeds and product code
 
-## Release authorization
+## License and authorization
 
-Release publication is blocked pending provenance authorization. Follow-up is derived
-from `zarazhangrui/follow-builders`, whose upstream GitHub repository currently exposes
-no license file. The redistribution authorization status remains
-`pending-user-confirmation`; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Follow-up is distributed under the MIT terms in [LICENSE](LICENSE). Upstream-derived code from
+`zarazhangrui/follow-builders` is included under confirmed MIT authorization recorded
+through maintainer attestation on 2026-09-02. The public upstream GitHub repository had
+no license file when reviewed; this project does not claim that repository itself is
+publicly MIT licensed. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 

@@ -123,6 +123,7 @@
               "type": "object",
               "minProperties": 1,
               "required": [
+                "LICENSE",
                 "THIRD_PARTY_NOTICES.md",
                 "SKILL.md",
                 "VERSION",
@@ -149,6 +150,7 @@
                 "scripts/release/verify-dependency-licenses.js"
               ],
               "properties": {
+                "LICENSE": { "$ref": "#/$defs/sha256" },
                 "THIRD_PARTY_NOTICES.md": { "$ref": "#/$defs/sha256" },
                 "SKILL.md": { "$ref": "#/$defs/sha256" },
                 "VERSION": { "$ref": "#/$defs/sha256" },

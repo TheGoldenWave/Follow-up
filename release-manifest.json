@@ -30,16 +30,17 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "55003a9df578772186653a8dbd7a2b181177e7cce8a838af919e4b4432f1e2da"
+      "digest": "aa23cb47511e3c0549aa4be0597b2be3e07cb3cf7d389226685e68aebca74650"
     },
     "criticalFiles": {
       "algorithm": "sha256",
       "files": {
+        "LICENSE": "3b1d30c9384a70f0f163fec07b83b0d410b3d7ab1273f1f9dd4a060e105f4da2",
         "SKILL.md": "0e96a43faab8deccb1b57546ab1d5a304069e8ecf24eb20962886f6ea54a9608",
-        "THIRD_PARTY_NOTICES.md": "2cd43334c0c8fe14d33ad3ba6fb2b027134dd243a7a86b6b627aa0df0695e5d4",
+        "THIRD_PARTY_NOTICES.md": "b167f01a0e79c75fe212f9c07ce8b8d113db7124aa11dce40abe8bc950104d2c",
         "VERSION": "e9dd8507f4bf0c6f42458e41aea833ad0bd3f6127272335eee9bf4d58541ed67",
         "contracts/central-feed.schema.json": "555b2fa536db5a90989eea416ac01651d419e92934bbc11cc9b404694ab058d2",
-        "contracts/release-manifest.schema.json": "87d241362f3d8e9ba40dffe16ab6314effd194760a968e6f41a2ae8d27a98baf",
+        "contracts/release-manifest.schema.json": "0a42d6d98c3c78b6fc30cd2b6abab337ee93c16f2714d7563a0f726b5f4de94c",
         "docs/third-party/v0.1.0-dependencies.md": "7b5fa03e7f1c6f987ebbc877ccd645c96a82faaa63d0f6b004eaee139fc969f2",
         "prompts/digest-intro.md": "5d25f2184b8bbacd910fcbe4547f02b83af76eb03f57f3b0bef02c8d2e1b91c5",
         "prompts/summarize-blogs.md": "58bfb1da427305b118ffcceabe8830f54566a142896e3c8605e556b98a5d2424",
@@ -56,7 +57,7 @@
         "scripts/release/build-release.sh": "a96dd85222d22237986caaa198a390b511bf96f46885224f4a78e5b1257178c8",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
         "scripts/release/scan-secrets.js": "5879411abcf32c30609d336b1a28cf2323b4df51964cdead3d12274d5e5b2ada",
-        "scripts/release/validate-release.js": "a0149b7fd3fd929f09991b8de1ad3c990941bab163dbbc9b0bd4a21b17423049",
+        "scripts/release/validate-release.js": "8082a9bc50ad308da784ddb6a748be6b372787c021ba546d17811e39743d78c6",
         "scripts/release/verify-dependency-licenses.js": "f4b2603095df4651a54f7deeee741b697301a9672ee1c48cf61f8419325f1572",
         "scripts/validate-feed-artifact.js": "0bdaec30c219c4bffb3e72dd12f8a6177d3a7cf2d3158f13000e58e35b3b3c73"
       }

@@ -19,6 +19,7 @@ export const EXPECTED_FEEDS = [
 ];
 
 export const REQUIRED_CRITICAL_FILES = [
+  'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'SKILL.md',
   'VERSION',
