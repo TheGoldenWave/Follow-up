@@ -35,6 +35,7 @@ export const REQUIRED_CRITICAL_FILES = [
   'scripts/package-lock.json',
   'scripts/package.json',
   'scripts/prepare-digest.js',
+  'scripts/validate-feed-artifact.js',
   'scripts/release/build-release.sh',
   'scripts/release/validate-release.js',
 ];

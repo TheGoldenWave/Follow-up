@@ -139,6 +139,7 @@
                 "scripts/package-lock.json",
                 "scripts/package.json",
                 "scripts/prepare-digest.js",
+                "scripts/validate-feed-artifact.js",
                 "scripts/release/build-release.sh",
                 "scripts/release/validate-release.js"
               ],
@@ -159,6 +160,7 @@
                 "scripts/package-lock.json": { "$ref": "#/$defs/sha256" },
                 "scripts/package.json": { "$ref": "#/$defs/sha256" },
                 "scripts/prepare-digest.js": { "$ref": "#/$defs/sha256" },
+                "scripts/validate-feed-artifact.js": { "$ref": "#/$defs/sha256" },
                 "scripts/release/build-release.sh": { "$ref": "#/$defs/sha256" },
                 "scripts/release/validate-release.js": { "$ref": "#/$defs/sha256" }
               },

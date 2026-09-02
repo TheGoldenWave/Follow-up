@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -21,6 +23,7 @@ import {
   fetchJSON as fetchDigestJSON,
   loadCentralFeedData,
 } from '../prepare-digest.js';
+import { validateArtifactDirectory } from '../validate-feed-artifact.js';
 
 const repositoryRoot = new URL('../../', import.meta.url);
 
@@ -423,4 +426,67 @@ test('workflow dispatch and generated-file tracking cover exactly the six live c
     assert.match(workflow, new RegExp(filename.replace('.', '\\.')));
   }
   assert.doesNotMatch(workflow, /reports-only|feed-reports\.json/);
+});
+
+test('feed artifact gate accepts exactly six feeds plus state and rejects unsafe contents', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'follow-up-feeds-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  for (const [, filename] of feedCases) {
+    await writeFile(directory + '/' + filename, await readFile(new URL(filename, repositoryRoot)));
+  }
+  await writeFile(join(directory, 'state-feed.json'), await readFile(new URL('state-feed.json', repositoryRoot)));
+  assert.deepEqual(await validateArtifactDirectory(directory), []);
+
+  await writeFile(join(directory, 'unexpected.json'), '{}\n');
+  assert.ok((await validateArtifactDirectory(directory)).some((error) => error.includes('unexpected.json')));
+  await rm(join(directory, 'unexpected.json'));
+
+  await rm(join(directory, 'feed-x.json'));
+  await symlink(join(directory, 'feed-podcasts.json'), join(directory, 'feed-x.json'));
+  assert.ok((await validateArtifactDirectory(directory)).some((error) => error.includes('symbolic link')));
+});
+
+test('feed workflow pins actions and separates secret generation from publishing', async () => {
+  const workflow = await readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8');
+  const pins = [
+    'actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0',
+    'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0',
+    'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2',
+    'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0',
+  ];
+  for (const pin of pins) assert.ok(workflow.includes(pin), pin);
+  assert.doesNotMatch(workflow, /uses:\s+[^\s]+@v\d+/);
+  assert.match(workflow, /concurrency:[\s\S]*cancel-in-progress: false/);
+
+  const generateJob = workflow.slice(workflow.indexOf('  generate:'), workflow.indexOf('  publish:'));
+  const publishJob = workflow.slice(workflow.indexOf('  publish:'));
+  assert.match(generateJob, /permissions:\s*\n\s+contents: read/);
+  assert.match(generateJob, /persist-credentials: false/);
+  assert.match(generateJob, /secrets\.X_BEARER_TOKEN/);
+  assert.doesNotMatch(generateJob, /contents: write/);
+  assert.match(publishJob, /permissions:\s*\n\s+contents: write/);
+  assert.doesNotMatch(publishJob, /secrets\.|X_BEARER_TOKEN|POD2TXT_API_KEY|npm (ci|install|test)/);
+});
+
+test('feed workflow transfers and publishes only the exact seven generated files', async () => {
+  const workflow = await readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8');
+  const expectedFiles = [...feedCases.map(([, filename]) => filename), 'state-feed.json'];
+  const uploadStart = workflow.indexOf('actions/upload-artifact@');
+  const publishStart = workflow.indexOf('  publish:');
+  const uploadBlock = workflow.slice(uploadStart, publishStart);
+  for (const filename of expectedFiles) assert.match(uploadBlock, new RegExp(`^\\s+${filename.replace('.', '\\.')}\\s*$`, 'm'));
+  assert.equal((uploadBlock.match(/^\s+feed-[^\s]+\.json\s*$/gm) || []).length, 6);
+  assert.match(uploadBlock, /if-no-files-found: error/);
+
+  const publishJob = workflow.slice(publishStart);
+  const checkout = publishJob.indexOf('actions/checkout@');
+  const download = publishJob.indexOf('actions/download-artifact@');
+  const validate = publishJob.indexOf('validate-feed-artifact.js');
+  const stage = publishJob.indexOf('git add feed-x.json');
+  const push = publishJob.indexOf('git push origin HEAD:main');
+  assert.ok(checkout >= 0 && download > checkout && validate > download && stage > validate && push > stage);
+  assert.match(publishJob, /ref: main/);
+  assert.match(publishJob, /git fetch origin main/);
+  assert.match(publishJob, /git rebase origin\/main/);
 });

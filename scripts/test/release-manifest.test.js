@@ -89,6 +89,7 @@ test('manifest records non-circular tracked content and critical-file integrity'
     'scripts/release/build-release.sh',
     'scripts/package.json',
     'scripts/package-lock.json',
+    'scripts/validate-feed-artifact.js',
     'prompts/digest-intro.md',
     'prompts/summarize-blogs.md',
     'prompts/summarize-newsletter.md',
