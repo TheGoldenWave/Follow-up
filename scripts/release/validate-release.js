@@ -124,6 +124,21 @@ export async function computeCriticalFileHashes(root, paths, treeish = 'HEAD') {
   return hashes;
 }
 
+export async function computeArchiveCriticalFileHashes(root, paths) {
+  const rootPath = toPath(root);
+  const hashes = {};
+  for (const path of [...paths].sort((a, b) => Buffer.from(a).compare(Buffer.from(b)))) {
+    if (path === 'release-manifest.json') {
+      throw new Error('release-manifest.json cannot hash itself');
+    }
+    if (path.startsWith('/') || path.split('/').includes('..') || path.includes('\\')) {
+      throw new Error(`critical file path must stay inside the release: ${path}`);
+    }
+    hashes[path] = sha256(await readFile(resolve(rootPath, path)));
+  }
+  return hashes;
+}
+
 export function validateManifest(manifest, repositoryVersion) {
   const errors = [];
   if (!validateFields(manifest, 'manifest', TOP_LEVEL_FIELDS, TOP_LEVEL_FIELDS, errors)) {
@@ -260,7 +275,7 @@ async function readJson(path, label, errors) {
 
 export async function validateRelease(
   root = resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
-  { treeish = 'HEAD', verifyIntegrity = true } = {},
+  { treeish = 'HEAD', mode = 'checkout', verifyIntegrity = true } = {},
 ) {
   const rootPath = toPath(root);
   const errors = [];
@@ -319,19 +334,29 @@ export async function validateRelease(
 
   if (verifyIntegrity && manifest?.integrity) {
     try {
-      const trackedContent = await computeTrackedContentDigest(rootPath, treeish);
-      if (trackedContent.digest !== manifest.integrity.trackedContent?.digest) {
-        errors.push(`manifest tracked content digest does not match ${treeish}`);
-      }
       const criticalPaths = Object.keys(manifest.integrity.criticalFiles?.files ?? {});
-      const criticalFiles = await computeCriticalFileHashes(rootPath, criticalPaths, treeish);
+      let criticalFiles;
+      if (mode === 'archive') {
+        criticalFiles = await computeArchiveCriticalFileHashes(rootPath, criticalPaths);
+      } else if (mode === 'checkout') {
+        const trackedContent = await computeTrackedContentDigest(rootPath, treeish);
+        if (trackedContent.digest !== manifest.integrity.trackedContent?.digest) {
+          errors.push(`manifest tracked content digest does not match ${treeish}`);
+        }
+        criticalFiles = await computeCriticalFileHashes(rootPath, criticalPaths, treeish);
+      } else {
+        errors.push(`unknown release validation mode: ${mode}`);
+        criticalFiles = {};
+      }
       for (const path of criticalPaths) {
         if (criticalFiles[path] !== manifest.integrity.criticalFiles.files[path]) {
-          errors.push(`manifest critical file hash does not match ${treeish}:${path}`);
+          const source = mode === 'archive' ? path : `${treeish}:${path}`;
+          errors.push(`manifest critical file hash does not match ${source}`);
         }
       }
     } catch (error) {
-      errors.push(`repository integrity could not be verified for ${treeish}: ${error.message}`);
+      const source = mode === 'archive' ? 'archive' : treeish;
+      errors.push(`release integrity could not be verified for ${source}: ${error.message}`);
     }
   }
 
@@ -356,6 +381,7 @@ const isCli = process.argv[1]
 
 if (isCli) {
   const args = process.argv.slice(2);
+  const mode = args.includes('--archive') ? 'archive' : 'checkout';
   const treeishIndex = args.indexOf('--treeish');
   const treeish = treeishIndex >= 0 ? args[treeishIndex + 1] : 'HEAD';
   if (treeishIndex >= 0 && !treeish) {
@@ -364,6 +390,10 @@ if (isCli) {
   }
 
   if (args.includes('--write-integrity')) {
+    if (mode === 'archive') {
+      console.error('--write-integrity requires a Git checkout');
+      process.exit(2);
+    }
     const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
     const manifestPath = resolve(root, 'release-manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
@@ -380,11 +410,14 @@ if (isCli) {
     process.exit(0);
   }
 
-  const errors = await validateRelease(undefined, { treeish });
+  const errors = await validateRelease(undefined, { treeish, mode });
   if (errors.length > 0) {
     for (const error of errors) console.error(`- ${error}`);
     process.exitCode = 1;
   } else {
+    if (mode === 'archive') {
+      console.log('Tracked content digest is checkout-only; archive mode verified all critical file SHA-256 hashes.');
+    }
     console.log('Release metadata is valid.');
   }
 }

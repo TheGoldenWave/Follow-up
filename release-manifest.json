@@ -30,7 +30,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "6ef704ebcfa23c46431c52f1dcba594a442f152a181398e510c3337d8ae1f8d7"
+      "digest": "47edf214bd2c89bf10130efe7f53113b1ddc10d091e2315f6062b8afe83d6267"
     },
     "criticalFiles": {
       "algorithm": "sha256",

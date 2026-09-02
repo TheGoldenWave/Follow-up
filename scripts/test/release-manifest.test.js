@@ -16,6 +16,7 @@ import {
 
 const repositoryRoot = new URL('../../', import.meta.url);
 const execFileAsync = promisify(execFile);
+const validationMode = process.env.FOLLOW_UP_RELEASE_MODE === 'archive' ? 'archive' : 'checkout';
 
 async function readJson(relativePath) {
   return JSON.parse(await readFile(new URL(relativePath, repositoryRoot), 'utf8'));
@@ -31,9 +32,13 @@ async function createReleaseFixture(t) {
     'VERSION',
     'CHANGELOG.md',
     'release-manifest.json',
+    'SKILL.md',
+    'contracts/central-feed.schema.json',
     'contracts/release-manifest.schema.json',
+    'scripts/feed-contract.js',
     'scripts/package.json',
     'scripts/package-lock.json',
+    'scripts/prepare-digest.js',
   ];
   for (const file of files) {
     await writeFile(join(root, file), await readFile(new URL(file, repositoryRoot)));
@@ -73,7 +78,9 @@ test('manifest describes only the stable centralized six-feed baseline', async (
   assert.deepEqual(validateManifest(manifest, manifest.productVersion), []);
 });
 
-test('manifest records non-circular tracked content and critical-file integrity', async () => {
+test('manifest records non-circular tracked content and critical-file integrity', {
+  skip: validationMode === 'archive' ? 'tracked content digest is checkout-only' : false,
+}, async () => {
   const manifest = await readJson('release-manifest.json');
 
   assert.equal(manifest.integrity.trackedContent.algorithm, 'git-ls-tree-sha256-v1');
@@ -93,7 +100,9 @@ test('manifest records non-circular tracked content and critical-file integrity'
   );
 });
 
-test('tracked content digest changes for tracked add, remove, content, and mode changes', async (t) => {
+test('tracked content digest changes for tracked add, remove, content, and mode changes', {
+  skip: validationMode === 'archive' ? 'Git object mutation is checkout-only' : false,
+}, async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'follow-up-integrity-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await execFileAsync('git', ['init', '-q'], { cwd: root });
@@ -198,7 +207,17 @@ test('validator rejects missing feeds, unknown fields, and implemented planned c
 });
 
 test('repository release validator accepts the checked-in release metadata', async () => {
-  assert.deepEqual(await validateRelease(repositoryRoot), []);
+  assert.deepEqual(await validateRelease(repositoryRoot, { mode: validationMode }), []);
+});
+
+test('archive mode validates critical files without Git metadata and rejects tampering', async (t) => {
+  const root = await createReleaseFixture(t);
+  assert.deepEqual(await validateRelease(root, { mode: 'archive' }), []);
+
+  await writeFile(join(root, 'SKILL.md'), 'tampered archive content\n');
+  assert.ok((await validateRelease(root, { mode: 'archive' })).some(
+    (error) => error.includes('critical file hash') && error.includes('SKILL.md'),
+  ));
 });
 
 test('repository release validator rejects package, lockfile, and changelog version drift', async (t) => {

@@ -56,6 +56,15 @@ jobs:
             exit 1
           fi
 
+      - name: Test the exact extracted archive
+        run: |
+          mkdir archive-smoke
+          tar -xzf "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz" -C archive-smoke
+          cd "archive-smoke/Follow-up-${GITHUB_REF_NAME}/scripts"
+          npm ci
+          npm run validate-release:archive
+          npm run test:archive
+
       - name: Publish immutable Stable assets
         env:
           GH_TOKEN: ${{ github.token }}

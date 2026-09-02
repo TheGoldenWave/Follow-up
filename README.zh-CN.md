@@ -355,7 +355,10 @@ curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Fol
 curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
 shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
 tar -xzf Follow-up-v0.1.0.tar.gz
-cd Follow-up-v0.1.0/scripts && npm ci
+cd Follow-up-v0.1.0/scripts
+npm ci
+npm run validate-release:archive
+npm run test:archive
 ```
 
 checksums 资产验证完整归档在既定 GitHub 信任边界内未被替换。标签内的 manifest
@@ -363,6 +366,11 @@ checksums 资产验证完整归档在既定 GitHub 信任边界内未被替换�
 `git-ls-tree-sha256-v1` 对 `git ls-tree -r -z --full-tree` 输出的原始 NUL 结尾记录
 做哈希，保留每个路径的 Git mode、type、blob object ID 和字节顺序位置，只排除
 `release-manifest.json` 以避免自引用。
+
+归档模式会验证 Schema、版本、package lock、运行时、changelog、Feed 与 Prompt
+契约，以及每个关键文件的 SHA-256。跟踪内容摘要（tracked content digest）只能在
+标签或 checkout 中重新计算，因为精确源码归档按设计不包含 `.git` object database；
+请在对应标签 checkout 中运行 `npm run validate-release` 完成这项验证。
 
 ### Hermes Agent
 ```bash

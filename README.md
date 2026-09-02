@@ -369,7 +369,10 @@ curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Fol
 curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
 shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
 tar -xzf Follow-up-v0.1.0.tar.gz
-cd Follow-up-v0.1.0/scripts && npm ci
+cd Follow-up-v0.1.0/scripts
+npm ci
+npm run validate-release:archive
+npm run test:archive
 ```
 
 The checksums asset authenticates the complete archive within the declared GitHub
@@ -379,6 +382,11 @@ of tracked Git entries and SHA-256 hashes for critical release files. Specifical
 `git ls-tree -r -z --full-tree`, preserving each path's Git mode, type, blob object ID,
 and byte-order position while excluding only `release-manifest.json` to avoid
 self-reference.
+
+Archive validation checks the schema, version, package lock, runtime, changelog, Feed
+and Prompt contracts, and every critical-file SHA-256. The tracked content digest is
+tag/checkout-only because an exact source archive intentionally contains no `.git`
+object database; validate it from the matching tag checkout with `npm run validate-release`.
 
 ### Hermes Agent
 ```bash

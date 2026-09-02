@@ -209,6 +209,45 @@ test('reinstalling the same archive leaves existing user configuration and crede
   assert.notEqual(fixtureHome, homedir());
 });
 
+test('the exact archive installs and passes archive-supported validation and contracts without Git metadata', async (t) => {
+  const root = await createReleaseRepository(t);
+  const output = join(root, 'archive-validation-output');
+  const installRoot = await mkdtemp(join(tmpdir(), 'follow-up-archive-validation-'));
+  t.after(() => rm(installRoot, { recursive: true, force: true }));
+
+  await run('sh', [buildScript.pathname, 'HEAD', output], { cwd: root });
+  await run('tar', [
+    '-xzf',
+    join(output, 'Follow-up-v0.1.0.tar.gz'),
+    '-C',
+    installRoot,
+  ]);
+  const program = join(installRoot, 'Follow-up-v0.1.0');
+  const { NODE_TEST_CONTEXT: _nodeTestContext, ...archiveEnvironment } = process.env;
+  await assert.rejects(stat(join(program, '.git')));
+  await run('npm', ['ci', '--ignore-scripts'], {
+    cwd: join(program, 'scripts'),
+    env: { ...archiveEnvironment, npm_config_cache: join(root, '.npm-cache') },
+  });
+
+  const validation = await run('npm', ['run', 'validate-release:archive'], {
+    cwd: join(program, 'scripts'),
+    env: archiveEnvironment,
+  });
+  assert.match(validation.stdout, /tracked content digest is checkout-only/i);
+  assert.match(validation.stdout, /Release metadata is valid/);
+
+  const contracts = await run('npm', ['run', 'test:archive'], {
+    cwd: join(program, 'scripts'),
+    env: archiveEnvironment,
+  });
+  const contractOutput = `${contracts.stdout}\n${contracts.stderr}`;
+  assert.match(contractOutput, /all six checked-in feeds use schemaVersion 1\.0/);
+  assert.match(contractOutput, /installed release prompt is used/);
+  assert.match(contractOutput, /repository release validator accepts/);
+  assert.match(contractOutput, /fail 0/);
+});
+
 test('tag workflow is the sole immutable Stable publisher with constrained permissions', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
 
@@ -220,6 +259,17 @@ test('tag workflow is the sole immutable Stable publisher with constrained permi
   assert.match(workflow, /npm run validate-release/);
   assert.match(workflow, /npm run validate-feeds/);
   assert.match(workflow, /npm test/);
+  assert.match(workflow, /npm run test:archive/);
+  assert.match(workflow, /npm run validate-release:archive/);
   assert.match(workflow, /build-release\.sh/);
   assert.doesNotMatch(workflow, /--clobber|release upload .*--clobber/);
+});
+
+test('installation docs use archive-safe validation commands after extraction', async () => {
+  for (const path of ['README.md', 'README.zh-CN.md']) {
+    const documentation = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
+    assert.match(documentation, /npm run validate-release:archive/);
+    assert.match(documentation, /npm run test:archive/);
+    assert.match(documentation, /tracked content digest/i);
+  }
 });
