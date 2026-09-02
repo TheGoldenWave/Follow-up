@@ -1,11 +1,16 @@
 {
   "name": "follow-builders-scripts",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Scripts for Follow Builders skill — feed generation, digest preparation, delivery",
   "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "generate-feed": "node generate-feed.js",
-    "prepare-digest": "node prepare-digest.js"
+    "prepare-digest": "node prepare-digest.js",
+    "test:release": "node --test test/release-manifest.test.js",
+    "validate-release": "node release/validate-release.js"
   },
   "dependencies": {
     "dotenv": "^16.4.0",

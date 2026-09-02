@@ -1,0 +1,30 @@
+{
+  "$schema": "./contracts/release-manifest.schema.json",
+  "schemaVersion": "1.0",
+  "productVersion": "0.1.0",
+  "releaseDate": "2026-09-02",
+  "channel": "stable",
+  "minimumSupportedVersion": null,
+  "releaseNotesUrl": "https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.1.0",
+  "trustMode": "github-tag-sha256",
+  "runtime": {
+    "node": ">=20.0.0"
+  },
+  "acquisition": {
+    "mode": "centralized",
+    "feeds": [
+      "x",
+      "podcasts",
+      "official-blogs",
+      "newsletters",
+      "academic-papers",
+      "chinese-tech"
+    ]
+  },
+  "capabilities": {
+    "localAcquisition": false,
+    "sidecars": false,
+    "feedbackState": false,
+    "updater": false
+  }
+}

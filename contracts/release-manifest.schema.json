@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/release-manifest.schema.json",
+  "title": "Follow-up release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "productVersion",
+    "releaseDate",
+    "channel",
+    "minimumSupportedVersion",
+    "releaseNotesUrl",
+    "trustMode",
+    "runtime",
+    "acquisition",
+    "capabilities"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./contracts/release-manifest.schema.json"
+    },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "productVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "releaseDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "channel": {
+      "const": "stable"
+    },
+    "minimumSupportedVersion": {
+      "type": "null"
+    },
+    "releaseNotesUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "/releases/tag/v[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "trustMode": {
+      "const": "github-tag-sha256"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node"],
+      "properties": {
+        "node": {
+          "const": ">=20.0.0"
+        }
+      }
+    },
+    "acquisition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "feeds"],
+      "properties": {
+        "mode": {
+          "const": "centralized"
+        },
+        "feeds": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "prefixItems": [
+            { "const": "x" },
+            { "const": "podcasts" },
+            { "const": "official-blogs" },
+            { "const": "newsletters" },
+            { "const": "academic-papers" },
+            { "const": "chinese-tech" }
+          ],
+          "items": false
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["localAcquisition", "sidecars", "feedbackState", "updater"],
+      "properties": {
+        "localAcquisition": { "const": false },
+        "sidecars": { "const": false },
+        "feedbackState": { "const": false },
+        "updater": { "const": false }
+      }
+    }
+  }
+}
