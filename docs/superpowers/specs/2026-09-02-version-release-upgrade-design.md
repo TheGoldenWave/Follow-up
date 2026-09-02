@@ -76,12 +76,15 @@ mode requires them, digest mismatches, incompatible or revoked component ranges,
 missing migration paths before changing the active installation.
 
 `v0.1.0` uses a transitional `github-tag-sha256` trust mode: the user obtains the
-release from the canonical `TheGoldenWave/Follow-up` repository over GitHub HTTPS,
-confirms that the release tag resolves to the documented commit, and verifies archive
-digests against the manifest stored in that tag. This detects corruption and accidental
-replacement but does not protect against compromise of the GitHub repository or owner
-account. `v0.1.0` therefore distributes source and JavaScript only, not prebuilt native
-executables or Sidecar images.
+release from the canonical `TheGoldenWave/Follow-up` repository over GitHub HTTPS and
+confirms that the release tag resolves to the commit declared by the Release. The
+manifest stored in the tag records the repository tree identity and hashes for critical
+release files; it cannot contain the digest of an archive that itself contains that
+manifest. A separate checksums Release asset records the complete archive digest and is
+published by the tag-triggered workflow. This detects corruption and accidental
+replacement within the stated GitHub trust boundary but does not protect against
+compromise of the GitHub repository or owner account. `v0.1.0` therefore distributes
+source and JavaScript only, not prebuilt native executables or Sidecar images.
 
 Before distributing managed executable or Sidecar artifacts, a later release must
 introduce a stronger trust mode with a pinned verification identity, documented key or
@@ -236,13 +239,24 @@ A Stable release is produced only from a clean, reviewed commit:
 
 1. Verify repository tests, schemas, secret scanning, license/provenance manifests,
    generated-file consistency, and clean-install fixtures.
-2. Build release archives from tracked files only and generate SHA-256 digests.
-3. Validate `release-manifest.json` against its schema and against built artifacts.
+2. Validate `release-manifest.json` against its schema, repository tree identity, and
+   critical tracked-file hashes.
+3. Build release archives from tracked files only and generate a separate checksums
+   Release asset for complete-archive verification.
 4. Create the signed/annotated immutable `vX.Y.Z` tag.
-5. Publish a GitHub Release with manifest, checksums, release archive, release notes,
+5. Let the tag-triggered workflow publish one GitHub Release with manifest, checksums,
+   release archive, release notes,
    compatibility notes, and any manual authorization requirements.
-6. Install the public assets into a temporary home and run the smoke-test and rollback
-   exercise before marking the release complete.
+6. Install the public assets into a temporary home and run the clean-install and
+   reinstall-recovery smoke tests before marking `v0.1.0` complete. Executable and
+   configuration rollback exercises become mandatory when the upgrade foundation is
+   introduced in `v0.2.0`.
+
+For `v0.1.0`, reinstall recovery means extracting the same tagged archive into a fresh
+program directory and running `npm ci` again while an existing test
+`~/.follow-builders` contains configuration, custom Prompts, and placeholder delivery
+credentials. The operation must leave that entire user directory byte-for-byte
+unchanged. It does not claim automatic rollback or migration.
 
 Tags and release assets are never replaced. A defective release is deprecated and
 superseded by a new patch version.
