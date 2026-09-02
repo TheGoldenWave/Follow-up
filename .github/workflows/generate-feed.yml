@@ -53,6 +53,10 @@ jobs:
             cd scripts && node generate-feed.js
           fi
 
+      - name: Validate generated feeds
+        working-directory: scripts
+        run: npm run validate-feeds
+
       - name: Commit and push feeds
         run: |
           git config user.name "github-actions[bot]"

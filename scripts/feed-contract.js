@@ -1,9 +1,19 @@
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 
 export const FEED_SCHEMA_VERSION = '1.0';
+export const CENTRAL_FEED_FILES = [
+  { category: 'x', filename: 'feed-x.json' },
+  { category: 'podcasts', filename: 'feed-podcasts.json' },
+  { category: 'blogs', filename: 'feed-blogs.json' },
+  { category: 'newsletters', filename: 'feed-newsletters.json' },
+  { category: 'academic', filename: 'feed-academic.json' },
+  { category: 'zh-tech', filename: 'feed-zh-tech.json' },
+];
 
 const PAYLOAD_KEYS = {
   x: 'x',
@@ -54,4 +64,39 @@ export function validateFeed(feed, category) {
 
 export function createFeedEnvelope(fields) {
   return { ...fields, schemaVersion: FEED_SCHEMA_VERSION };
+}
+
+export async function validateFeedFiles({
+  readJson = async (filename) => JSON.parse(await readFile(
+    new URL(`../${filename}`, import.meta.url),
+    'utf8',
+  )),
+} = {}) {
+  const errors = [];
+  for (const { category, filename } of CENTRAL_FEED_FILES) {
+    try {
+      const result = validateFeed(await readJson(filename), category);
+      errors.push(...result.errors.map((error) => `${filename}: ${error}`));
+    } catch (error) {
+      errors.push(`${filename}: ${error.message}`);
+    }
+  }
+  return errors;
+}
+
+async function main() {
+  const errors = await validateFeedFiles();
+  if (errors.length > 0) {
+    for (const error of errors) console.error(error);
+    process.exitCode = 1;
+    return;
+  }
+  console.log('All six central feeds are valid.');
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
 }

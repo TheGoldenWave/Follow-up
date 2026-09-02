@@ -3,15 +3,18 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
+  CENTRAL_FEED_FILES,
   FEED_SCHEMA_VERSION,
   createFeedEnvelope,
   validateFeed,
+  validateFeedFiles,
 } from '../feed-contract.js';
 import {
   errorsSince,
   fetchRssFeeds,
   normalizePublishedAt,
   parseRssFeed,
+  pruneState,
 } from '../generate-feed.js';
 import {
   CENTRAL_FEEDS,
@@ -342,6 +345,54 @@ test('package and generation workflow run the unified test suite before generati
   const generateStep = workflow.indexOf('node generate-feed.js');
   assert.ok(testStep >= 0);
   assert.ok(generateStep > testStep);
+});
+
+test('generated feed validation covers all six artifacts and rejects an invalid one', async () => {
+  assert.deepEqual(CENTRAL_FEED_FILES.map(({ filename }) => filename), feedCases.map(([, filename]) => filename));
+
+  const validErrors = await validateFeedFiles({
+    readJson: (filename) => readJson(filename),
+  });
+  assert.deepEqual(validErrors, []);
+
+  const invalidErrors = await validateFeedFiles({
+    readJson: async (filename) => (
+      filename === 'feed-academic.json'
+        ? { schemaVersion: '2.0', papers: [] }
+        : readJson(filename)
+    ),
+  });
+  assert.ok(invalidErrors.some((error) => error.includes('feed-academic.json')));
+});
+
+test('generation workflow validates generated feeds before staging them', async () => {
+  const [packageJson, workflow] = await Promise.all([
+    readJson('scripts/package.json'),
+    readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8'),
+  ]);
+
+  assert.equal(packageJson.scripts['validate-feeds'], 'node feed-contract.js');
+  const generateStep = workflow.indexOf('node generate-feed.js');
+  const validateStep = workflow.indexOf('npm run validate-feeds');
+  const stageStep = workflow.indexOf('git add feed-x.json');
+  assert.ok(validateStep > generateStep);
+  assert.ok(stageStep > validateStep);
+});
+
+test('state pruning retains podcast GUIDs for the full fourteen-day lookback', () => {
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.parse('2026-09-02T00:00:00.000Z');
+  const state = {
+    seenTweets: { recent: now - 6 * day, expired: now - 8 * day },
+    seenVideos: { day9: now - 9 * day, day15: now - 15 * day },
+    seenArticles: { recent: now - 6 * day, expired: now - 8 * day },
+  };
+
+  pruneState(state, now);
+
+  assert.deepEqual(Object.keys(state.seenTweets), ['recent']);
+  assert.deepEqual(Object.keys(state.seenVideos), ['day9']);
+  assert.deepEqual(Object.keys(state.seenArticles), ['recent']);
 });
 
 test('digest JSON fetch aborts stalled requests using a bounded timeout', async (t) => {

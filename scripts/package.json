@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
+    "validate-feeds": "node feed-contract.js",
     "generate-feed": "node generate-feed.js",
     "prepare-digest": "node prepare-digest.js",
     "test:release": "node --test test/release-manifest.test.js",

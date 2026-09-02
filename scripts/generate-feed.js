@@ -78,18 +78,25 @@ async function loadState() {
   }
 }
 
-async function saveState(state) {
-  // Prune entries older than 7 days to prevent the file from growing forever
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+function pruneState(state, now = Date.now()) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  const tweetCutoff = now - 7 * dayMs;
+  const podcastCutoff = now - PODCAST_LOOKBACK_HOURS * 60 * 60 * 1000;
+  const articleCutoff = now - 7 * dayMs;
   for (const [id, ts] of Object.entries(state.seenTweets)) {
-    if (ts < cutoff) delete state.seenTweets[id];
+    if (ts < tweetCutoff) delete state.seenTweets[id];
   }
   for (const [id, ts] of Object.entries(state.seenVideos)) {
-    if (ts < cutoff) delete state.seenVideos[id];
+    if (ts < podcastCutoff) delete state.seenVideos[id];
   }
   for (const [id, ts] of Object.entries(state.seenArticles || {})) {
-    if (ts < cutoff) delete state.seenArticles[id];
+    if (ts < articleCutoff) delete state.seenArticles[id];
   }
+  return state;
+}
+
+async function saveState(state) {
+  pruneState(state);
   await writeFile(STATE_PATH, JSON.stringify(state, null, 2));
 }
 
@@ -1408,6 +1415,7 @@ export {
   main,
   normalizePublishedAt,
   parseRssFeed,
+  pruneState,
 };
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
