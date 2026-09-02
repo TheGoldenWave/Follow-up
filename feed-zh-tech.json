@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-08-28T06:10:56.344Z",
+  "lookbackHours": 72,
+  "articles": [
+    {
+      "source": "36氪",
+      "url": "https://36kr.com/",
+      "tags": [
+        "zh",
+        "tech-business",
+        "daily"
+      ],
+      "items": [
+        {
+          "title": "赵长鹏在香港，回答了15个问题｜现场直击",
+          "url": "https://36kr.com/p/3958638529117569?f=rss",
+          "publishedAt": "2026-08-28T04:07:21.000Z",
+          "guid": "https://36kr.com/p/3958638529117569?f=rss",
+          "source": "36氪",
+          "language": "zh"
+        },
+        {
+          "title": "硬氪专访丨几百个投资人不想投的光芯片公司，现在估值快200亿了",
+          "url": "https://36kr.com/p/3958587575975049?f=rss",
+          "publishedAt": "2026-08-28T02:47:42.000Z",
+          "guid": "https://36kr.com/p/3958587575975049?f=rss",
+          "source": "36氪",
+          "language": "zh"
+        },
+        {
+          "title": "1699元跌到500元，跑鞋黄金五年结束丨深氪",
+          "url": "https://36kr.com/p/3958572354715014?f=rss",
+          "publishedAt": "2026-08-28T02:30:42.000Z",
+          "guid": "https://36kr.com/p/3958572354715014?f=rss",
+          "source": "36氪",
+          "language": "zh"
+        }
+      ]
+    },
+    {
+      "source": "少数派",
+      "url": "https://sspai.com/",
+      "tags": [
+        "zh",
+        "tech",
+        "daily"
+      ],
+      "items": [
+        {
+          "title": "新玩意 250｜少数派的编辑们最近买了啥？",
+          "url": "https://sspai.com/post/113905",
+          "publishedAt": "2026-08-27T10:00:05.000Z",
+          "guid": "https://sspai.com/post/113905",
+          "source": "少数派",
+          "language": "zh"
+        },
+        {
+          "title": "日常使用 Linux 的第六个年头，这些经验希望能打消你的顾虑",
+          "url": "https://sspai.com/post/89194",
+          "publishedAt": "2026-08-27T07:28:44.000Z",
+          "guid": "https://sspai.com/post/89194",
+          "source": "少数派",
+          "language": "zh"
+        },
+        {
+          "title": "来自 1997 年的迷你笔记本电脑，东芝 Libretto 50M 怀旧手记",
+          "url": "https://sspai.com/post/113222",
+          "publishedAt": "2026-08-27T03:01:42.000Z",
+          "guid": "https://sspai.com/post/113222",
+          "source": "少数派",
+          "language": "zh"
+        }
+      ]
+    },
+    {
+      "source": "量子位",
+      "url": "https://www.qbitai.com/",
+      "tags": [
+        "zh",
+        "ai",
+        "daily"
+      ],
+      "items": [
+        {
+          "title": "MiniMax ARR暴涨500%，token暴涨2000%！这就是Agent红利吧",
+          "url": "https://www.qbitai.com/2026/08/480092.html",
+          "publishedAt": "2026-08-27T12:16:10.000Z",
+          "guid": "https://www.qbitai.com/?p=480092",
+          "source": "量子位",
+          "language": "zh"
+        },
+        {
+          "title": "基元律动累计融资数千万美元，推出“中国版OpenRouter”",
+          "url": "https://www.qbitai.com/2026/08/480079.html",
+          "publishedAt": "2026-08-27T05:43:00.000Z",
+          "guid": "https://www.qbitai.com/?p=480079",
+          "source": "量子位",
+          "language": "zh"
+        },
+        {
+          "title": "工业Agent不是“套壳”大模型！西门子百年经验灌进工业AI",
+          "url": "https://www.qbitai.com/2026/08/480005.html",
+          "publishedAt": "2026-08-27T02:46:35.000Z",
+          "guid": "https://www.qbitai.com/?p=480005",
+          "source": "量子位",
+          "language": "zh"
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "sources": 3,
+    "totalArticles": 9
+  }
+}

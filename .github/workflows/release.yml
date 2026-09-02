@@ -1,0 +1,147 @@
+name: Publish Stable Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Require tag and product version to agree
+        run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
+
+      - name: Scan tracked release content for credentials
+        run: node scripts/release/scan-secrets.js --tracked "$GITHUB_SHA"
+
+      - name: Verify dependency licenses and inventory
+        run: node scripts/release/verify-dependency-licenses.js
+
+      - name: Install locked dependencies
+        working-directory: scripts
+        run: npm ci
+
+      - name: Validate metadata, feeds, and tests
+        working-directory: scripts
+        run: |
+          npm run validate-release
+          npm run validate-feeds
+          npm test
+
+      - name: Build and inspect tracked-only archive
+        run: |
+          sh scripts/release/build-release.sh "$GITHUB_SHA" dist
+          cp CHANGELOG.md dist/release-notes.md
+          cd dist
+          shasum -a 256 -c "Follow-up-${GITHUB_REF_NAME}-checksums.txt"
+          tar -tzf "Follow-up-${GITHUB_REF_NAME}.tar.gz" > archive-contents.txt
+          if grep -E '(^|/)(\.hermes|docker|node_modules|dist)(/|$)|(^|/)\.env$|docs/wechat-integration\.md$' archive-contents.txt; then
+            echo "Release archive contains a forbidden path." >&2
+            exit 1
+          fi
+
+      - name: Test the exact extracted archive
+        run: |
+          mkdir archive-smoke
+          tar -xzf "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz" -C archive-smoke
+          cd "archive-smoke/Follow-up-${GITHUB_REF_NAME}/scripts"
+          node release/validate-release.js --archive-critical-only
+          npm ci
+          npm run validate-release:archive
+          npm run test:archive
+
+      - name: Scan complete release archive for credentials
+        run: node scripts/release/scan-secrets.js --archive "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz"
+
+      - name: Require confirmed redistribution authorization
+        run: node scripts/release/check-provenance.js
+
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ github.ref_name }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            dist/Follow-up-${{ github.ref_name }}.tar.gz
+            dist/Follow-up-${{ github.ref_name }}-checksums.txt
+            dist/release-manifest.json
+            dist/release-notes.md
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release assets
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-${{ github.ref_name }}
+          path: dist
+
+      - name: Verify external immutability controls and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_IMMUTABILITY_CONFIRMED: ${{ vars.RELEASE_IMMUTABILITY_CONFIRMED }}
+        run: |
+          if [ "$RELEASE_IMMUTABILITY_CONFIRMED" != "true" ]; then
+            echo "Repository variable RELEASE_IMMUTABILITY_CONFIRMED must be true after external release protections are verified." >&2
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; refusing replacement." >&2
+            exit 1
+          fi
+          (
+            cd dist
+            shasum -a 256 -c "Follow-up-${GITHUB_REF_NAME}-checksums.txt"
+            tar -xOzf "Follow-up-${GITHUB_REF_NAME}.tar.gz" \
+              "Follow-up-${GITHUB_REF_NAME}/release-manifest.json" > archive-manifest.json
+            cmp release-manifest.json archive-manifest.json
+          )
+
+          REF_JSON=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$GITHUB_REF_NAME")
+          OBJECT_TYPE=$(printf '%s' "$REF_JSON" | jq -r '.object.type')
+          RESOLVED_SHA=$(printf '%s' "$REF_JSON" | jq -r '.object.sha')
+          PEEL_COUNT=0
+          while [ "$OBJECT_TYPE" = "tag" ]; do
+            PEEL_COUNT=$((PEEL_COUNT + 1))
+            if [ "$PEEL_COUNT" -gt 10 ]; then
+              echo "Tag reference nesting exceeds the supported limit." >&2
+              exit 1
+            fi
+            TAG_JSON=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$RESOLVED_SHA")
+            OBJECT_TYPE=$(printf '%s' "$TAG_JSON" | jq -r '.object.type')
+            RESOLVED_SHA=$(printf '%s' "$TAG_JSON" | jq -r '.object.sha')
+          done
+          if [ "$OBJECT_TYPE" != "commit" ] || [ "$RESOLVED_SHA" != "$GITHUB_SHA" ]; then
+            echo "Tag $GITHUB_REF_NAME resolves to $OBJECT_TYPE $RESOLVED_SHA, expected commit $GITHUB_SHA." >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz" \
+            "dist/Follow-up-${GITHUB_REF_NAME}-checksums.txt" \
+            "dist/release-manifest.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Follow-up $GITHUB_REF_NAME" \
+            --notes-file dist/release-notes.md

@@ -1,0 +1,34 @@
+{
+  "generatedAt": null,
+  "lookbackHours": 72,
+  "articles": [],
+  "sources": [
+    {
+      "name": "36氪",
+      "rss": "https://36kr.com/feed",
+      "url": "https://36kr.com/",
+      "tags": ["zh", "tech-business", "daily"],
+      "cadence": "daily",
+      "language": "zh",
+      "maxArticles": 3
+    },
+    {
+      "name": "少数派",
+      "rss": "https://sspai.com/feed",
+      "url": "https://sspai.com/",
+      "tags": ["zh", "tech", "daily"],
+      "cadence": "daily",
+      "language": "zh",
+      "maxArticles": 3
+    },
+    {
+      "name": "量子位",
+      "rss": "https://www.qbitai.com/rss",
+      "url": "https://www.qbitai.com/",
+      "tags": ["zh", "ai", "daily"],
+      "cadence": "daily",
+      "language": "zh",
+      "maxArticles": 3
+    }
+  ]
+}

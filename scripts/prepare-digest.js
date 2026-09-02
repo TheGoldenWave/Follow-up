@@ -5,7 +5,7 @@
 // ============================================================================
 // Gathers everything the LLM needs to produce a digest:
 // - Fetches the central feeds (tweets + podcasts)
-// - Fetches the latest prompts from GitHub
+// - Loads prompts from the installed release, with optional user overrides
 // - Reads the user's config (language, delivery method)
 // - Outputs a single JSON blob to stdout
 //
@@ -16,41 +16,147 @@
 // Output: JSON to stdout
 // ============================================================================
 
-import { readFile, mkdir } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { fileURLToPath, pathToFileURL } from 'url';
+
+import { validateFeed } from './feed-contract.js';
 
 // -- Constants ---------------------------------------------------------------
 
 const USER_DIR = join(homedir(), '.follow-builders');
 const CONFIG_PATH = join(USER_DIR, 'config.json');
 
-const FEED_X_URL = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/feed-x.json';
-const FEED_PODCASTS_URL = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/feed-podcasts.json';
-const FEED_BLOGS_URL = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/feed-blogs.json';
+const CENTRAL_FEED_BASE = 'https://raw.githubusercontent.com/TheGoldenWave/Follow-up/main';
+export const CENTRAL_FEEDS = [
+  { category: 'x', label: 'Tweet', filename: 'feed-x.json', payloadKey: 'x', outputKey: 'x' },
+  { category: 'podcasts', label: 'Podcast', filename: 'feed-podcasts.json', payloadKey: 'podcasts', outputKey: 'podcasts' },
+  { category: 'blogs', label: 'Blog', filename: 'feed-blogs.json', payloadKey: 'blogs', outputKey: 'blogs' },
+  { category: 'newsletters', label: 'Newsletter', filename: 'feed-newsletters.json', payloadKey: 'newsletters', outputKey: 'newsletters' },
+  { category: 'academic', label: 'Academic', filename: 'feed-academic.json', payloadKey: 'papers', outputKey: 'academic' },
+  { category: 'zh-tech', label: 'Chinese technology', filename: 'feed-zh-tech.json', payloadKey: 'articles', outputKey: 'zhTech' },
+].map((spec) => ({ ...spec, url: `${CENTRAL_FEED_BASE}/${spec.filename}` }));
 
-const PROMPTS_BASE = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/prompts';
 const PROMPT_FILES = [
   'summarize-podcast.md',
   'summarize-tweets.md',
   'summarize-blogs.md',
+  'summarize-newsletter.md',
+  'summarize-paper.md',
+  'summarize-zh-sources.md',
   'digest-intro.md',
   'translate.md'
 ];
 
 // -- Fetch helpers -----------------------------------------------------------
 
-async function fetchJSON(url) {
-  const res = await fetch(url);
+export async function fetchJSON(
+  url,
+  { fetchImpl = fetch, timeoutMs = 15000 } = {},
+) {
+  const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) return null;
   return res.json();
 }
 
-async function fetchText(url) {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.text();
+export async function loadCentralFeedData({ fetchJson = fetchJSON } = {}) {
+  const data = Object.fromEntries(CENTRAL_FEEDS.map(({ outputKey }) => [outputKey, []]));
+  const feeds = {};
+  const errors = [];
+
+  await Promise.all(CENTRAL_FEEDS.map(async (spec) => {
+    let feed;
+    try {
+      feed = await fetchJson(spec.url);
+    } catch (error) {
+      errors.push(`Could not fetch ${spec.label.toLowerCase()} feed: ${error.message}`);
+      return;
+    }
+
+    if (!feed) {
+      errors.push(`Could not fetch ${spec.label.toLowerCase()} feed`);
+      return;
+    }
+
+    const validation = validateFeed(feed, spec.category);
+    if (!validation.valid) {
+      errors.push(
+        `${spec.label} feed is invalid (${validation.errors.join('; ')}); `
+        + 'expected compatible schema 1.x. Update Follow-up before retrying.',
+      );
+      return;
+    }
+
+    feeds[spec.category] = feed;
+    data[spec.outputKey] = feed[spec.payloadKey];
+    if (feed.errors?.length) {
+      errors.push(...feed.errors.map((error) => `${spec.label} feed problem: ${error}`));
+    }
+  }));
+
+  return { data, feeds, errors };
+}
+
+export function resolveInstalledPromptsDir(moduleUrl = import.meta.url) {
+  return fileURLToPath(new URL('../prompts/', moduleUrl));
+}
+
+async function readPrompt(path) {
+  try {
+    return { content: await readFile(path, 'utf-8') };
+  } catch (error) {
+    return { error };
+  }
+}
+
+export async function loadPrompts({
+  userPromptsDir = join(USER_DIR, 'prompts'),
+  localPromptsDir = resolveInstalledPromptsDir(),
+  promptFiles = PROMPT_FILES,
+} = {}) {
+  const prompts = {};
+  const errors = [];
+
+  for (const filename of promptFiles) {
+    const key = filename.replace('.md', '').replace(/-/g, '_');
+    const userPath = join(userPromptsDir, filename);
+    const localPath = join(localPromptsDir, filename);
+    const userDisplayPath = `~/.follow-builders/prompts/${filename}`;
+    const localDisplayPath = `prompts/${filename}`;
+
+    const userPrompt = await readPrompt(userPath);
+    if (userPrompt.content !== undefined) {
+      prompts[key] = userPrompt.content;
+      continue;
+    }
+    if (userPrompt.error?.code !== 'ENOENT') {
+      errors.push(
+        `Could not read custom prompt ${userDisplayPath}; `
+        + `trying installed prompt ${localDisplayPath} instead.`,
+      );
+    }
+
+    const localPrompt = await readPrompt(localPath);
+    if (localPrompt.content !== undefined) {
+      prompts[key] = localPrompt.content;
+      continue;
+    }
+    if (localPrompt.error?.code === 'ENOENT') {
+      errors.push(
+        `Could not load prompt ${filename}. Add a custom prompt at ${userDisplayPath} `
+        + `or reinstall Follow-up to restore ${localDisplayPath}.`,
+      );
+    } else {
+      errors.push(
+        `Could not read installed prompt ${localDisplayPath}. Reinstall Follow-up `
+        + `or add a custom prompt at ${userDisplayPath}.`,
+      );
+    }
+  }
+
+  return { prompts, errors };
 }
 
 // -- Main --------------------------------------------------------------------
@@ -72,68 +178,16 @@ async function main() {
     }
   }
 
-  // 2. Fetch all three feeds
-  const [feedX, feedPodcasts, feedBlogs] = await Promise.all([
-    fetchJSON(FEED_X_URL),
-    fetchJSON(FEED_PODCASTS_URL),
-    fetchJSON(FEED_BLOGS_URL)
-  ]);
+  // 2. Fetch all feeds
+  const { data: feedData, feeds, errors: feedErrors } = await loadCentralFeedData();
+  errors.push(...feedErrors);
+  const feedX = feeds.x;
+  const feedPodcasts = feeds.podcasts;
+  const feedBlogs = feeds.blogs;
 
-  if (!feedX) errors.push('Could not fetch tweet feed');
-  if (!feedPodcasts) errors.push('Could not fetch podcast feed');
-  if (!feedBlogs) errors.push('Could not fetch blog feed');
-  if (feedX?.errors?.length) {
-    errors.push(
-      ...feedX.errors.map((error) => `Tweet feed problem: ${error}`)
-    );
-  }
-  if (feedPodcasts?.errors?.length) {
-    errors.push(
-      ...feedPodcasts.errors.map((error) => `Podcast feed problem: ${error}`)
-    );
-  }
-  if (feedBlogs?.errors?.length) {
-    errors.push(
-      ...feedBlogs.errors.map((error) => `Blog feed problem: ${error}`)
-    );
-  }
-
-  // 3. Load prompts with priority: user custom > remote (GitHub) > local default
-  //
-  // If the user has a custom prompt at ~/.follow-builders/prompts/<file>,
-  // use that (they personalized it — don't overwrite with remote updates).
-  // Otherwise, fetch the latest from GitHub so they get central improvements.
-  // If GitHub is unreachable, fall back to the local copy shipped with the skill.
-  const prompts = {};
-  const scriptDir = decodeURIComponent(new URL('.', import.meta.url).pathname);
-  const localPromptsDir = join(scriptDir, '..', 'prompts');
-  const userPromptsDir = join(USER_DIR, 'prompts');
-
-  for (const filename of PROMPT_FILES) {
-    const key = filename.replace('.md', '').replace(/-/g, '_');
-    const userPath = join(userPromptsDir, filename);
-    const localPath = join(localPromptsDir, filename);
-
-    // Priority 1: user's custom prompt (they personalized it)
-    if (existsSync(userPath)) {
-      prompts[key] = await readFile(userPath, 'utf-8');
-      continue;
-    }
-
-    // Priority 2: latest from GitHub (central updates)
-    const remote = await fetchText(`${PROMPTS_BASE}/${filename}`);
-    if (remote) {
-      prompts[key] = remote;
-      continue;
-    }
-
-    // Priority 3: local copy shipped with the skill
-    if (existsSync(localPath)) {
-      prompts[key] = await readFile(localPath, 'utf-8');
-    } else {
-      errors.push(`Could not load prompt: ${filename}`);
-    }
-  }
+  // 3. Load immutable release-local prompts, with explicit user overrides first.
+  const { prompts, errors: promptErrors } = await loadPrompts();
+  errors.push(...promptErrors);
 
   // 4. Build the output — everything the LLM needs in one blob
   const output = {
@@ -148,9 +202,7 @@ async function main() {
     },
 
     // Content to remix
-    podcasts: feedPodcasts?.podcasts || [],
-    x: feedX?.x || [],
-    blogs: feedBlogs?.blogs || [],
+    ...feedData,
 
     // Stats for the LLM to reference
     stats: {
@@ -158,6 +210,11 @@ async function main() {
       xBuilders: feedX?.x?.length || 0,
       totalTweets: (feedX?.x || []).reduce((sum, a) => sum + a.tweets.length, 0),
       blogPosts: feedBlogs?.blogs?.length || 0,
+      newsletterSources: feedData.newsletters.length,
+      academicCategories: feedData.academic.length,
+      totalPapers: feedData.academic.reduce((sum, s) => sum + (s.items?.length || 0), 0),
+      zhTechSources: feedData.zhTech.length,
+      totalZhArticles: feedData.zhTech.reduce((sum, s) => sum + (s.items?.length || 0), 0),
       feedGeneratedAt: feedX?.generatedAt || feedPodcasts?.generatedAt || feedBlogs?.generatedAt || null
     },
 
@@ -171,10 +228,14 @@ async function main() {
   console.log(JSON.stringify(output, null, 2));
 }
 
-main().catch(err => {
-  console.error(JSON.stringify({
-    status: 'error',
-    message: err.message
-  }));
-  process.exit(1);
-});
+export { main };
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(err => {
+    console.error(JSON.stringify({
+      status: 'error',
+      message: err.message
+    }));
+    process.exit(1);
+  });
+}

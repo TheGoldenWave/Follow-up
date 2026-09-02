@@ -1,0 +1,61 @@
+{
+  "generatedAt": null,
+  "lookbackHours": 168,
+  "papers": [],
+  "sources": [
+    {
+      "name": "arXiv cs.AI",
+      "rss": "https://rss.arxiv.org/rss/cs.AI",
+      "url": "https://arxiv.org/list/cs.AI/recent",
+      "tags": ["academic", "ai", "daily"],
+      "cadence": "daily",
+      "maxArticles": 5
+    },
+    {
+      "name": "arXiv cs.CL",
+      "rss": "https://rss.arxiv.org/rss/cs.CL",
+      "url": "https://arxiv.org/list/cs.CL/recent",
+      "tags": ["academic", "nlp", "daily"],
+      "cadence": "daily",
+      "maxArticles": 5
+    },
+    {
+      "name": "arXiv cs.CV",
+      "rss": "https://rss.arxiv.org/rss/cs.CV",
+      "url": "https://arxiv.org/list/cs.CV/recent",
+      "tags": ["academic", "vision", "daily"],
+      "cadence": "daily",
+      "maxArticles": 3
+    },
+    {
+      "name": "arXiv cs.LG",
+      "rss": "https://rss.arxiv.org/rss/cs.LG",
+      "url": "https://arxiv.org/list/cs.LG/recent",
+      "tags": ["academic", "ml", "daily"],
+      "cadence": "daily",
+      "maxArticles": 3
+    },
+    {
+      "name": "arXiv cs.RO",
+      "rss": "https://rss.arxiv.org/rss/cs.RO",
+      "url": "https://arxiv.org/list/cs.RO/recent",
+      "tags": ["academic", "robotics", "daily"],
+      "cadence": "daily",
+      "maxArticles": 2
+    },
+    {
+      "name": "arXiv cs.CR (AI Security)",
+      "rss": "https://rss.arxiv.org/rss/cs.CR",
+      "url": "https://arxiv.org/list/cs.CR/recent",
+      "tags": ["academic", "security", "daily"],
+      "cadence": "daily",
+      "maxArticles": 2
+    }
+  ],
+  "filters": {
+    "description": "arXiv RSS feeds generate ~50-200 papers per day per category. We use keyword filtering to surface only the most relevant papers.",
+    "minKeywords": ["LLM", "agent", "reasoning", "alignment", "RLHF", "multimodal", "transformer", "diffusion", "safety", "scaling", "fine-tuning", "RL", "MCTS", "chain-of-thought", "RAG", "tool-use", "function-calling", "code-generation"],
+    "excludeKeywords": ["quantum", "blockchain", "federated-learning", "edge-computing", "IoT", "5G", "vehicular", "bioinformatics", "genomics", "medical-imaging", "brain-computer"],
+    "strategy": "After fetching RSS, filter by: (1) title contains a minKeyword, AND (2) title does NOT contain an excludeKeyword. Sort by date, take top N per category."
+  }
+}

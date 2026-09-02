@@ -21,7 +21,7 @@ Skill 是跨 Agent 可移植的安装、配置、调用和反馈入口；DeepSee
 | Follow-up Skill | 跨 Agent Onboarding、偏好配置、按需摘要、自然语言反馈和 Handoff 交互 | 稳定后台运行、复杂信息浏览、正式知识写入 |
 | DeepSeek Harness Plugin | 高度个性化的信息中心、主题聚合、推荐解释、阅读状态和批量反馈 | 重新实现抓取、维护平行用户状态、正式知识写入 |
 | Follow-up Core / Contract | 统一 Signal、Topic、Digest、Feedback、Delivery 和 Handoff 语义 | 绑定单一 Agent 宿主或 IM 平台 |
-| Feed Pipeline | 抓取、解析、去重、缓存、来源健康 | 判断用户是否理解内容 |
+| Feed Pipeline | 采集子系统总称；当前由中心任务运行，目标由用户本地 Acquisition Runtime + Source Adapters 承担抓取、解析、标准化、去重、短期缓存和来源健康 | Signal 策展、判断用户是否理解内容、外部投递 |
 | Delivery Runtime | 定时、IM/邮件投递、重试、投递回执 | 长期知识治理 |
 | Local User State | 打开、忽略、稍后读以及 `learn_requested`、`matter_handoff_requested`、`candidate_proposed` 等用户动作事件 | 公共 Feed、正式知识状态和实践验证状态 |
 
@@ -113,6 +113,12 @@ Follow-up 不生成正式 `human_state` / `agent_state`，不因打开、收藏�
 
 ## 当前能力与后续能力
 
+### 下一阶段采集方向
+
+已确认下一阶段不再由 Follow-up 维护者承担中心采集服务的来源凭据、API 费用和平台账号风险。目标架构改为用户本地运行 Acquisition / Adapter，由用户持有来源凭据并承担相应调用成本；Follow-up 项目通过复刻许可兼容的成熟 Adapter 保持开箱可用，而不是要求用户另行安装一套完整研究产品。
+
+目标来源范围、7 类信息体系映射、微信公众号指定账号模式、成熟 Adapter 复刻原则和待确认问题，见[用户本地采集与 Adapter 复刻方向](2026-09-01-local-acquisition-adapters-design.md)。该文档描述目标方向；在迁移完成前，下面的中心 Feed 仍是当前能力事实。
+
 ### 当前已具备
 
 - 7 类来源 taxonomy，其中 X、播客、官方博客、Newsletter、学术论文和中文科技 6 类已生成中心化 Feed；行业报告仍是低频来源规划，未形成实时 Feed；
@@ -123,6 +129,11 @@ Follow-up 不生成正式 `human_state` / `agent_state`，不因打开、收藏�
 
 ### 尚未实现
 
+- 用户本地 Acquisition / Adapter 运行时；
+- 用户自有来源凭据与来源调用预算配置；
+- GitHub、Hacker News、Reddit、通用 YouTube、Techmeme、Digg AI 1000 和小红书来源；
+- 微信公众号指定账号的稳定本地订阅链路；
+- 从中心 Feed 到本地采集的运行时迁移；
 - 稳定的阅读和反馈状态模型；
 - 被配置 Schema 和 `prepare-digest.js` 真正执行的用户级频道开关；
 - 行业报告的稳定抓取与 Feed；
@@ -142,7 +153,7 @@ Follow-up 不生成正式 `human_state` / `agent_state`，不因打开、收藏�
 - DeepSeek Harness 插件作为可选增强界面，不改变 Skill 在其他 Agent 中的可用性。
 - Skill、插件和 IM 必须通过统一 Core/Contract 共享偏好、Signal 和反馈状态。
 - 复杂 Onboarding、投递、Handoff 和状态 Schema 后续迁移到 `references/`，按需加载。
-- 确定性抓取、去重、准备数据和投递逻辑继续放在 `scripts/`。
+- 迁移前，现有确定性抓取、去重、准备数据和投递逻辑继续放在 `scripts/`；目标架构中 Acquisition Runtime / Adapters 与 Delivery Runtime 分离，前者负责采集、标准化、去重、短期缓存和来源健康，后者只负责投递、重试和回执。
 - 用户状态放在 `~/.follow-up/`，不与公共 Feed、Prompt 或代码一起提交。
 - 创建 Cron、写密钥、发送外部消息和跨项目写入前必须分别获得授权。
 

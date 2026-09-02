@@ -1,52 +1,4 @@
 {
-  "podcasts": [
-    {
-      "name": "Latent Space",
-      "rssUrl": "https://pod2txt.vercel.app/api/feed?url=https://api.substack.com/feed/podcast/1084089.rss",
-      "url": "https://www.youtube.com/@LatentSpacePod"
-    },
-    {
-      "name": "Training Data",
-      "rssUrl": "https://feeds.megaphone.fm/trainingdata",
-      "url": "https://www.youtube.com/playlist?list=PLOhHNjZItNnMm5tdW61JpnyxeYH5NDDx8"
-    },
-    {
-      "name": "No Priors",
-      "rssUrl": "https://feeds.megaphone.fm/nopriors",
-      "url": "https://www.youtube.com/@NoPriorsPodcast"
-    },
-    {
-      "name": "Unsupervised Learning",
-      "rssUrl": "https://feeds.simplecast.com/dOSE_bdP",
-      "url": "https://www.youtube.com/@RedpointAI"
-    },
-    {
-      "name": "The MAD Podcast with Matt Turck",
-      "rssUrl": "https://anchor.fm/s/f2ee4948/podcast/rss",
-      "url": "https://www.youtube.com/@DataDrivenNYC/videos"
-    },
-    {
-      "name": "AI & I by Every",
-      "rssUrl": "https://anchor.fm/s/ed1f5584/podcast/rss",
-      "url": "https://www.youtube.com/playlist?list=PLuMcoKK9mKgHtW_o9h5sGO2vXrffKHwJL"
-    }
-  ],
-  "blogs": [
-    {
-      "name": "Anthropic Engineering",
-      "type": "scrape",
-      "indexUrl": "https://www.anthropic.com/engineering",
-      "articleBaseUrl": "https://www.anthropic.com/engineering/",
-      "fetchMethod": "http"
-    },
-    {
-      "name": "Claude Blog",
-      "type": "scrape",
-      "indexUrl": "https://claude.com/blog",
-      "articleBaseUrl": "https://claude.com/blog/",
-      "fetchMethod": "http"
-    }
-  ],
   "x_accounts": [
     { "name": "Andrej Karpathy", "handle": "karpathy" },
     { "name": "Swyx", "handle": "swyx" },
@@ -73,6 +25,60 @@
     { "name": "Dan Shipper", "handle": "danshipper" },
     { "name": "Aditya Agarwal", "handle": "adityaag" },
     { "name": "Sam Altman", "handle": "sama" },
-    { "name": "Claude", "handle": "claudeai" }
+    { "name": "Claude", "handle": "claudeai" },
+    { "name": "Dario Amodei", "handle": "dario_amodei_h" },
+    { "name": "Nathan Labenz", "handle": "nathanlabenz" },
+    { "name": "Jack Clark", "handle": "jackclarksf" },
+    { "name": "Ben Tossell", "handle": "bentossell" }
+  ],
+  "podcasts": [
+    { "name": "Latent Space", "rssUrl": "https://pod2txt.vercel.app/api/feed?url=https://api.substack.com/feed/podcast/1084089.rss", "url": "https://www.youtube.com/@LatentSpacePod" },
+    { "name": "Training Data", "rssUrl": "https://feeds.megaphone.fm/trainingdata", "url": "https://www.youtube.com/playlist?list=PLOhHNjZItNnMm5tdW61JpnyxeYH5NDDx8" },
+    { "name": "No Priors", "rssUrl": "https://feeds.megaphone.fm/nopriors", "url": "https://www.youtube.com/@NoPriorsPodcast" },
+    { "name": "Unsupervised Learning", "rssUrl": "https://feeds.simplecast.com/dOSE_bdP", "url": "https://www.youtube.com/@RedpointAI" },
+    { "name": "The MAD Podcast with Matt Turck", "rssUrl": "https://anchor.fm/s/f2ee4948/podcast/rss", "url": "https://www.youtube.com/@DataDrivenNYC/videos" },
+    { "name": "AI & I by Every", "rssUrl": "https://anchor.fm/s/ed1f5584/podcast/rss", "url": "https://www.youtube.com/playlist?list=PLuMcoKK9mKgHtW_o9h5sGO2vXrffKHwJL" },
+    { "name": "Lex Fridman Podcast", "rssUrl": "https://lexfridman.com/feed/podcast/", "url": "https://www.youtube.com/@lexfridman" },
+    { "name": "The Cognitive Revolution", "rssUrl": "https://feeds.megaphone.fm/cognitiverevolution", "url": "https://www.youtube.com/@CognitiveRevolutionPodcast" },
+    { "name": "Lightcone (YC)", "rssUrl": "https://feeds.simplecast.com/JGq5e7qP", "url": "https://www.youtube.com/@ycombinator" },
+    { "name": "Acquired", "rssUrl": "https://acquired.libsyn.com/rss", "url": "https://www.youtube.com/@AcquiredFM" }
+  ],
+  "blogs": [
+    { "name": "Anthropic Engineering", "type": "scrape", "indexUrl": "https://www.anthropic.com/engineering", "articleBaseUrl": "https://www.anthropic.com/engineering/", "fetchMethod": "http" },
+    { "name": "Claude Blog", "type": "scrape", "indexUrl": "https://claude.com/blog", "articleBaseUrl": "https://claude.com/blog/", "fetchMethod": "http" }
+  ],
+  "newsletters": [
+    { "name": "The Batch (Andrew Ng)", "rssUrl": "https://www.deeplearning.ai/the-batch/rss/", "url": "https://www.deeplearning.ai/the-batch" },
+    { "name": "Ben's Bites", "rssUrl": "https://bensbites.beehiiv.com/feed", "url": "https://bensbites.beehiiv.com" },
+    { "name": "TLDR AI", "rssUrl": "https://tldr.tech/ai/rss", "url": "https://tldr.tech/ai" },
+    { "name": "Import AI (Jack Clark)", "rssUrl": "https://importai.substack.com/feed", "url": "https://importai.substack.com" },
+    { "name": "The Algorithmic Bridge", "rssUrl": "https://www.thealgorithmicbridge.com/feed", "url": "https://www.thealgorithmicbridge.com" },
+    { "name": "AI Snake Oil", "rssUrl": "https://www.aisnakeoil.com/feed", "url": "https://www.aisnakeoil.com" },
+    { "name": "Stratechery", "rssUrl": "https://stratechery.com/feed", "url": "https://stratechery.com" },
+    { "name": "The Gradient", "rssUrl": "https://thegradient.pub/rss", "url": "https://thegradient.pub" }
+  ],
+  "academic": {
+    "arxivCategories": ["cs.AI", "cs.CL", "cs.CV", "cs.LG", "cs.MA"],
+    "conferences": ["NeurIPS", "ICML", "ICLR", "CVPR", "ACL", "EMNLP", "AAAI"],
+    "topLabs": ["OpenAI", "Anthropic", "DeepMind", "Google", "Meta FAIR", "Microsoft Research", "NVIDIA"],
+    "filterRules": {
+      "minCitations": "top 5%",
+      "venuePriority": ["NeurIPS", "ICML", "ICLR", "CVPR", "ACL"],
+      "topicKeywords": ["LLM", "agent", "multimodal", "alignment", "RLHF", "RAG", "reasoning", "safety", "evaluation", "benchmark", "post-training", "inference", "scaling"]
+    }
+  },
+  "chinese_tech": [
+    { "name": "机器之心", "rssUrl": "https://www.jiqizhixin.com/rss", "url": "https://www.jiqizhixin.com" },
+    { "name": "量子位", "rssUrl": "https://www.qbitai.com/feed", "url": "https://www.qbitai.com" },
+    { "name": "少数派", "rssUrl": "https://sspai.com/feed", "url": "https://sspai.com" },
+    { "name": "36氪", "rssUrl": "https://36kr.com/feed", "url": "https://36kr.com" },
+    { "name": "新智元", "rssUrl": "https://www.aiera.com.cn/feed", "url": "https://www.aiera.com.cn" }
+  ],
+  "reports": [
+    { "name": "State of AI Report", "url": "https://www.stateof.ai", "frequency": "annual" },
+    { "name": "Stanford HAI AI Index", "url": "https://hai.stanford.edu/ai-index", "frequency": "annual" },
+    { "name": "a16z AI Canon", "url": "https://a16z.com/ai-canon", "frequency": "rolling" },
+    { "name": "CB Insights AI Research", "url": "https://www.cbinsights.com/research/artificial-intelligence", "frequency": "quarterly" },
+    { "name": "FirstMark MAD Landscape", "url": "https://mad.firstmark.com", "frequency": "annual" }
   ]
 }

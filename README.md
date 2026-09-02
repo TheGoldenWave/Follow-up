@@ -51,6 +51,30 @@ The DeepSeek Harness plugin only projects shared Follow-up Core / State. It does
 
 Follow-up never directly or automatically writes authoritative Malow or GoldenWave state. Future integrations may only submit auditable proposals for downstream acceptance and promotion. See the [positioning design](docs/superpowers/specs/2026-08-28-skill-first-positioning-design.md).
 
+### Current Status and Target Direction
+
+The current release still consumes centrally generated public Feeds. This remains the
+documented runtime truth until each replacement source passes shadow-mode acceptance.
+
+The next architecture moves acquisition into each user's local environment:
+
+```text
+Local Scheduler -> Acquisition Runtime -> Source Adapters / Sidecars
+                -> Versioned Signal Batch -> Follow-up Core -> Digest / Delivery
+```
+
+- Users own source API keys, cookies, login sessions, quotas, and related platform risk.
+- Follow-up maintainers do not host shared source credentials or pay source API costs.
+- Mature, license-compatible implementations are reused through audited vendor snapshots;
+  Follow-up does not reimplement platform protocols without a concrete need.
+- GitHub, Hacker News, Reddit, RSS, YouTube, Techmeme, Digg AI 1000, and arXiv run
+  through local Adapters or managed local tools.
+- Xiaohongshu and WeChat Official Accounts use local-only Sidecars for persistent login
+  state. They never rely on a Follow-up-operated service.
+
+See the [local acquisition design](docs/superpowers/specs/2026-09-01-local-acquisition-adapters-design.md)
+and [implementation plan](docs/superpowers/plans/2026-09-02-local-acquisition-adapters.md).
+
 ## The 7-Category Source Strategy
 
 Six live Feed categories are currently generated: X, podcasts, official blogs, newsletters, academic papers, and Chinese tech. Industry reports remain a low-frequency source plan and do not yet have a stable live Feed.
@@ -206,7 +230,7 @@ All with links to original content. Available in English, Chinese, or bilingual.
 
 ## Quick Start
 
-1. Install the skill in your AI agent (Hermes, OpenClaw, or Claude Code)
+1. Install the exact verified GitHub Release using the instructions below
 2. Say "set up follow builders" or invoke `/follow-builders`
 3. The agent walks you through setup conversationally
 
@@ -305,6 +329,8 @@ The target cadence differs by source category:
 
 ## How It Works
 
+### Current release
+
 1. **Central Feed generation:** GitHub Actions run daily to fetch content from six
    live categories (X/Twitter API, YouTube transcripts via Pod2Text, RSS feeds for
    blogs and newsletters, arXiv API for papers, web scraping for Chinese sources)
@@ -314,24 +340,78 @@ The target cadence differs by source category:
 4. **Digest delivered:** To your messaging app or directly in chat
 5. **Feedback and handoff (planned):** A DeepSeek Harness information center supports deeper review and explicit actions, then submits proposals to Malow or GoldenWave
 
+### Development roadmap
+
+1. **Foundation:** introduce the Python Acquisition Runtime, versioned Signal Batch,
+   health taxonomy, local configuration, and audited upstream provenance.
+2. **Keyless sources:** migrate RSS, GitHub, Hacker News, and keyless Reddit into shadow mode.
+3. **Managed local tools:** add YouTube via `yt-dlp` and Digg, Techmeme, and arXiv via
+   pinned Printing Press CLIs.
+4. **Authorized sources:** add X, Xiaohongshu, and WeChat Official Accounts with explicit
+   user authorization and local Sidecar isolation.
+5. **Per-source cutover:** switch sources independently after quality, security, and
+   stability gates; retain a 14-day rollback window.
+6. **Central retirement:** remove the public Feed runtime only after all existing sources
+   complete local migration and observation.
+
 ## Installation
 
-### Hermes Agent
+Follow-up `v0.1.0` requires Node.js 20 or newer. Install the exact tag and use
+`npm ci` so dependencies match the release lockfile. This release continues to consume
+the six centralized public Feeds, validates their schema before preparing a Digest,
+and uses Prompts from the installed tag unless a local user override exists. It does
+not include automatic update discovery or upgrading.
+
+### Verify the release archive
+
 ```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
-cd ~/Documents/MyProject/Follow-up/scripts && npm install
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/release-manifest.json
+shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
+tar -xzf Follow-up-v0.1.0.tar.gz
+cmp release-manifest.json Follow-up-v0.1.0/release-manifest.json
+cd Follow-up-v0.1.0/scripts
+node release/validate-release.js --archive-critical-only
+npm ci
+npm run validate-release:archive
+npm run test:archive
 ```
 
-### OpenClaw
-```bash
-clawhub install follow-builders
-```
+The checksums asset authenticates the complete archive within the declared GitHub
+trust boundary. The manifest inside the tag separately records a non-circular digest
+of tracked Git entries and SHA-256 hashes for critical release files. Specifically,
+`git-ls-tree-sha256-v1` hashes the raw, NUL-terminated records from
+`git ls-tree -r -z --full-tree`, preserving each path's Git mode, type, blob object ID,
+and byte-order position while excluding only `release-manifest.json` to avoid
+self-reference.
 
-### Claude Code
-```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
-cd ~/.claude/skills/follow-builders/scripts && npm install
-```
+Archive validation checks the schema, version, package lock, runtime, changelog, Feed
+and Prompt contracts, and every critical-file SHA-256. The tracked content digest is
+tag/checkout-only because an exact source archive intentionally contains no `.git`
+object database; validate it from the matching tag checkout with `npm run validate-release`.
+The dependency-free critical-file preflight runs before `npm ci`, but it necessarily
+executes the validator while checking the validator's own hash. That self-verification
+cannot establish trust by itself; the separately downloaded manifest asset, checksum,
+and resolved protected tag are the external trust anchors.
+
+### Release maintainer precondition
+
+The tag workflow does not make GitHub assets or tags immutable by itself. Before Task 6
+publishes a release, a repository administrator must enable a ruleset that protects
+`v*` tags and enable GitHub immutable releases, verify both settings externally, then
+set repository variable `RELEASE_IMMUTABILITY_CONFIRMED` to `true`. The workflow refuses
+publication without that confirmation and still refuses any already-existing release
+as defense in depth. Task 6 must re-check the external settings rather than treating the
+repository variable as proof.
+
+After verification, register the extracted `Follow-up-v0.1.0` directory through your
+agent's local Skill mechanism. This exact GitHub Release archive is the only documented
+first-install source for Hermes, OpenClaw, Claude Code, and other supported agents in
+`v0.1.0`. The project does not provide a verified ClawHub installation path.
+
+To move to a later release, verify and install that release's exact tag manually.
+`v0.1.0` never replaces program files or changes `~/.follow-builders` automatically.
 
 ## Configuration
 
@@ -352,15 +432,22 @@ All settings are stored in `~/.follow-builders/config.json`:
 
 ## Privacy
 
-- No source-fetching API keys need to be provided to the Skill; public content is fetched centrally
+- Current release: no source-fetching API keys are provided to the Skill because public content is fetched centrally
+- Target local acquisition: source credentials and costs belong to the user and remain on the user's machine
+- Follow-up will not operate shared login sessions, source credentials, or acquisition Sidecars
+- Xiaohongshu and WeChat Sidecars bind only to the local machine and expose no credential-export API
 - If you use Telegram/email delivery, those keys are stored locally in `~/.follow-builders/.env`
 - The skill only reads public content
 - Your configuration and custom prompts stay on your machine
 - Reading and feedback state is not implemented yet; future state must remain local and separate from public Feeds and product code
 
-## License
+## License and authorization
 
-MIT
+Follow-up is distributed under the MIT terms in [LICENSE](LICENSE). Upstream-derived code from
+`zarazhangrui/follow-builders` is included under confirmed MIT authorization recorded
+through maintainer attestation on 2026-09-02. The public upstream GitHub repository had
+no license file when reviewed; this project does not claim that repository itself is
+publicly MIT licensed. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ---
 

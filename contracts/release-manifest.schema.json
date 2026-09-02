@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/release-manifest.schema.json",
+  "title": "Follow-up release manifest",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "productVersion",
+    "releaseDate",
+    "channel",
+    "minimumSupportedVersion",
+    "releaseNotesUrl",
+    "trustMode",
+    "runtime",
+    "acquisition",
+    "capabilities",
+    "integrity"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./contracts/release-manifest.schema.json"
+    },
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "productVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "releaseDate": {
+      "type": "string",
+      "format": "date"
+    },
+    "channel": {
+      "const": "stable"
+    },
+    "minimumSupportedVersion": {
+      "type": "null"
+    },
+    "releaseNotesUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/TheGoldenWave/Follow-up/releases/tag/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "trustMode": {
+      "const": "github-tag-sha256"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node"],
+      "properties": {
+        "node": {
+          "const": ">=20.0.0"
+        }
+      }
+    },
+    "acquisition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "feeds"],
+      "properties": {
+        "mode": {
+          "const": "centralized"
+        },
+        "feeds": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "prefixItems": [
+            { "const": "x" },
+            { "const": "podcasts" },
+            { "const": "official-blogs" },
+            { "const": "newsletters" },
+            { "const": "academic-papers" },
+            { "const": "chinese-tech" }
+          ],
+          "items": false
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["localAcquisition", "sidecars", "feedbackState", "updater"],
+      "properties": {
+        "localAcquisition": { "const": false },
+        "sidecars": { "const": false },
+        "feedbackState": { "const": false },
+        "updater": { "const": false }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trackedContent", "criticalFiles"],
+      "properties": {
+        "trackedContent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "digest"],
+          "properties": {
+            "algorithm": { "const": "git-ls-tree-sha256-v1" },
+            "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "criticalFiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "files"],
+          "properties": {
+            "algorithm": { "const": "sha256" },
+            "files": {
+              "type": "object",
+              "minProperties": 1,
+              "required": [
+                "LICENSE",
+                "THIRD_PARTY_NOTICES.md",
+                "SKILL.md",
+                "VERSION",
+                "contracts/central-feed.schema.json",
+                "contracts/release-manifest.schema.json",
+                "docs/third-party/v0.1.0-dependencies.md",
+                "prompts/digest-intro.md",
+                "prompts/summarize-blogs.md",
+                "prompts/summarize-newsletter.md",
+                "prompts/summarize-paper.md",
+                "prompts/summarize-podcast.md",
+                "prompts/summarize-tweets.md",
+                "prompts/summarize-zh-sources.md",
+                "prompts/translate.md",
+                "scripts/feed-contract.js",
+                "scripts/package-lock.json",
+                "scripts/package.json",
+                "scripts/prepare-digest.js",
+                "scripts/validate-feed-artifact.js",
+                "scripts/release/build-release.sh",
+                "scripts/release/check-provenance.js",
+                "scripts/release/scan-secrets.js",
+                "scripts/release/validate-release.js",
+                "scripts/release/verify-dependency-licenses.js"
+              ],
+              "properties": {
+                "LICENSE": { "$ref": "#/$defs/sha256" },
+                "THIRD_PARTY_NOTICES.md": { "$ref": "#/$defs/sha256" },
+                "SKILL.md": { "$ref": "#/$defs/sha256" },
+                "VERSION": { "$ref": "#/$defs/sha256" },
+                "contracts/central-feed.schema.json": { "$ref": "#/$defs/sha256" },
+                "contracts/release-manifest.schema.json": { "$ref": "#/$defs/sha256" },
+                "docs/third-party/v0.1.0-dependencies.md": { "$ref": "#/$defs/sha256" },
+                "prompts/digest-intro.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-blogs.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-newsletter.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-paper.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-podcast.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-tweets.md": { "$ref": "#/$defs/sha256" },
+                "prompts/summarize-zh-sources.md": { "$ref": "#/$defs/sha256" },
+                "prompts/translate.md": { "$ref": "#/$defs/sha256" },
+                "scripts/feed-contract.js": { "$ref": "#/$defs/sha256" },
+                "scripts/package-lock.json": { "$ref": "#/$defs/sha256" },
+                "scripts/package.json": { "$ref": "#/$defs/sha256" },
+                "scripts/prepare-digest.js": { "$ref": "#/$defs/sha256" },
+                "scripts/validate-feed-artifact.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/build-release.sh": { "$ref": "#/$defs/sha256" },
+                "scripts/release/check-provenance.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/scan-secrets.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/validate-release.js": { "$ref": "#/$defs/sha256" },
+                "scripts/release/verify-dependency-licenses.js": { "$ref": "#/$defs/sha256" }
+              },
+              "propertyNames": {
+                "not": { "const": "release-manifest.json" }
+              },
+              "additionalProperties": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

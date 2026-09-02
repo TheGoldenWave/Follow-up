@@ -48,6 +48,29 @@ DeepSeek Harness 插件只投影共享的 Follow-up Core / State，不重新抓�
 
 Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。未来集成也只提交可审计 proposal，由下游系统决定是否接纳和晋升。完整边界见[产品定位设计](docs/superpowers/specs/2026-08-28-skill-first-positioning-design.md)。
 
+### 当前状态与目标方向
+
+当前版本仍然消费由维护者集中生成的公共 Feed。在各来源通过 shadow 验收前，
+这仍是项目对外描述的真实运行方式。
+
+下一阶段将信息采集迁移到每位用户的本地环境：
+
+```text
+本地调度器 -> Acquisition Runtime -> Source Adapter / Sidecar
+           -> 版本化 Signal Batch -> Follow-up Core -> Digest / 投递
+```
+
+- 来源 API Key、Cookie、登录会话、配额和平台账号风险由用户自行拥有与承担。
+- Follow-up 维护者不托管共享来源凭据，也不承担来源 API 费用。
+- 优先通过经过审计的 Vendor 快照复用许可兼容的成熟实现，不无谓重写平台协议。
+- GitHub、Hacker News、Reddit、RSS、YouTube、Techmeme、Digg AI 1000 和 arXiv
+  通过本地 Adapter 或由 Follow-up 管理的本地工具运行。
+- 小红书和微信公众号使用仅在本机运行的 Sidecar 维护长期登录态，不依赖
+  Follow-up 维护者运营的服务。
+
+详细设计见[本地采集架构](docs/superpowers/specs/2026-09-01-local-acquisition-adapters-design.md)，
+实施顺序见[开发计划](docs/superpowers/plans/2026-09-02-local-acquisition-adapters.md)。
+
 ## 7 类来源策略
 
 当前已经生成 6 类实时 Feed：X、播客、官方博客、Newsletter、学术论文和中文科技。行业报告属于低频来源规划，尚未形成稳定实时 Feed。
@@ -196,7 +219,7 @@ Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。�
 
 ## 快速开始
 
-1. 在你的 AI agent 中安装此 skill（Hermes、OpenClaw 或 Claude Code）
+1. 按下方说明安装经过验证的精确 GitHub Release
 2. 输入 "set up follow builders" 或执行 `/follow-builders`
 3. Agent 会以对话方式引导你完成设置
 
@@ -295,6 +318,8 @@ Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
 
 ## 工作原理
 
+### 当前版本
+
 1. **中心化 Feed 生成：** GitHub Actions 每日运行，从 6 类实时来源抓取内容
    （X/Twitter API、YouTube 字幕通过 Pod2Text、博客和 Newsletter 的 RSS、
    arXiv API、中文源的网页抓取）
@@ -304,24 +329,70 @@ Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
 4. **摘要推送：** 到通讯工具或直接在聊天中显示
 5. **反馈与 Handoff（规划中）：** DeepSeek Harness 信息中心承载深度浏览与显式操作，再向 Malow 或 GoldenWave 提交 proposal
 
+### 后续开发路线
+
+1. **运行底座：** 建立 Python Acquisition Runtime、版本化 Signal Batch、来源健康状态、
+   本地配置和上游来源追踪机制。
+2. **免登录来源：** 将 RSS、GitHub、Hacker News 和免密 Reddit 接入 shadow 模式。
+3. **本地工具来源：** 通过 `yt-dlp` 接入 YouTube，通过固定版本 Printing Press CLI
+   接入 Digg、Techmeme 和 arXiv。
+4. **授权来源：** 在用户明确授权后接入 X、小红书和微信公众号，并隔离 Sidecar 登录态。
+5. **逐来源切换：** 每个来源独立通过质量、安全和稳定性门槛，再进入正式 Digest，
+   切换后保留 14 天回滚窗口。
+6. **中心层下线：** 现有来源全部完成本地迁移与观察后，才删除公共 Feed 运行时。
+
 ## 安装
 
-### Hermes Agent
+Follow-up `v0.1.0` 需要 Node.js 20 或更高版本。请安装精确标签，并使用
+`npm ci` 按发布锁文件安装依赖。该版本继续读取 6 类中心化公共 Feed，在准备
+Digest 前验证 Feed Schema；除非用户存在本地覆盖，否则使用安装标签内的 Prompt。
+`v0.1.0` 不提供自动发现更新或自动升级。
+
+### 验证发布归档
+
 ```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
-cd ~/Documents/MyProject/Follow-up/scripts && npm install
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/release-manifest.json
+shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
+tar -xzf Follow-up-v0.1.0.tar.gz
+cmp release-manifest.json Follow-up-v0.1.0/release-manifest.json
+cd Follow-up-v0.1.0/scripts
+node release/validate-release.js --archive-critical-only
+npm ci
+npm run validate-release:archive
+npm run test:archive
 ```
 
-### OpenClaw
-```bash
-clawhub install follow-builders
-```
+checksums 资产验证完整归档在既定 GitHub 信任边界内未被替换。标签内的 manifest
+则独立记录无自引用的 Git 跟踪内容摘要，以及关键发布文件的 SHA-256。具体来说，
+`git-ls-tree-sha256-v1` 对 `git ls-tree -r -z --full-tree` 输出的原始 NUL 结尾记录
+做哈希，保留每个路径的 Git mode、type、blob object ID 和字节顺序位置，只排除
+`release-manifest.json` 以避免自引用。
 
-### Claude Code
-```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
-cd ~/.claude/skills/follow-builders/scripts && npm install
-```
+归档模式会验证 Schema、版本、package lock、运行时、changelog、Feed 与 Prompt
+契约，以及每个关键文件的 SHA-256。跟踪内容摘要（tracked content digest）只能在
+标签或 checkout 中重新计算，因为精确源码归档按设计不包含 `.git` object database；
+请在对应标签 checkout 中运行 `npm run validate-release` 完成这项验证。
+无依赖的关键文件预检会在 `npm ci` 前运行，但它检查 validator 自身哈希时必然已经
+执行了 validator，因此这种 self-verification 不能独立建立信任；单独下载的 manifest
+资产、checksum 与解析后的受保护标签才是外部信任锚点。
+
+### 发布维护者前置条件
+
+标签 workflow 本身不能让 GitHub 资产或标签变得不可变。Task 6 发布前，仓库管理员
+必须启用保护 `v*` 的 tag ruleset（protected `v*` tags），并启用 GitHub immutable
+releases；在外部核实两项设置后，再把仓库变量 `RELEASE_IMMUTABILITY_CONFIRMED`
+设为 `true`。未确认时 workflow 会拒绝发布，同时仍会拒绝覆盖已有 Release，作为
+纵深防御。Task 6 必须重新核实外部设置，不能把该变量本身当成证明。
+
+验证完成后，通过 Agent 的本地 Skill 机制注册解压后的 `Follow-up-v0.1.0` 目录。
+在 `v0.1.0` 中，这个精确 GitHub Release 归档是 Hermes、OpenClaw、Claude Code
+及其他受支持 Agent 唯一记录在案的首次安装来源。项目目前不提供经过验证的
+ClawHub 安装路径。
+
+升级到后续版本时，需要手动验证并安装该版本的精确标签。`v0.1.0` 不会自动替换
+程序文件，也不会自动修改 `~/.follow-builders`。
 
 ## 配置
 
@@ -342,15 +413,22 @@ cd ~/.claude/skills/follow-builders/scripts && npm install
 
 ## 隐私
 
-- 不需要把来源抓取 API key 交给 Skill，公开内容由中心化服务获取
+- 当前版本：公开内容由中心服务获取，因此不需要向 Skill 提供来源 API Key
+- 目标本地采集：来源凭据和调用成本归用户，凭据只保留在用户机器上
+- Follow-up 不运营共享登录会话、共享来源凭据或采集 Sidecar
+- 小红书和微信公众号 Sidecar 只监听本机，不提供凭据导出接口
 - 如果你使用 Telegram/邮件推送，相关 key 仅存储在本地 `~/.follow-builders/.env`
 - Skill 只读取公开内容
 - 你的配置和自定义 Prompt 保留在自己的设备上
 - 阅读与反馈状态尚未正式实现；未来必须使用本地用户状态，不与公共 Feed 或代码一起提交
 
-## 许可证
+## 许可证与授权
 
-MIT
+Follow-up 按 MIT 许可证分发，全文见 [LICENSE](LICENSE)。来自 `zarazhangrui/follow-builders` 的
+上游派生代码依据已确认的 MIT 授权纳入；该授权由项目维护者于 2026-09-02 在本项目
+发布流程中作出证明。公开上游 GitHub 仓库在审查时未提供许可证文件，本项目不声称
+该公开仓库本身采用 MIT 许可证。详见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ---
 

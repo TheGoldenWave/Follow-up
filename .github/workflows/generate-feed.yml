@@ -2,7 +2,8 @@ name: Generate Feeds
 
 on:
   schedule:
-    # All feeds (tweets, podcasts, blogs): once daily at 6:17am UTC
+    # All feeds (tweets, podcasts, blogs, newsletters, academic, zh-tech):
+    # once daily at 6:17am UTC
     - cron: '17 6 * * *'
   workflow_dispatch:
     inputs:
@@ -16,22 +17,37 @@ on:
           - tweets-only
           - podcasts-only
           - blogs-only
+          - newsletters-only
+          - academic-only
+          - zh-tech-only
+
+concurrency:
+  group: central-feed-generation
+  cancel-in-progress: false
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
 
       - name: Install dependencies
-        run: cd scripts && npm install
+        working-directory: scripts
+        run: npm ci
+
+      - name: Test
+        working-directory: scripts
+        run: npm test
 
       - name: Generate feeds
         env:
@@ -44,10 +60,72 @@ jobs:
             cd scripts && node generate-feed.js
           fi
 
+      - name: Validate generated feeds
+        working-directory: scripts
+        run: npm run validate-feeds
+
+      - name: Upload generated feeds
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: generated-feeds-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            feed-x.json
+            feed-podcasts.json
+            feed-blogs.json
+            feed-newsletters.json
+            feed-academic.json
+            feed-zh-tech.json
+            state-feed.json
+
+  publish:
+    needs: generate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download generated feeds
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: generated-feeds-${{ github.run_id }}
+          path: generated-feeds
+
+      - name: Validate artifact and apply exact feed files
+        run: |
+          node scripts/validate-feed-artifact.js generated-feeds
+          cp generated-feeds/feed-x.json feed-x.json
+          cp generated-feeds/feed-podcasts.json feed-podcasts.json
+          cp generated-feeds/feed-blogs.json feed-blogs.json
+          cp generated-feeds/feed-newsletters.json feed-newsletters.json
+          cp generated-feeds/feed-academic.json feed-academic.json
+          cp generated-feeds/feed-zh-tech.json feed-zh-tech.json
+          cp generated-feeds/state-feed.json state-feed.json
+
       - name: Commit and push feeds
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add feed-x.json feed-podcasts.json feed-blogs.json state-feed.json
-          git diff --cached --quiet || git commit -m "chore: update feeds [skip ci]"
-          git push
+          git add feed-x.json feed-podcasts.json feed-blogs.json \
+            feed-newsletters.json feed-academic.json feed-zh-tech.json \
+            state-feed.json
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: update feeds [skip ci]"
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to publish feeds after 3 attempts." >&2
+              exit 1
+            fi
+            git fetch origin main
+            git rebase origin/main
+          done

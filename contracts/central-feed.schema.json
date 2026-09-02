@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/central-feed.schema.json",
+  "title": "Follow-up Central Feed",
+  "oneOf": [
+    { "$ref": "#/$defs/xFeed" },
+    { "$ref": "#/$defs/podcastFeed" },
+    { "$ref": "#/$defs/blogFeed" },
+    { "$ref": "#/$defs/newsletterFeed" },
+    { "$ref": "#/$defs/academicFeed" },
+    { "$ref": "#/$defs/zhTechFeed" }
+  ],
+  "$defs": {
+    "envelope": {
+      "type": "object",
+      "required": ["schemaVersion", "generatedAt", "lookbackHours", "stats"],
+      "properties": {
+        "schemaVersion": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+        "generatedAt": { "type": "string", "format": "date-time" },
+        "lookbackHours": { "type": "number", "exclusiveMinimum": 0 },
+        "stats": { "type": "object" },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "xFeed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "type": "object",
+          "required": ["x"],
+          "properties": {
+            "x": { "type": "array", "items": { "$ref": "#/$defs/xSource" } }
+          }
+        }
+      ]
+    },
+    "xSource": {
+      "type": "object",
+      "required": ["source", "name", "handle", "tweets"],
+      "properties": {
+        "source": { "const": "x" },
+        "name": { "type": "string", "minLength": 1 },
+        "handle": { "type": "string", "minLength": 1 },
+        "bio": { "type": "string" },
+        "tweets": { "type": "array", "items": { "$ref": "#/$defs/tweet" } }
+      }
+    },
+    "tweet": {
+      "type": "object",
+      "required": ["id", "text", "createdAt", "url"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "url": { "type": "string", "format": "uri" },
+        "likes": { "type": "number" },
+        "retweets": { "type": "number" },
+        "replies": { "type": "number" }
+      }
+    },
+    "podcastFeed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "type": "object",
+          "required": ["podcasts"],
+          "properties": {
+            "podcasts": { "type": "array", "items": { "$ref": "#/$defs/podcast" } }
+          }
+        }
+      ]
+    },
+    "podcast": {
+      "type": "object",
+      "required": ["source", "name", "title", "guid", "url"],
+      "properties": {
+        "source": { "const": "podcast" },
+        "name": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "guid": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "publishedAt": { "type": ["string", "null"], "format": "date-time" },
+        "transcript": { "type": "string" }
+      }
+    },
+    "blogFeed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "type": "object",
+          "required": ["blogs"],
+          "properties": {
+            "blogs": { "type": "array", "items": { "$ref": "#/$defs/blog" } }
+          }
+        }
+      ]
+    },
+    "blog": {
+      "type": "object",
+      "required": ["source", "name", "title", "url", "content"],
+      "properties": {
+        "source": { "const": "blog" },
+        "name": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "publishedAt": { "type": ["string", "null"], "format": "date-time" },
+        "author": { "type": "string" },
+        "description": { "type": "string" },
+        "content": { "type": "string" }
+      }
+    },
+    "rssGroup": {
+      "type": "object",
+      "required": ["source", "url", "tags", "items"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/rssItem" } }
+      }
+    },
+    "rssItem": {
+      "type": "object",
+      "required": ["title", "url", "guid", "source", "language"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "publishedAt": { "type": ["string", "null"], "format": "date-time" },
+        "guid": { "type": "string", "minLength": 1 },
+        "source": { "type": "string", "minLength": 1 },
+        "language": { "type": "string", "minLength": 2 }
+      }
+    },
+    "newsletterFeed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "type": "object",
+          "required": ["newsletters"],
+          "properties": {
+            "newsletters": { "type": "array", "items": { "$ref": "#/$defs/rssGroup" } }
+          }
+        }
+      ]
+    },
+    "academicFeed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "type": "object",
+          "required": ["papers"],
+          "properties": {
+            "papers": { "type": "array", "items": { "$ref": "#/$defs/rssGroup" } }
+          }
+        }
+      ]
+    },
+    "zhTechFeed": {
+      "allOf": [
+        { "$ref": "#/$defs/envelope" },
+        {
+          "type": "object",
+          "required": ["articles"],
+          "properties": {
+            "articles": { "type": "array", "items": { "$ref": "#/$defs/rssGroup" } }
+          }
+        }
+      ]
+    }
+  }
+}
