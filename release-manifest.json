@@ -26,5 +26,22 @@
     "sidecars": false,
     "feedbackState": false,
     "updater": false
+  },
+  "integrity": {
+    "trackedContent": {
+      "algorithm": "git-ls-tree-sha256-v1",
+      "digest": "6ef704ebcfa23c46431c52f1dcba594a442f152a181398e510c3337d8ae1f8d7"
+    },
+    "criticalFiles": {
+      "algorithm": "sha256",
+      "files": {
+        "SKILL.md": "2b0d9cac6344e335416c55e47fcb4473893792471882eb2d76a894cda58643b8",
+        "VERSION": "e9dd8507f4bf0c6f42458e41aea833ad0bd3f6127272335eee9bf4d58541ed67",
+        "contracts/central-feed.schema.json": "555b2fa536db5a90989eea416ac01651d419e92934bbc11cc9b404694ab058d2",
+        "contracts/release-manifest.schema.json": "94d449134467766e2b7a2da0c416eaf5804e71965d34a5271e46da2f7a82abc1",
+        "scripts/feed-contract.js": "db47477c1e3a11c5a42e8d91fe8161cb98df8bec73ad646b4be5b32ebc965e00",
+        "scripts/prepare-digest.js": "fdf1979beeb4ba9bfd24ef1f376ed7114f25a16ffc3beefc6f5a39f16e5e9fb8"
+      }
+    }
   }
 }

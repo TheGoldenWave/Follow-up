@@ -16,6 +16,13 @@ Combine Western and Chinese perspectives into a unified, low-noise attention fee
 centrally and served via public Feeds. Telegram or email delivery still requires the
 user's own delivery credentials, stored locally after explicit authorization.
 
+Release `v0.1.0` has no automatic updater. Its executable Prompt defaults are the
+files bundled with the installed release, not files fetched from a mutable branch.
+Files under `~/.follow-builders/prompts/` remain the highest-priority user overrides.
+The six centralized Feed envelopes are schema-validated before Digest preparation;
+an invalid or unsupported Feed is reported as a source-specific error and contributes
+no payload.
+
 ## Product Boundary
 
 Follow-up has multiple surfaces and runtime responsibilities:
@@ -290,6 +297,11 @@ Read `~/.follow-builders/config.json` for language, schedule, delivery, and prom
 This script handles ALL data fetching deterministically — feeds, prompts, config.
 You do NOT fetch anything yourself.
 
+Feed data remains centrally published in `v0.1.0`, but every envelope is checked
+against the bundled compatible `1.x` Feed contract before use. Prompt defaults come
+from this installed release directory. The script checks the user's local Prompt
+override first and never downloads executable Prompt behavior from `main`.
+
 ```bash
 cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js 2>/dev/null
 ```
@@ -427,7 +439,8 @@ fields or claim that the next digest will be filtered.
 ### Prompt Changes
 When a user wants to customize how their digest sounds, copy the relevant prompt
 file to `~/.follow-builders/prompts/` and edit it there. This way their
-customization persists and won't be overwritten by central updates.
+customization persists across a manual reinstall and takes priority over the Prompt
+bundled with the installed release.
 
 ```bash
 mkdir -p ~/.follow-builders/prompts

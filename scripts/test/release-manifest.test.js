@@ -1,16 +1,21 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { promisify } from 'node:util';
 
 import {
+  computeCriticalFileHashes,
+  computeTrackedContentDigest,
   EXPECTED_FEEDS,
   validateManifest,
   validateRelease,
 } from '../release/validate-release.js';
 
 const repositoryRoot = new URL('../../', import.meta.url);
+const execFileAsync = promisify(execFile);
 
 async function readJson(relativePath) {
   return JSON.parse(await readFile(new URL(relativePath, repositoryRoot), 'utf8'));
@@ -66,6 +71,62 @@ test('manifest describes only the stable centralized six-feed baseline', async (
     updater: false,
   });
   assert.deepEqual(validateManifest(manifest, manifest.productVersion), []);
+});
+
+test('manifest records non-circular tracked content and critical-file integrity', async () => {
+  const manifest = await readJson('release-manifest.json');
+
+  assert.equal(manifest.integrity.trackedContent.algorithm, 'git-ls-tree-sha256-v1');
+  assert.match(manifest.integrity.trackedContent.digest, /^[a-f0-9]{64}$/);
+  assert.equal(manifest.integrity.criticalFiles.algorithm, 'sha256');
+  assert.equal(Object.hasOwn(manifest.integrity.criticalFiles.files, 'release-manifest.json'), false);
+  assert.deepEqual(
+    manifest.integrity.trackedContent,
+    await computeTrackedContentDigest(repositoryRoot),
+  );
+  assert.deepEqual(
+    manifest.integrity.criticalFiles.files,
+    await computeCriticalFileHashes(
+      repositoryRoot,
+      Object.keys(manifest.integrity.criticalFiles.files),
+    ),
+  );
+});
+
+test('tracked content digest changes for tracked add, remove, content, and mode changes', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'follow-up-integrity-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await execFileAsync('git', ['init', '-q'], { cwd: root });
+  await execFileAsync('git', ['config', 'user.name', 'Integrity Test'], { cwd: root });
+  await execFileAsync('git', ['config', 'user.email', 'integrity@example.invalid'], { cwd: root });
+  await writeFile(join(root, 'tracked.txt'), 'original\n');
+  await writeFile(join(root, 'release-manifest.json'), '{}\n');
+  await execFileAsync('git', ['add', '.'], { cwd: root });
+  await execFileAsync('git', ['commit', '-qm', 'baseline'], { cwd: root });
+  const baseline = await computeTrackedContentDigest(root);
+
+  await writeFile(join(root, 'tracked.txt'), 'changed\n');
+  await execFileAsync('git', ['add', 'tracked.txt'], { cwd: root });
+  await execFileAsync('git', ['commit', '-qm', 'content'], { cwd: root });
+  const contentChanged = await computeTrackedContentDigest(root);
+
+  await execFileAsync('git', ['update-index', '--chmod=+x', 'tracked.txt'], { cwd: root });
+  await execFileAsync('git', ['commit', '-qm', 'mode'], { cwd: root });
+  const modeChanged = await computeTrackedContentDigest(root);
+
+  await writeFile(join(root, 'added.txt'), 'added\n');
+  await execFileAsync('git', ['add', 'added.txt'], { cwd: root });
+  await execFileAsync('git', ['commit', '-qm', 'add'], { cwd: root });
+  const added = await computeTrackedContentDigest(root);
+
+  await execFileAsync('git', ['rm', '-q', 'added.txt'], { cwd: root });
+  await execFileAsync('git', ['commit', '-qm', 'remove'], { cwd: root });
+  const removed = await computeTrackedContentDigest(root);
+
+  assert.notEqual(contentChanged.digest, baseline.digest);
+  assert.notEqual(modeChanged.digest, contentChanged.digest);
+  assert.notEqual(added.digest, modeChanged.digest);
+  assert.equal(removed.digest, modeChanged.digest);
 });
 
 test('validator rejects malformed and mismatched product versions', async () => {

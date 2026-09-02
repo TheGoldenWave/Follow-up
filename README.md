@@ -356,10 +356,34 @@ The target cadence differs by source category:
 
 ## Installation
 
+Follow-up `v0.1.0` requires Node.js 20 or newer. Install the exact tag and use
+`npm ci` so dependencies match the release lockfile. This release continues to consume
+the six centralized public Feeds, validates their schema before preparing a Digest,
+and uses Prompts from the installed tag unless a local user override exists. It does
+not include automatic update discovery or upgrading.
+
+### Verify the release archive
+
+```bash
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
+shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
+tar -xzf Follow-up-v0.1.0.tar.gz
+cd Follow-up-v0.1.0/scripts && npm ci
+```
+
+The checksums asset authenticates the complete archive within the declared GitHub
+trust boundary. The manifest inside the tag separately records a non-circular digest
+of tracked Git entries and SHA-256 hashes for critical release files. Specifically,
+`git-ls-tree-sha256-v1` hashes the raw, NUL-terminated records from
+`git ls-tree -r -z --full-tree`, preserving each path's Git mode, type, blob object ID,
+and byte-order position while excluding only `release-manifest.json` to avoid
+self-reference.
+
 ### Hermes Agent
 ```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
-cd ~/Documents/MyProject/Follow-up/scripts && npm install
+git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
+cd ~/Documents/MyProject/Follow-up/scripts && npm ci
 ```
 
 ### OpenClaw
@@ -369,9 +393,12 @@ clawhub install follow-builders
 
 ### Claude Code
 ```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
-cd ~/.claude/skills/follow-builders/scripts && npm install
+git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
+cd ~/.claude/skills/follow-builders/scripts && npm ci
 ```
+
+To move to a later release, verify and install that release's exact tag manually.
+`v0.1.0` never replaces program files or changes `~/.follow-builders` automatically.
 
 ## Configuration
 

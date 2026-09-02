@@ -1,0 +1,225 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import {
+  cp,
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
+import { basename, join, relative } from 'node:path';
+import { promisify } from 'node:util';
+import test from 'node:test';
+
+import {
+  computeCriticalFileHashes,
+  computeTrackedContentDigest,
+} from '../release/validate-release.js';
+
+const execFileAsync = promisify(execFile);
+const repositoryRoot = new URL('../../', import.meta.url);
+const buildScript = new URL('../release/build-release.sh', import.meta.url);
+
+async function run(command, args, options = {}) {
+  return execFileAsync(command, args, {
+    encoding: 'utf8',
+    maxBuffer: 20 * 1024 * 1024,
+    ...options,
+  });
+}
+
+async function copyTrackedRepository(destination) {
+  const root = repositoryRoot.pathname;
+  const { stdout } = await run('git', ['ls-files', '-z'], { cwd: root, encoding: 'buffer' });
+  const tracked = stdout.toString().split('\0').filter(Boolean);
+
+  // The test and implementation are uncommitted during their TDD cycle.
+  for (const extra of [
+    'scripts/release/build-release.sh',
+    'scripts/test/release-build.test.js',
+    '.github/workflows/release.yml',
+  ]) {
+    try {
+      await stat(join(root, extra));
+      if (!tracked.includes(extra)) tracked.push(extra);
+    } catch {
+      // The initial red run intentionally reaches this path.
+    }
+  }
+
+  for (const path of tracked.sort()) {
+    await mkdir(join(destination, path, '..'), { recursive: true });
+    await cp(join(root, path), join(destination, path), { preserveTimestamps: true });
+  }
+}
+
+async function createReleaseRepository(t) {
+  const root = await mkdtemp(join(tmpdir(), 'follow-up-release-build-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await copyTrackedRepository(root);
+  await run('git', ['init', '-q'], { cwd: root });
+  await run('git', ['config', 'user.name', 'Release Test'], { cwd: root });
+  await run('git', ['config', 'user.email', 'release-test@example.invalid'], { cwd: root });
+  await run('git', ['add', '.'], { cwd: root });
+  await run('git', ['commit', '-qm', 'release fixture'], {
+    cwd: root,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_DATE: '2026-09-02T00:00:00Z',
+      GIT_COMMITTER_DATE: '2026-09-02T00:00:00Z',
+    },
+  });
+
+  const manifestPath = join(root, 'release-manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const criticalPaths = Object.keys(manifest.integrity.criticalFiles.files);
+  manifest.integrity = {
+    trackedContent: await computeTrackedContentDigest(root),
+    criticalFiles: {
+      algorithm: 'sha256',
+      files: await computeCriticalFileHashes(root, criticalPaths),
+    },
+  };
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const { stdout: manifestStatus } = await run(
+    'git',
+    ['status', '--porcelain', 'release-manifest.json'],
+    { cwd: root },
+  );
+  if (manifestStatus.trim()) {
+    await run('git', ['add', 'release-manifest.json'], { cwd: root });
+    await run('git', ['commit', '-qm', 'record release integrity'], {
+      cwd: root,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_DATE: '2026-09-02T00:00:01Z',
+        GIT_COMMITTER_DATE: '2026-09-02T00:00:01Z',
+      },
+    });
+  }
+  await run('npm', ['ci', '--ignore-scripts'], {
+    cwd: join(root, 'scripts'),
+    env: { ...process.env, npm_config_cache: join(root, '.npm-cache') },
+  });
+
+  await mkdir(join(root, '.hermes'), { recursive: true });
+  await mkdir(join(root, 'docker'), { recursive: true });
+  await mkdir(join(root, 'dist'), { recursive: true });
+  await writeFile(join(root, '.hermes', 'private-plan.md'), 'not for release\n');
+  await writeFile(join(root, 'docker', 'docker-compose.yml'), 'unsafe draft\n');
+  await writeFile(join(root, '.env'), 'TOKEN=placeholder-secret\n');
+  await writeFile(join(root, 'dist', 'development-output.txt'), 'not for release\n');
+  await writeFile(join(root, 'docs', 'wechat-integration.md'), 'untracked draft\n');
+  return root;
+}
+
+async function listArchive(archive) {
+  const { stdout } = await run('tar', ['-tzf', archive]);
+  return stdout.trim().split('\n');
+}
+
+async function treeDigest(root) {
+  const entries = [];
+
+  async function visit(directory) {
+    const children = await readdir(directory, { withFileTypes: true });
+    for (const child of children.sort((a, b) => Buffer.from(a.name).compare(Buffer.from(b.name)))) {
+      const path = join(directory, child.name);
+      const name = relative(root, path);
+      if (child.isDirectory()) {
+        entries.push(`d\0${name}\0`);
+        await visit(path);
+      } else {
+        const mode = (await stat(path)).mode & 0o777;
+        entries.push(`f\0${name}\0${mode.toString(8)}\0`);
+        entries.push(await readFile(path));
+        entries.push('\0');
+      }
+    }
+  }
+
+  await visit(root);
+  const input = Buffer.concat(entries.map((entry) => Buffer.isBuffer(entry) ? entry : Buffer.from(entry)));
+  const { createHash } = await import('node:crypto');
+  return createHash('sha256').update(input).digest('hex');
+}
+
+test('release build creates a deterministic tracked-only v0.1.0 archive and checksum', async (t) => {
+  const root = await createReleaseRepository(t);
+  const firstOutput = join(root, 'dist-first');
+  const secondOutput = join(root, 'dist-second');
+
+  await run('sh', [buildScript.pathname, 'HEAD', firstOutput], { cwd: root });
+  await run('sh', [buildScript.pathname, 'HEAD', secondOutput], { cwd: root });
+
+  const archiveName = 'Follow-up-v0.1.0.tar.gz';
+  const firstArchive = join(firstOutput, archiveName);
+  const secondArchive = join(secondOutput, archiveName);
+  assert.deepEqual(await readFile(firstArchive), await readFile(secondArchive));
+
+  const checksum = await readFile(join(firstOutput, 'Follow-up-v0.1.0-checksums.txt'), 'utf8');
+  assert.match(checksum, new RegExp(`^[a-f0-9]{64}  ${archiveName}\\n$`));
+  await run('shasum', ['-a', '256', '-c', basename(join(firstOutput, 'Follow-up-v0.1.0-checksums.txt'))], {
+    cwd: firstOutput,
+  });
+
+  const entries = await listArchive(firstArchive);
+  assert.ok(entries.includes('Follow-up-v0.1.0/VERSION'));
+  assert.ok(entries.includes('Follow-up-v0.1.0/release-manifest.json'));
+  for (const forbidden of ['.hermes/', 'docker/', '.env', 'node_modules/', 'dist/', 'wechat-integration.md']) {
+    assert.equal(entries.some((entry) => entry.includes(forbidden)), false, forbidden);
+  }
+});
+
+test('reinstalling the same archive leaves existing user configuration and credentials byte-for-byte unchanged', async (t) => {
+  const root = await createReleaseRepository(t);
+  const output = join(root, 'release-output');
+  await run('sh', [buildScript.pathname, 'HEAD', output], { cwd: root });
+
+  const fixtureHome = await mkdtemp(join(tmpdir(), 'follow-up-home-'));
+  const installRoot = await mkdtemp(join(tmpdir(), 'follow-up-install-'));
+  t.after(() => rm(fixtureHome, { recursive: true, force: true }));
+  t.after(() => rm(installRoot, { recursive: true, force: true }));
+  const userState = join(fixtureHome, '.follow-builders');
+  await mkdir(join(userState, 'prompts'), { recursive: true });
+  await writeFile(join(userState, 'config.json'), '{"language":"bilingual","onboardingComplete":true}\n');
+  await writeFile(join(userState, 'prompts', 'digest-intro.md'), 'My private prompt.\n');
+  await writeFile(join(userState, '.env'), 'TELEGRAM_BOT_TOKEN=placeholder-only\n');
+  const before = await treeDigest(userState);
+
+  const archive = join(output, 'Follow-up-v0.1.0.tar.gz');
+  await run('tar', ['-xzf', archive, '-C', installRoot]);
+  const program = join(installRoot, 'Follow-up-v0.1.0');
+  await run('npm', ['ci', '--ignore-scripts'], {
+    cwd: join(program, 'scripts'),
+    env: { ...process.env, HOME: fixtureHome, npm_config_cache: join(root, '.npm-cache') },
+  });
+  await rm(join(program, 'scripts', 'node_modules'), { recursive: true, force: true });
+  await run('tar', ['-xzf', archive, '-C', installRoot]);
+  await run('npm', ['ci', '--ignore-scripts'], {
+    cwd: join(program, 'scripts'),
+    env: { ...process.env, HOME: fixtureHome, npm_config_cache: join(root, '.npm-cache') },
+  });
+
+  assert.equal(await treeDigest(userState), before);
+  assert.notEqual(fixtureHome, homedir());
+});
+
+test('tag workflow is the sole immutable Stable publisher with constrained permissions', async () => {
+  const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
+
+  assert.match(workflow, /tags:\s*\n\s*- ['"]v\*['"]/);
+  assert.match(workflow, /permissions:\s*\n\s*contents: write/);
+  assert.match(workflow, /node-version: ['"]20['"]/);
+  assert.match(workflow, /gh release view/);
+  assert.equal((workflow.match(/gh release create/g) ?? []).length, 1);
+  assert.match(workflow, /npm run validate-release/);
+  assert.match(workflow, /npm run validate-feeds/);
+  assert.match(workflow, /npm test/);
+  assert.match(workflow, /build-release\.sh/);
+  assert.doesNotMatch(workflow, /--clobber|release upload .*--clobber/);
+});

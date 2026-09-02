@@ -343,10 +343,31 @@ Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
 
 ## 安装
 
+Follow-up `v0.1.0` 需要 Node.js 20 或更高版本。请安装精确标签，并使用
+`npm ci` 按发布锁文件安装依赖。该版本继续读取 6 类中心化公共 Feed，在准备
+Digest 前验证 Feed Schema；除非用户存在本地覆盖，否则使用安装标签内的 Prompt。
+`v0.1.0` 不提供自动发现更新或自动升级。
+
+### 验证发布归档
+
+```bash
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
+shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
+tar -xzf Follow-up-v0.1.0.tar.gz
+cd Follow-up-v0.1.0/scripts && npm ci
+```
+
+checksums 资产验证完整归档在既定 GitHub 信任边界内未被替换。标签内的 manifest
+则独立记录无自引用的 Git 跟踪内容摘要，以及关键发布文件的 SHA-256。具体来说，
+`git-ls-tree-sha256-v1` 对 `git ls-tree -r -z --full-tree` 输出的原始 NUL 结尾记录
+做哈希，保留每个路径的 Git mode、type、blob object ID 和字节顺序位置，只排除
+`release-manifest.json` 以避免自引用。
+
 ### Hermes Agent
 ```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
-cd ~/Documents/MyProject/Follow-up/scripts && npm install
+git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/Documents/MyProject/Follow-up
+cd ~/Documents/MyProject/Follow-up/scripts && npm ci
 ```
 
 ### OpenClaw
@@ -356,9 +377,12 @@ clawhub install follow-builders
 
 ### Claude Code
 ```bash
-git clone https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
-cd ~/.claude/skills/follow-builders/scripts && npm install
+git clone --branch v0.1.0 --depth 1 https://github.com/TheGoldenWave/Follow-up.git ~/.claude/skills/follow-builders
+cd ~/.claude/skills/follow-builders/scripts && npm ci
 ```
+
+升级到后续版本时，需要手动验证并安装该版本的精确标签。`v0.1.0` 不会自动替换
+程序文件，也不会自动修改 `~/.follow-builders`。
 
 ## 配置
 

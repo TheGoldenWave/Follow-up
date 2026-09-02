@@ -15,7 +15,8 @@
     "trustMode",
     "runtime",
     "acquisition",
-    "capabilities"
+    "capabilities",
+    "integrity"
   ],
   "properties": {
     "$schema": {
@@ -90,6 +91,41 @@
         "sidecars": { "const": false },
         "feedbackState": { "const": false },
         "updater": { "const": false }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trackedContent", "criticalFiles"],
+      "properties": {
+        "trackedContent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "digest"],
+          "properties": {
+            "algorithm": { "const": "git-ls-tree-sha256-v1" },
+            "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "criticalFiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "files"],
+          "properties": {
+            "algorithm": { "const": "sha256" },
+            "files": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "not": { "const": "release-manifest.json" }
+              },
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        }
       }
     }
   }

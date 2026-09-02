@@ -1,10 +1,15 @@
 #!/usr/bin/env node
 
-import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { promisify } from 'node:util';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+
+const execFileAsync = promisify(execFile);
 
 export const EXPECTED_FEEDS = [
   'x',
@@ -28,6 +33,7 @@ const TOP_LEVEL_FIELDS = [
   'runtime',
   'acquisition',
   'capabilities',
+  'integrity',
 ];
 const PLANNED_CAPABILITIES = [
   'localAcquisition',
@@ -71,6 +77,51 @@ function validateFields(value, path, allowed, required, errors) {
     if (!Object.hasOwn(value, key)) errors.push(`${path}.${key} is required`);
   }
   return true;
+}
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+async function git(rootPath, args, options = {}) {
+  const { stdout } = await execFileAsync('git', args, {
+    cwd: rootPath,
+    encoding: 'buffer',
+    maxBuffer: 20 * 1024 * 1024,
+    ...options,
+  });
+  return stdout;
+}
+
+export async function computeTrackedContentDigest(root, treeish = 'HEAD') {
+  const rootPath = toPath(root);
+  const output = await git(rootPath, ['ls-tree', '-r', '-z', '--full-tree', treeish]);
+  const records = [];
+  let start = 0;
+  for (let index = 0; index < output.length; index += 1) {
+    if (output[index] !== 0) continue;
+    if (index > start) records.push(output.subarray(start, index));
+    start = index + 1;
+  }
+  const manifestSuffix = Buffer.from('\trelease-manifest.json');
+  const included = records.filter((record) => !record.subarray(-manifestSuffix.length).equals(manifestSuffix));
+  const canonicalStream = Buffer.concat(included.flatMap((record) => [record, Buffer.from([0])]));
+  return {
+    algorithm: 'git-ls-tree-sha256-v1',
+    digest: sha256(canonicalStream),
+  };
+}
+
+export async function computeCriticalFileHashes(root, paths, treeish = 'HEAD') {
+  const rootPath = toPath(root);
+  const hashes = {};
+  for (const path of [...paths].sort((a, b) => Buffer.from(a).compare(Buffer.from(b)))) {
+    if (path === 'release-manifest.json') {
+      throw new Error('release-manifest.json cannot hash itself');
+    }
+    hashes[path] = sha256(await git(rootPath, ['show', `${treeish}:${path}`]));
+  }
+  return hashes;
 }
 
 export function validateManifest(manifest, repositoryVersion) {
@@ -143,6 +194,54 @@ export function validateManifest(manifest, repositoryVersion) {
     }
   }
 
+  if (validateFields(
+    manifest.integrity,
+    'manifest.integrity',
+    ['trackedContent', 'criticalFiles'],
+    ['trackedContent', 'criticalFiles'],
+    errors,
+  )) {
+    if (validateFields(
+      manifest.integrity.trackedContent,
+      'manifest.integrity.trackedContent',
+      ['algorithm', 'digest'],
+      ['algorithm', 'digest'],
+      errors,
+    )) {
+      if (manifest.integrity.trackedContent.algorithm !== 'git-ls-tree-sha256-v1') {
+        errors.push('manifest.integrity.trackedContent.algorithm must be git-ls-tree-sha256-v1');
+      }
+      if (!/^[a-f0-9]{64}$/.test(manifest.integrity.trackedContent.digest ?? '')) {
+        errors.push('manifest.integrity.trackedContent.digest must be a lowercase SHA-256 digest');
+      }
+    }
+
+    if (validateFields(
+      manifest.integrity.criticalFiles,
+      'manifest.integrity.criticalFiles',
+      ['algorithm', 'files'],
+      ['algorithm', 'files'],
+      errors,
+    )) {
+      if (manifest.integrity.criticalFiles.algorithm !== 'sha256') {
+        errors.push('manifest.integrity.criticalFiles.algorithm must be sha256');
+      }
+      const files = manifest.integrity.criticalFiles.files;
+      if (!isObject(files) || Object.keys(files).length === 0) {
+        errors.push('manifest.integrity.criticalFiles.files must be a non-empty object');
+      } else {
+        for (const [path, digest] of Object.entries(files)) {
+          if (path === 'release-manifest.json') {
+            errors.push('manifest.integrity.criticalFiles.files cannot include release-manifest.json');
+          }
+          if (!/^[a-f0-9]{64}$/.test(digest)) {
+            errors.push(`manifest.integrity.criticalFiles.files.${path} must be a lowercase SHA-256 digest`);
+          }
+        }
+      }
+    }
+  }
+
   return errors;
 }
 
@@ -159,7 +258,10 @@ async function readJson(path, label, errors) {
   }
 }
 
-export async function validateRelease(root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')) {
+export async function validateRelease(
+  root = resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
+  { treeish = 'HEAD', verifyIntegrity = true } = {},
+) {
   const rootPath = toPath(root);
   const errors = [];
   let version;
@@ -215,6 +317,24 @@ export async function validateRelease(root = resolve(dirname(fileURLToPath(impor
     errors.push('contracts/release-manifest.schema.json has an unexpected $id');
   }
 
+  if (verifyIntegrity && manifest?.integrity) {
+    try {
+      const trackedContent = await computeTrackedContentDigest(rootPath, treeish);
+      if (trackedContent.digest !== manifest.integrity.trackedContent?.digest) {
+        errors.push(`manifest tracked content digest does not match ${treeish}`);
+      }
+      const criticalPaths = Object.keys(manifest.integrity.criticalFiles?.files ?? {});
+      const criticalFiles = await computeCriticalFileHashes(rootPath, criticalPaths, treeish);
+      for (const path of criticalPaths) {
+        if (criticalFiles[path] !== manifest.integrity.criticalFiles.files[path]) {
+          errors.push(`manifest critical file hash does not match ${treeish}:${path}`);
+        }
+      }
+    } catch (error) {
+      errors.push(`repository integrity could not be verified for ${treeish}: ${error.message}`);
+    }
+  }
+
   try {
     const changelog = await readFile(resolve(rootPath, 'CHANGELOG.md'), 'utf8');
     const heading = new RegExp(
@@ -235,7 +355,32 @@ const isCli = process.argv[1]
   && pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
 
 if (isCli) {
-  const errors = await validateRelease();
+  const args = process.argv.slice(2);
+  const treeishIndex = args.indexOf('--treeish');
+  const treeish = treeishIndex >= 0 ? args[treeishIndex + 1] : 'HEAD';
+  if (treeishIndex >= 0 && !treeish) {
+    console.error('--treeish requires a Git revision');
+    process.exit(2);
+  }
+
+  if (args.includes('--write-integrity')) {
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+    const manifestPath = resolve(root, 'release-manifest.json');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const criticalPaths = Object.keys(manifest.integrity?.criticalFiles?.files ?? {});
+    manifest.integrity = {
+      trackedContent: await computeTrackedContentDigest(root, treeish),
+      criticalFiles: {
+        algorithm: 'sha256',
+        files: await computeCriticalFileHashes(root, criticalPaths, treeish),
+      },
+    };
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    console.log(`Updated release integrity from ${treeish}.`);
+    process.exit(0);
+  }
+
+  const errors = await validateRelease(undefined, { treeish });
   if (errors.length > 0) {
     for (const error of errors) console.error(`- ${error}`);
     process.exitCode = 1;

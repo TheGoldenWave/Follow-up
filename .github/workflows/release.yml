@@ -1,0 +1,70 @@
+name: Publish Stable Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Require tag and product version to agree
+        run: test "$GITHUB_REF_NAME" = "v$(cat VERSION)"
+
+      - name: Refuse to replace an existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; assets are immutable." >&2
+            exit 1
+          fi
+
+      - name: Install locked dependencies
+        working-directory: scripts
+        run: npm ci
+
+      - name: Validate metadata, feeds, and tests
+        working-directory: scripts
+        run: |
+          npm run validate-release
+          npm run validate-feeds
+          npm test
+
+      - name: Build and inspect tracked-only archive
+        run: |
+          sh scripts/release/build-release.sh "$GITHUB_SHA" dist
+          cd dist
+          shasum -a 256 -c "Follow-up-${GITHUB_REF_NAME}-checksums.txt"
+          tar -tzf "Follow-up-${GITHUB_REF_NAME}.tar.gz" > archive-contents.txt
+          if grep -E '(^|/)(\.hermes|docker|node_modules|dist)(/|$)|(^|/)\.env$|docs/wechat-integration\.md$' archive-contents.txt; then
+            echo "Release archive contains a forbidden path." >&2
+            exit 1
+          fi
+
+      - name: Publish immutable Stable assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz" \
+            "dist/Follow-up-${GITHUB_REF_NAME}-checksums.txt" \
+            "dist/release-manifest.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Follow-up $GITHUB_REF_NAME" \
+            --notes-file CHANGELOG.md
