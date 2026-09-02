@@ -5,7 +5,7 @@
 // ============================================================================
 // Gathers everything the LLM needs to produce a digest:
 // - Fetches the central feeds (tweets + podcasts)
-// - Fetches the latest prompts from GitHub
+// - Loads prompts from the installed release, with optional user overrides
 // - Reads the user's config (language, delivery method)
 // - Outputs a single JSON blob to stdout
 //
@@ -16,7 +16,7 @@
 // Output: JSON to stdout
 // ============================================================================
 
-import { readFile, mkdir } from 'fs/promises';
+import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -39,7 +39,6 @@ export const CENTRAL_FEEDS = [
   { category: 'zh-tech', label: 'Chinese technology', filename: 'feed-zh-tech.json', payloadKey: 'articles', outputKey: 'zhTech' },
 ].map((spec) => ({ ...spec, url: `${CENTRAL_FEED_BASE}/${spec.filename}` }));
 
-const PROMPTS_BASE = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/prompts';
 const PROMPT_FILES = [
   'summarize-podcast.md',
   'summarize-tweets.md',
@@ -60,12 +59,6 @@ export async function fetchJSON(
   const res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) return null;
   return res.json();
-}
-
-async function fetchText(url) {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.text();
 }
 
 export async function loadCentralFeedData({ fetchJson = fetchJSON } = {}) {
@@ -106,6 +99,34 @@ export async function loadCentralFeedData({ fetchJson = fetchJSON } = {}) {
   return { data, feeds, errors };
 }
 
+export async function loadPrompts({
+  userPromptsDir = join(USER_DIR, 'prompts'),
+  localPromptsDir = join(decodeURIComponent(new URL('.', import.meta.url).pathname), '..', 'prompts'),
+  promptFiles = PROMPT_FILES,
+} = {}) {
+  const prompts = {};
+  const errors = [];
+
+  for (const filename of promptFiles) {
+    const key = filename.replace('.md', '').replace(/-/g, '_');
+    const userPath = join(userPromptsDir, filename);
+    const localPath = join(localPromptsDir, filename);
+
+    if (existsSync(userPath)) {
+      prompts[key] = await readFile(userPath, 'utf-8');
+    } else if (existsSync(localPath)) {
+      prompts[key] = await readFile(localPath, 'utf-8');
+    } else {
+      errors.push(
+        `Could not load prompt ${filename}. Add a custom prompt at ${userPath} `
+        + `or reinstall Follow-up to restore ${localPath}.`,
+      );
+    }
+  }
+
+  return { prompts, errors };
+}
+
 // -- Main --------------------------------------------------------------------
 
 async function main() {
@@ -132,42 +153,9 @@ async function main() {
   const feedPodcasts = feeds.podcasts;
   const feedBlogs = feeds.blogs;
 
-  // 3. Load prompts with priority: user custom > remote (GitHub) > local default
-  //
-  // If the user has a custom prompt at ~/.follow-builders/prompts/<file>,
-  // use that (they personalized it — don't overwrite with remote updates).
-  // Otherwise, fetch the latest from GitHub so they get central improvements.
-  // If GitHub is unreachable, fall back to the local copy shipped with the skill.
-  const prompts = {};
-  const scriptDir = decodeURIComponent(new URL('.', import.meta.url).pathname);
-  const localPromptsDir = join(scriptDir, '..', 'prompts');
-  const userPromptsDir = join(USER_DIR, 'prompts');
-
-  for (const filename of PROMPT_FILES) {
-    const key = filename.replace('.md', '').replace(/-/g, '_');
-    const userPath = join(userPromptsDir, filename);
-    const localPath = join(localPromptsDir, filename);
-
-    // Priority 1: user's custom prompt (they personalized it)
-    if (existsSync(userPath)) {
-      prompts[key] = await readFile(userPath, 'utf-8');
-      continue;
-    }
-
-    // Priority 2: latest from GitHub (central updates)
-    const remote = await fetchText(`${PROMPTS_BASE}/${filename}`);
-    if (remote) {
-      prompts[key] = remote;
-      continue;
-    }
-
-    // Priority 3: local copy shipped with the skill
-    if (existsSync(localPath)) {
-      prompts[key] = await readFile(localPath, 'utf-8');
-    } else {
-      errors.push(`Could not load prompt: ${filename}`);
-    }
-  }
+  // 3. Load immutable release-local prompts, with explicit user overrides first.
+  const { prompts, errors: promptErrors } = await loadPrompts();
+  errors.push(...promptErrors);
 
   // 4. Build the output — everything the LLM needs in one blob
   const output = {
