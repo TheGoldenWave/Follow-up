@@ -78,10 +78,13 @@ missing migration paths before changing the active installation.
 `v0.1.0` uses a transitional `github-tag-sha256` trust mode: the user obtains the
 release from the canonical `TheGoldenWave/Follow-up` repository over GitHub HTTPS and
 confirms that the release tag resolves to the commit declared by the Release. The
-manifest stored in the tag records the repository tree identity and hashes for critical
-release files; it cannot contain the digest of an archive that itself contains that
-manifest. A separate checksums Release asset records the complete archive digest and is
-published by the tag-triggered workflow. This detects corruption and accidental
+manifest stored in the tag records a SHA-256 digest over the canonical, byte-order
+sorted `git ls-tree -r -z --full-tree` entries excluding `release-manifest.json`, plus
+SHA-256 hashes for required critical files. Excluding the manifest makes this tracked
+content digest non-circular. A separate checksums Release asset records the complete
+archive digest and is published by the tag-triggered workflow. An extracted archive has
+no Git object database, so it verifies the critical file hashes and complete-archive
+checksum rather than recomputing the tracked content digest. This detects corruption and accidental
 replacement within the stated GitHub trust boundary but does not protect against
 compromise of the GitHub repository or owner account. `v0.1.0` therefore distributes
 source and JavaScript only, not prebuilt native executables or Sidecar images.
@@ -239,10 +242,13 @@ A Stable release is produced only from a clean, reviewed commit:
 
 1. Verify repository tests, schemas, secret scanning, license/provenance manifests,
    generated-file consistency, and clean-install fixtures.
-2. Validate `release-manifest.json` against its schema, repository tree identity, and
-   critical tracked-file hashes.
+2. Validate `release-manifest.json` against its schema, the non-circular SHA-256 of
+   canonical sorted `git ls-tree` entries excluding `release-manifest.json`, and the
+   required critical-file SHA-256 hashes. In an extracted archive, validate the critical
+   file hashes; the tracked content digest remains a tag/checkout-only check.
 3. Build release archives from tracked files only and generate a separate checksums
-   Release asset for complete-archive verification.
+   Release asset for complete-archive verification. Archive verification relies on the
+   critical file hashes and this checksum because the archive contains no Git metadata.
 4. Create the signed/annotated immutable `vX.Y.Z` tag.
 5. Let the tag-triggered workflow publish one GitHub Release with manifest, checksums,
    release archive, release notes,
