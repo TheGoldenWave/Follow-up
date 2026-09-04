@@ -118,6 +118,19 @@ export function validateBlogSources(sources) {
           );
         }
         if (entry.type === 'json') {
+          try {
+            if (new URL(entry.url).origin !== new URL(source.url).origin) {
+              addError(
+                errors,
+                source,
+                index,
+                `discovery[${discoveryIndex}].url`,
+                'must use the exact source origin',
+              );
+            }
+          } catch {
+            // The absolute HTTPS validation above already reports malformed URLs.
+          }
           for (const [field, patterns] of [
             ['publicUrl', source.articleUrlPatterns],
             ['detailUrl', source.fetchUrlPatterns],

@@ -273,6 +273,21 @@ test('JSON discovery requires matching same-origin public and detail URL templat
   }
 });
 
+test('JSON discovery listing endpoint must use the exact source origin', () => {
+  const result = validateBlogSources([validSource({
+    discovery: [{
+      type: 'json',
+      url: 'https://api.example.com/articles',
+      publicUrl: 'https://example.com/blog?id={path}',
+      detailUrl: 'https://example.com/api/article?path={path}',
+    }],
+    articleUrlPatterns: ['^https://example\\.com/blog\\?id=[A-Za-z0-9._-]+$'],
+    fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
+  })]);
+
+  assert.ok(errorFor(result, 'example-blog', 'discovery[0].url'));
+});
+
 test('JSON discovery requires nonempty fetch URL patterns', () => {
   const jsonDiscovery = [{
     type: 'json',

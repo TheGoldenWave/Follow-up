@@ -380,6 +380,36 @@ test('fetchBlogContent checks both raw and normalized candidate URLs in state be
   assert.deepEqual(fetched, []);
 });
 
+test('fetch-only URLs neither suppress public candidates nor become state identities', async () => {
+  const publicUrl = 'https://example.com/blog/public';
+  const fetchUrl = 'https://example.com/api/article?path=public';
+  const candidate = {
+    title: 'Public article',
+    url: publicUrl,
+    publishedAt: '2026-09-03',
+    description: '',
+  };
+  Object.defineProperty(candidate, Symbol.for('follow-up.blog.fetch-url'), { value: fetchUrl });
+  const state = { seenArticles: { [fetchUrl]: 1 } };
+  const requested = [];
+
+  const results = await fetchBlogContent([source({
+    fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
+  })], state, [], {
+    discoverImpl: async () => [candidate],
+    fetchImpl: async (url) => {
+      requested.push(url);
+      return response(articleHtml({ canonical: '' }), { url });
+    },
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+  });
+
+  assert.deepEqual(requested, [fetchUrl]);
+  assert.deepEqual(results.map(({ url }) => url), [publicUrl]);
+  assert.equal(state.seenArticles[publicUrl], Date.parse('2026-09-04T00:00:00Z'));
+  assert.deepEqual(Object.keys(state.seenArticles), [publicUrl]);
+});
+
 test('fetchBlogContent skips an exact raw tracking URL from real RSS discovery state', async () => {
   const rawUrl = 'https://example.com/blog/tracked?utm_source=legacy';
   const requested = [];
