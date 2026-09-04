@@ -107,6 +107,78 @@ test('unknown source ID writes a clear diagnostic to stderr and returns nonzero'
   assert.match(run.stderr.text(), /Unknown blog source ID: missing/);
 });
 
+for (const [label, sources, expectedError] of [
+  ['insecure URL', [source('one'), source('two')].map((item, index) => (
+    index === 1 ? { ...item, url: 'http://two.example.com/blog' } : item
+  )), /two\.url: must be an absolute HTTPS URL/],
+  ['unsupported discovery type', [{ ...source('one'), discovery: [{ type: 'atom', url: 'https://one.example.com/feed' }] }], /one\.discovery\[0\]\.type/],
+  ['unsupported parser', [{ ...source('one'), parser: 'unknown-parser' }], /one\.parser: is not a supported parser/],
+  ['invalid article regex', [{ ...source('one'), articleUrlPatterns: ['['] }], /one\.articleUrlPatterns\[0\]/],
+  ['duplicate IDs', [source('one'), { ...source('one'), name: 'Duplicate' }], /one\.id: must be unique/],
+]) {
+  test(`CLI rejects ${label} before source selection or network access`, async () => {
+    let networkCalls = 0;
+    const run = injectedRun({
+      readFileImpl: async () => JSON.stringify({ sources }),
+      discoverImpl: async () => {
+        networkCalls += 1;
+        return [];
+      },
+      fetchArticleImpl: async () => {
+        networkCalls += 1;
+        return null;
+      },
+    });
+
+    const exitCode = await runCli({ argv: ['--source=one'], ...run.options });
+
+    assert.equal(exitCode, 1);
+    assert.equal(run.stdout.text(), '');
+    assert.match(run.stderr.text(), /Invalid blog source configuration:/);
+    assert.match(run.stderr.text(), expectedError);
+    assert.equal(networkCalls, 0);
+  });
+}
+
+test('CLI rejects an empty configured source list instead of reporting vacuous success', async () => {
+  let networkCalls = 0;
+  const run = injectedRun({
+    readFileImpl: async () => JSON.stringify({ sources: [] }),
+    discoverImpl: async () => {
+      networkCalls += 1;
+      return [];
+    },
+  });
+
+  const exitCode = await runCli({ argv: [], ...run.options });
+
+  assert.equal(exitCode, 1);
+  assert.equal(run.stdout.text(), '');
+  assert.match(run.stderr.text(), /Invalid blog source configuration: sources must not be empty/);
+  assert.equal(networkCalls, 0);
+});
+
+test('callable validator checks the complete injected source array before filtering', async () => {
+  let discoveryCalls = 0;
+  const invalidUnselectedSource = {
+    ...source('two'),
+    articleUrlPatterns: ['['],
+  };
+
+  await assert.rejects(
+    validateBlogSourcesLive({
+      sources: [source('one'), invalidUnselectedSource],
+      sourceId: 'one',
+      discoverImpl: async () => {
+        discoveryCalls += 1;
+        return [];
+      },
+    }),
+    /Invalid blog source configuration: two\.articleUrlPatterns\[0\]/,
+  );
+  assert.equal(discoveryCalls, 0);
+});
+
 test('callable validator returns the stable report contract and ignores article age', async () => {
   const oldCandidate = {
     title: 'Low-frequency latest article',
@@ -155,9 +227,9 @@ test('discovery failure is isolated in the source report', async () => {
   });
 });
 
-test('extraction failure tries at most three candidates and reports source errors', async () => {
+test('extraction failure tries at most twelve candidates and reports source errors', async () => {
   const attempted = [];
-  const candidates = Array.from({ length: 5 }, (_, index) => ({
+  const candidates = Array.from({ length: 14 }, (_, index) => ({
     title: `Post ${index}`,
     url: `https://one.example.com/blog/post-${index}`,
   }));
@@ -173,10 +245,32 @@ test('extraction failure tries at most three candidates and reports source error
 
   assert.equal(report.passed, false);
   assert.equal(report.sources[0].discovery, true);
-  assert.equal(report.sources[0].candidates, 5);
+  assert.equal(report.sources[0].candidates, 14);
   assert.equal(report.sources[0].validArticles, 0);
-  assert.equal(report.sources[0].errors.length, 3);
-  assert.deepEqual(attempted, candidates.slice(0, 3).map(({ url }) => url));
+  assert.equal(report.sources[0].errors.length, 12);
+  assert.deepEqual(attempted, candidates.slice(0, 12).map(({ url }) => url));
+});
+
+test('validator continues past three invalid candidates and stops after three valid articles', async () => {
+  const attempted = [];
+  const candidates = Array.from({ length: 10 }, (_, index) => ({
+    title: `Post ${index}`,
+    url: `https://one.example.com/blog/post-${index}`,
+  }));
+  const report = await validateBlogSourcesLive({
+    sources: [source('one')],
+    discoverImpl: async () => candidates,
+    fetchArticleImpl: async (candidate) => {
+      attempted.push(candidate.url);
+      const index = Number(candidate.url.split('-').pop());
+      return index >= 3 ? { title: candidate.title, url: candidate.url } : null;
+    },
+  });
+
+  assert.equal(report.passed, true);
+  assert.equal(report.sources[0].candidates, 10);
+  assert.equal(report.sources[0].validArticles, 3);
+  assert.deepEqual(attempted, candidates.slice(0, 6).map(({ url }) => url));
 });
 
 test('CLI exits nonzero when any selected source fails live validation', async () => {
@@ -204,6 +298,7 @@ test('validator architecture imports discovery and article reads only', async ()
 
   assert.match(sourceText, /from ['"]\.\/blog-discovery\.js['"]/);
   assert.match(sourceText, /from ['"]\.\/blog-collector\.js['"]/);
+  assert.match(sourceText, /validateBlogSources/);
   assert.doesNotMatch(sourceText, /generate-feed|fetchBlogContent|writeFile|appendFile|rename|unlink/);
 });
 

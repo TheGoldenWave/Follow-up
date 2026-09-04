@@ -6,8 +6,10 @@ import {
   discoverBlogArticles,
   sanitizeBlogErrorMessage,
 } from './blog-discovery.js';
+import { validateBlogSources } from './blog-source-config.js';
 
-const MAX_ARTICLE_ATTEMPTS = 3;
+const MAX_ARTICLE_ATTEMPTS = 12;
+const MAX_VALID_ARTICLES = 3;
 const CONFIG_URLS = {
   candidates: new URL('../config/blog-source-candidates.json', import.meta.url),
   production: new URL('../config/feed-blogs.json', import.meta.url),
@@ -31,6 +33,17 @@ function selectSources(sources, sourceId) {
   const selected = sources.filter((source) => source.id === sourceId);
   if (selected.length === 0) throw new Error(`Unknown blog source ID: ${sourceId}`);
   return selected;
+}
+
+function assertValidSources(sources) {
+  const result = validateBlogSources(sources);
+  const errors = [...result.errors];
+  if (Array.isArray(sources) && sources.length === 0) {
+    errors.push('sources must not be empty');
+  }
+  if (errors.length > 0) {
+    throw new Error(`Invalid blog source configuration: ${errors.join('; ')}`);
+  }
 }
 
 async function validateSource(source, {
@@ -59,8 +72,8 @@ async function validateSource(source, {
         errors,
       });
       if (article) {
-        validArticles = 1;
-        break;
+        validArticles += 1;
+        if (validArticles === MAX_VALID_ARTICLES) break;
       }
     } catch (error) {
       errors.push(errorMessage(source, 'article', error));
@@ -95,6 +108,7 @@ export async function validateBlogSourcesLive({
   }
 
   const configuredSources = sources ?? await readSources(mode, readFileImpl);
+  assertValidSources(configuredSources);
   const selectedSources = selectSources(configuredSources, sourceId);
   const sourceReports = [];
   for (const source of selectedSources) {
