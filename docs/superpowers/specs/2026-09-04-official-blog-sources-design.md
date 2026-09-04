@@ -39,7 +39,7 @@ Research Root、Publications、API 文档、GitHub 和模型仓库不属于本�
 3. Index HTML：从官网列表页的链接和结构化数据发现文章。
 4. JSON：仅用于官网公开页面由同源 JSON 接口提供文章索引或正文的站点；候选必须同时保留公开文章 URL，API URL 不得作为 Feed canonical URL。
 
-前一种方式请求失败或没有产生合规候选时才进入下一种方式；已经产生候选后不混用后续入口，避免同一篇文章重复发现。RSS 不提供全文时，三种发现方式最终都进入相同的文章抓取与正文提取流程。现有 Anthropic Engineering 和 Claude Blog 的专用解析器继续保留；其他来源优先使用 JSON-LD、Open Graph 和语义化 `article`/`main` 正文提取。只有通用提取无法满足离线 Fixture 时才增加站点级规则。
+前一种方式请求失败或没有产生合规候选时才进入下一种方式；已经产生候选后不混用后续入口，避免同一篇文章重复发现。RSS 不提供全文时，四种发现方式最终都进入相同的文章抓取与正文提取流程。现有 Anthropic Engineering 和 Claude Blog 的专用解析器继续保留；其他来源优先使用 JSON-LD、Open Graph 和语义化 `article`/`main` 正文提取。只有通用提取无法满足离线 Fixture 时才增加站点级规则。
 
 ## 逐站采集矩阵
 
@@ -72,14 +72,14 @@ Research Root、Publications、API 文档、GitHub 和模型仓库不属于本�
 - `id`：稳定、不可变的机器标识；
 - `name`：Feed 中显示的官网名称；
 - `url`：用户访问的来源主页；
-- `discovery`：有序数组；每项包含 `type`（`rss`、`sitemap`、`html` 或经逐站验证的 `json`）和对应 `url`；JSON 策略还包含同源 `detailUrl` 模板；
+- `discovery`：有序数组；每项包含 `type`（`rss`、`sitemap`、`html` 或经逐站验证的 `json`）和对应 `url`；JSON 策略还包含同源 `detailUrl` 模板和 `publicUrl` 模板，二者都使用 `{path}` 占位符；
 - `articleUrlPatterns`：针对 canonical absolute URL 的 JavaScript 正则字符串；任一匹配即允许进入抓取流程；
-- 可选 `fetchUrlPatterns`：只约束与公开 URL 不同的同源抓取 URL；抓取 URL 不得进入 Feed 或作为 state canonical key；
+- 可选 `fetchUrlPatterns`：只约束与公开 URL 不同的同源抓取 URL；任何 discovery 可能产生 `fetchUrl` 时，该数组必填且非空；抓取 URL 不得进入 Feed 或作为 state canonical key；
 - `excludeUrlPatterns`：同样针对 absolute URL 的 JavaScript 正则字符串；任一匹配即拒绝，优先级高于允许规则；
 - `language`：来源主要语言；
 - 可选 `parser`：确有必要时选择已实现的站点规则；
 - 可选 `contentSelectors`：通用语义提取失败时使用的有限 CSS 选择器集合。
-- 可选 `contentSelectorPriority`：默认 `false`；仅当真实页面的语义 `article`/`main` 包含相关阅读等非正文块时设为 `true`，使该来源的选择器先于语义正文。
+- 可选 `contentSelectorPriority`：默认 `false`；必须是布尔值；设为 `true` 时必须同时提供非空且有效的 `contentSelectors`，使该来源的选择器先于语义正文。
 
 `loadSources()` 使用该文件覆盖旧配置中的 `blogs`。发布配置中只允许 HTTPS 官网地址和采集器已支持的 discovery/parser 值。
 
@@ -88,7 +88,7 @@ Research Root、Publications、API 文档、GitHub 和模型仓库不属于本�
 ```text
 feed-blogs.json config
   -> discoverBlogArticles(source)
-     -> RSS | Sitemap | Index HTML
+     -> RSS | Sitemap | Index HTML | JSON
   -> normalize and filter URLs
   -> lookback and seenArticles filtering
   -> fetchBlogArticle(url)
@@ -102,10 +102,10 @@ feed-blogs.json config
 核心函数契约：
 
 - 所有异步函数共享 `BlogFetchOptions`：`{ fetchImpl = globalThis.fetch, now = Date.now, timeoutMs = 15000, errors = [], shadow = false }`。`errors` 是调用方拥有的可变字符串数组；函数只追加脱敏错误。
-- `discoverBlogArticles(source, options) -> Promise<Candidate[]>`：输入已验证的来源配置和完整 `BlogFetchOptions`；输出 `{ title, url, publishedAt, description }`，内部可带非枚举 `fetchUrl`。`url` 必须是公开文章 URL；`fetchUrl` 只用于同源官方资源抓取。某个发现入口失败时向 `options.errors` 追加阶段错误并尝试下一入口；所有入口失败时返回空数组。
+- `discoverBlogArticles(source, options) -> Promise<Candidate[]>`：输入已验证的来源配置和完整 `BlogFetchOptions`；输出 `{ title, url, publishedAt, description }`，内部可带非枚举 `fetchUrl`。JSON 发现把响应中的 `path` 分别填入经验证的 `publicUrl` 和 `detailUrl` 模板；`url` 必须是公开文章 URL，`fetchUrl` 只用于同源官方资源抓取。某个发现入口失败时向 `options.errors` 追加阶段错误并尝试下一入口；所有入口失败时返回空数组。
 - `canonicalizeArticleUrl(url, baseUrl) -> string | null`：解析相对 URL、强制 HTTP(S)、删除 fragment 和 `utm_*`、`ref`、`source` 等追踪参数、保留其他业务参数、标准化默认端口与非根路径尾斜杠。
 - `extractBlogArticle(html, articleUrl, source) -> ArticleExtraction`：输出 `{ title, canonicalUrl, publishedAt, author, description, content }`，不负责网络请求或 state 写入。
-- `fetchBlogArticle(candidate, source, options) -> Promise<BlogItem | null>`：跟随重定向后抓取文章，运行提取器并校验必填字段；返回现有 Blog Feed item 或 `null`，失败写入 `options.errors`。
+- `fetchBlogArticle(candidate, source, options) -> Promise<BlogItem | null>`：存在 `candidate.fetchUrl` 时请求它，否则请求 `candidate.url`；公开身份、state 查询和缺省 canonical 始终使用 `candidate.url`。跟随安全重定向后运行提取器并校验必填字段；返回现有 Blog Feed item 或 `null`，失败写入 `options.errors`。
 - `fetchBlogContent(sources, state, options) -> Promise<BlogItem[]>`：编排来源、时间窗、去重和上限；只有成功生成 Blog item 后才更新 state。现有 `errors` 参数迁入 `options.errors`，调用方继续把同一数组写入 Feed envelope。
 
 `Candidate.publishedAt` 和 `ArticleExtraction.publishedAt` 均为可解析的原始日期或 `null`；写入 Feed 前统一转为 ISO 8601。错误继续使用现有 `errors: string[]`，格式为 `Blog: <source>: <stage>: <message>`。
@@ -135,7 +135,7 @@ feed-blogs.json config
 - 已知发布时间的文章必须在时间窗内；无可靠日期的文章只允许来自发现结果顶部，并限制扫描数量。
 - canonical URL 优先使用文章页 `<link rel="canonical">`，其次使用最终重定向 URL，最后使用发现 URL；随后执行统一 URL 规范化。
 - 最终 canonical URL 必须再次通过来源允许 host、`articleUrlPatterns` 和 `excludeUrlPatterns` 校验；跨站 canonical 或重定向不能进入 Feed 或 state。
-- 非枚举 `fetchUrl` 必须为 HTTPS、与来源同源并匹配 `fetchUrlPatterns`；正文提取产生的 canonical URL 仍必须匹配公开 `articleUrlPatterns`。
+- JSON `detailUrl`/`publicUrl` 模板必须包含 `{path}`；`detailUrl` 和解析后的非枚举 `fetchUrl` 必须为 HTTPS、与来源同源并匹配必填的 `fetchUrlPatterns`；`publicUrl` 解析结果和正文提取产生的 canonical URL 必须匹配公开 `articleUrlPatterns`。
 - state 查询同时检查 canonical URL、最终 URL 和旧的原始 URL；新写入只保存 canonical URL。
 - 同一 canonical URL 在单次运行和跨运行状态中只出现一次，即使它被不同发现入口或不同来源重复列出。
 - RSS、Sitemap、索引页和文章页错误均带来源名、阶段和 HTTP 状态。
@@ -158,6 +158,7 @@ feed-blogs.json config
 - 同一文章被两个来源发现时只输出一次；
 - 单源错误隔离；
 - 配置中的唯一 ID、HTTPS 入口、正则语法、必填策略字段、parser 与 selector 均通过验证；
+- JSON 模板、公私 URL 模式、`contentSelectorPriority` 类型及其与非空 selector 的依赖关系均通过验证；
 - Blog item 精确保持 `{ source, name, title, url, publishedAt, author, description, content }`，错误保持 Feed envelope 的字符串数组。
 
 新增命令 `node scripts/generate-feed.js --blogs-only --shadow`。Shadow 模式在内存中使用空 state，禁止调用 `saveState()` 和任何 Feed `writeFile()`，仅向标准输出写完整候选 JSON，诊断写向标准错误。真实 shadow 验收对每个来源执行：
