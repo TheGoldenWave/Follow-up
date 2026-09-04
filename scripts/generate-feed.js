@@ -19,6 +19,10 @@ import { join } from "path";
 import { pathToFileURL } from "url";
 
 import { createFeedEnvelope } from "./feed-contract.js";
+import {
+  extractAnthropicArticleContent,
+  extractClaudeBlogArticleContent,
+} from "./blog-extraction.js";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -786,150 +790,6 @@ function parseClaudeBlogIndex(html) {
     });
   }
   return articles;
-}
-
-// Extracts the main text content from an Anthropic Engineering article page.
-// Tries the embedded JSON first (Next.js SSR data), then falls back to
-// stripping HTML tags from the article body.
-function extractAnthropicArticleContent(html) {
-  let title = "";
-  let author = "";
-  let publishedAt = null;
-  let content = "";
-
-  // Try to get structured data from Next.js __NEXT_DATA__
-  const nextDataMatch = html.match(
-    /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i,
-  );
-  if (nextDataMatch) {
-    try {
-      const data = JSON.parse(nextDataMatch[1]);
-      const pageProps = data?.props?.pageProps;
-      const post =
-        pageProps?.post || pageProps?.article || pageProps?.entry || pageProps;
-      title = post?.title || "";
-      author = post?.author?.name || post?.authors?.[0]?.name || "";
-      publishedAt =
-        post?.publishedOn || post?.publishedAt || post?.date || null;
-
-      // Extract text from the body blocks (Sanity CMS portable text format)
-      const body = post?.body || post?.content || [];
-      if (Array.isArray(body)) {
-        const textParts = [];
-        for (const block of body) {
-          if (block._type === "block" && block.children) {
-            const text = block.children.map((c) => c.text || "").join("");
-            if (text.trim()) textParts.push(text.trim());
-          }
-        }
-        content = textParts.join("\n\n");
-      }
-      if (content) return { title, author, publishedAt, content };
-    } catch {
-      // Fall through to HTML stripping
-    }
-  }
-
-  // Fallback: extract title from <h1> and body from <article> or main content
-  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  if (h1Match) title = h1Match[1].replace(/<[^>]+>/g, "").trim();
-
-  // Try to find the article body and strip HTML tags
-  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-  const bodyHtml = articleMatch ? articleMatch[1] : html;
-
-  // Strip script/style tags first, then all remaining HTML tags
-  content = bodyHtml
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return { title, author, publishedAt, content };
-}
-
-// Extracts the main text content from a Claude Blog article page.
-// Uses JSON-LD schema data if present, then falls back to the rich text body.
-function extractClaudeBlogArticleContent(html) {
-  let title = "";
-  let author = "";
-  let publishedAt = null;
-  let content = "";
-
-  // Try JSON-LD structured data first (most reliable for metadata)
-  const jsonLdRegex =
-    /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
-  let jsonLdMatch;
-  while ((jsonLdMatch = jsonLdRegex.exec(html)) !== null) {
-    try {
-      const ld = JSON.parse(jsonLdMatch[1]);
-      if (ld["@type"] === "BlogPosting" || ld["@type"] === "Article") {
-        title = ld.headline || ld.name || "";
-        author = ld.author?.name || "";
-        publishedAt = ld.datePublished || null;
-        break;
-      }
-    } catch {
-      // Not valid JSON-LD, skip
-    }
-  }
-
-  // Extract body text from the Webflow rich text container
-  const richTextMatch =
-    html.match(
-      /<div[^>]*class="[^"]*u-rich-text-blog[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
-    ) ||
-    html.match(/<div[^>]*class="[^"]*w-richtext[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-
-  if (richTextMatch) {
-    content = richTextMatch[1]
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  // If rich text extraction failed, try a broader approach
-  if (!content) {
-    // Get title from <h1> if not already found
-    if (!title) {
-      const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-      if (h1Match) title = h1Match[1].replace(/<[^>]+>/g, "").trim();
-    }
-
-    // Strip the whole page down to text as a last resort
-    content = html
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<nav[\s\S]*?<\/nav>/gi, "")
-      .replace(/<footer[\s\S]*?<\/footer>/gi, "")
-      .replace(/<header[\s\S]*?<\/header>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  return { title, author, publishedAt, content };
 }
 
 // Main blog fetching orchestrator.
