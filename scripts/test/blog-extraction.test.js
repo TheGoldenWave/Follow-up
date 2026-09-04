@@ -170,7 +170,7 @@ test('configured content selectors support tag, class, id, tag.class, and descen
     ['.post-body', '<div class="layout post-body wide">SELECTED</div>'],
     ['#story', '<div id="story">SELECTED</div>'],
     ['div.prose', '<div class="prose">SELECTED</div>'],
-    ['main .copy', '<div class="copy">SELECTED</div>'],
+    ['main .copy', '<main><div class="copy">SELECTED</div></main>'],
   ];
 
   for (const [selector, markup] of cases) {
@@ -182,6 +182,26 @@ test('configured content selectors support tag, class, id, tag.class, and descen
     });
     assert.equal(result?.content, selected, selector);
   }
+});
+
+test('configured descendant selectors reject an earlier match outside the requested ancestor', () => {
+  const outside = longText('Outside copy');
+  const wrongAncestor = longText('Inside wrong ancestor');
+  const inside = longText('Inside main copy');
+  const html = `<html><body>
+    <h1>Scoped selector article</h1>
+    <div class="copy">${outside}</div>
+    <div class="article-shell">
+      <div><div class="copy">${wrongAncestor}</div></div>
+      <section><div class="copy">${inside}</div></section>
+    </div>
+  </body></html>`;
+
+  assert.equal(blogExtraction.extractBlogArticle(
+    html,
+    'https://example.com/blog/scoped-selector',
+    { ...genericSource, contentSelectors: ['.article-shell section .copy'] },
+  )?.content, inside);
 });
 
 test('a configured site parser runs before semantic and configured selector fallbacks', () => {
@@ -204,6 +224,18 @@ test('a configured site parser runs before semantic and configured selector fall
     parser: 'anthropic-engineering',
     contentSelectors: ['article'],
   })?.content, preferred);
+});
+
+test('site-parser broad fallback removes boilerplate before generic validation', async () => {
+  const html = await fixture('claude-blog/fallback-with-boilerplate.html');
+  const result = blogExtraction.extractBlogArticle(
+    html,
+    'https://example.com/blog/fallback-cleaning',
+    { ...genericSource, parser: 'claude-blog' },
+  );
+
+  assert.match(result.content, /Useful fallback content/);
+  assert.doesNotMatch(result.content, /Navigation|Related links/);
 });
 
 test('content extraction decodes entities and removes non-content elements', () => {

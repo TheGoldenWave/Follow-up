@@ -106,12 +106,7 @@ function authorName(author) {
   return String(author.name || '').trim();
 }
 
-function selectorPart(selector) {
-  return selector.trim().split(/\s+/).pop() || '';
-}
-
-function selectorMatcher(selector) {
-  const part = selectorPart(selector);
+function selectorMatcher(part) {
   let tagName = '';
   let className = '';
   let id = '';
@@ -132,33 +127,70 @@ function selectorMatcher(selector) {
   };
 }
 
-function extractElement(html, selector) {
-  const matcher = selectorMatcher(selector);
-  if (!matcher) return '';
-  if (matcher.tagName) {
-    const pattern = new RegExp(`<${matcher.tagName}\\b([^>]*)>([\\s\\S]*?)<\\/${matcher.tagName}\\s*>`, 'gi');
-    let match;
-    while ((match = pattern.exec(html)) !== null) {
-      if (matcher.matches(parseAttributes(match[1]))) return match[2];
-    }
-    return '';
-  }
+function matchesNode(node, matcher) {
+  return (!matcher.tagName || matcher.tagName.toLowerCase() === node.tagName) &&
+    matcher.matches(node.attributes);
+}
 
-  const openingPattern = /<([a-z][\w-]*)\b([^>]*)>/gi;
-  let opening;
-  while ((opening = openingPattern.exec(html)) !== null) {
-    if (!matcher.matches(parseAttributes(opening[2]))) continue;
-    const closingPattern = new RegExp(`<\\/${opening[1]}\\s*>`, 'gi');
-    closingPattern.lastIndex = openingPattern.lastIndex;
-    const closing = closingPattern.exec(html);
-    if (closing) return html.slice(openingPattern.lastIndex, closing.index);
+function matchesAncestorChain(ancestors, matchers) {
+  let ancestorIndex = ancestors.length - 1;
+  for (let matcherIndex = matchers.length - 2; matcherIndex >= 0; matcherIndex -= 1) {
+    while (ancestorIndex >= 0 && !matchesNode(ancestors[ancestorIndex], matchers[matcherIndex])) {
+      ancestorIndex -= 1;
+    }
+    if (ancestorIndex < 0) return false;
+    ancestorIndex -= 1;
   }
-  return '';
+  return true;
+}
+
+function extractElement(html, selector) {
+  const matchers = selector.trim().split(/\s+/).map(selectorMatcher);
+  if (matchers.length === 0 || matchers.some((matcher) => !matcher)) return '';
+
+  const voidTags = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+  const stack = [];
+  const candidates = [];
+  const tagPattern = /<(\/)?([a-z][\w-]*)\b([^>]*)>/gi;
+  let tag;
+  while ((tag = tagPattern.exec(html)) !== null) {
+    const tagName = tag[2].toLowerCase();
+    if (!tag[1]) {
+      if (!voidTags.has(tagName) && !tag[3].trimEnd().endsWith('/')) {
+        stack.push({
+          tagName,
+          attributes: parseAttributes(tag[3]),
+          contentStart: tagPattern.lastIndex,
+          openingIndex: tag.index,
+        });
+      }
+      continue;
+    }
+
+    let openingIndex = stack.length - 1;
+    while (openingIndex >= 0 && stack[openingIndex].tagName !== tagName) openingIndex -= 1;
+    if (openingIndex < 0) continue;
+    const node = stack[openingIndex];
+    const ancestors = stack.slice(0, openingIndex);
+    stack.length = openingIndex;
+    const finalMatcher = matchers[matchers.length - 1];
+    if (
+      matchesNode(node, finalMatcher) &&
+      matchesAncestorChain(ancestors, matchers)
+    ) {
+      candidates.push({
+        openingIndex: node.openingIndex,
+        content: html.slice(node.contentStart, tag.index),
+      });
+    }
+  }
+  candidates.sort((left, right) => left.openingIndex - right.openingIndex);
+  return candidates[0]?.content || '';
 }
 
 function cleanHtmlText(html = '') {
   let cleaned = html;
-  for (const tag of ['script', 'style', 'nav', 'footer', 'aside']) {
+  for (const tag of ['script', 'style', 'nav', 'footer', 'aside', 'header']) {
     cleaned = cleaned.replace(new RegExp(`<${tag}\\b[\\s\\S]*?<\\/${tag}\\s*>`, 'gi'), ' ');
   }
   cleaned = cleaned
@@ -223,7 +255,7 @@ export function extractBlogArticle(html, articleUrl, source = {}) {
   let content = typeof structured?.articleBody === 'string'
     ? decodeEntities(structured.articleBody).replace(/\s+/g, ' ').trim()
     : '';
-  if (!content && site?.content) content = site.content.trim();
+  if (!content && site?.content) content = cleanHtmlText(site.content);
   if (!content) content = semanticText(html, 'article') || semanticText(html, 'main');
   if (!content) {
     for (const selector of source.contentSelectors || []) {
@@ -287,18 +319,7 @@ export function extractAnthropicArticleContent(html) {
   const bodyHtml = articleMatch ? articleMatch[1] : html;
 
   // Strip script/style tags first, then all remaining HTML tags
-  content = bodyHtml
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  content = cleanHtmlText(bodyHtml);
 
   return { title, author, publishedAt, content };
 }
@@ -337,18 +358,7 @@ export function extractClaudeBlogArticleContent(html) {
     html.match(/<div[^>]*class="[^"]*w-richtext[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
 
   if (richTextMatch) {
-    content = richTextMatch[1]
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    content = cleanHtmlText(richTextMatch[1]);
   }
 
   // If rich text extraction failed, try a broader approach
@@ -360,21 +370,7 @@ export function extractClaudeBlogArticleContent(html) {
     }
 
     // Strip the whole page down to text as a last resort
-    content = html
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<nav[\s\S]*?<\/nav>/gi, "")
-      .replace(/<footer[\s\S]*?<\/footer>/gi, "")
-      .replace(/<header[\s\S]*?<\/header>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
+    content = cleanHtmlText(html);
   }
 
   return { title, author, publishedAt, content };
