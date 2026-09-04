@@ -30,7 +30,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "aa23cb47511e3c0549aa4be0597b2be3e07cb3cf7d389226685e68aebca74650"
+      "digest": "bea3ca88d4e13edbc9462d83ee32769d5146cb1692eaa97e48c845d4dd2b50a5"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -52,7 +52,7 @@
         "prompts/translate.md": "96bd5896fa1792d95c0df189fbe92433f1bc50e5d7d49b71323a3afccf5f72ed",
         "scripts/feed-contract.js": "db47477c1e3a11c5a42e8d91fe8161cb98df8bec73ad646b4be5b32ebc965e00",
         "scripts/package-lock.json": "8690ff0ca61213a702d14864e6718b59e9ea8f270cb3c4f8a847b56831443ad5",
-        "scripts/package.json": "44b97059abb9f199e5b7e442a7774ec3e8b3b7ac7e1801a01d56dc99ef730ad6",
+        "scripts/package.json": "beefaa7e32a6509b7dfddd10312e1a649c1cd138d752c8cee469037c37c7102b",
         "scripts/prepare-digest.js": "fdf1979beeb4ba9bfd24ef1f376ed7114f25a16ffc3beefc6f5a39f16e5e9fb8",
         "scripts/release/build-release.sh": "a96dd85222d22237986caaa198a390b511bf96f46885224f4a78e5b1257178c8",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
