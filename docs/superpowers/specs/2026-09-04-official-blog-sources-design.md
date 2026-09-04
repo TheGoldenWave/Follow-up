@@ -37,6 +37,7 @@ Research Root、Publications、API 文档、GitHub 和模型仓库不属于本�
 1. RSS/Atom：直接读取文章 URL、标题和发布时间。
 2. Sitemap：筛选属于该来源的文章 URL，并使用 sitemap 的更新时间辅助排序。
 3. Index HTML：从官网列表页的链接和结构化数据发现文章。
+4. JSON：仅用于官网公开页面由同源 JSON 接口提供文章索引或正文的站点；候选必须同时保留公开文章 URL，API URL 不得作为 Feed canonical URL。
 
 前一种方式请求失败或没有产生合规候选时才进入下一种方式；已经产生候选后不混用后续入口，避免同一篇文章重复发现。RSS 不提供全文时，三种发现方式最终都进入相同的文章抓取与正文提取流程。现有 Anthropic Engineering 和 Claude Blog 的专用解析器继续保留；其他来源优先使用 JSON-LD、Open Graph 和语义化 `article`/`main` 正文提取。只有通用提取无法满足离线 Fixture 时才增加站点级规则。
 
@@ -56,7 +57,7 @@ Research Root、Publications、API 文档、GitHub 和模型仓库不属于本�
 | Amazon Science | `https://www.amazon.science/index.rss` | `https://www.amazon.science/blog/` HTML | `^https://www\\.amazon\\.science/blog/[^/?#]+/?$` | 2026-09-04 RSS HTTP 200 且含正文 |
 | IBM Research | `https://research.ibm.com/rss` | `https://research.ibm.com/blog` HTML | `^https://research\\.ibm\\.com/blog/[^/?#]+/?$` | 2026-09-04 RSS HTTP 200；链接含追踪参数 |
 | Perplexity Research | `https://research.perplexity.ai/articles` HTML | `https://research.perplexity.ai/sitemap.xml` | `^https://research\\.perplexity\\.ai/articles/[^/?#]+/?$` | 2026-09-04 当前网络超时，实施时重试并准备 Fixture |
-| Qwen Blog | `https://qwen.ai/blog/` HTML | 无 | `^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$` | 2026-09-04 HTTP 200，页面脚本含 `/blog?id=qwen3.8` |
+| Qwen Blog | `https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US` JSON | `https://qwen.ai/blog/` HTML | 公开 URL 为 `^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$`；抓取 URL 限同源 `/api/v2/article/` | 2026-09-04 HTML HTTP 200 但仅为应用壳；同源 JSON 接口可发现并返回正文 |
 | Kimi Blog | `https://www.kimi.ai/blog/` HTML | `https://www.kimi.ai/sitemap.xml` | `^https://www\\.kimi\\.ai/blog/[^/?#]+/?$` | 2026-09-04 HTTP 200，HTML 含 `/blog/kimi-k3` 等文章及日期 |
 | ERNIE Blog | `https://ernie.baidu.com/blog/zh/index.xml` | `https://ernie.baidu.com/blog/zh/` HTML | `^https://ernie\\.baidu\\.com/blog/zh/posts/[^/?#]+/?$` | 2026-09-04 RSS HTTP 200；链接为相对 URL |
 | MiniMax Blog | `https://www.minimax.cn/sitemap.xml` | `https://minimaxi.com/blog` HTML | `^https://www\\.minimax\\.cn/blog/[^/?#]+/?$`；默认使用中文 canonical URL | 2026-09-04 Sitemap HTTP 200，含 `/blog/minimax-music-3-0-cn` |
@@ -71,12 +72,14 @@ Research Root、Publications、API 文档、GitHub 和模型仓库不属于本�
 - `id`：稳定、不可变的机器标识；
 - `name`：Feed 中显示的官网名称；
 - `url`：用户访问的来源主页；
-- `discovery`：有序数组；每项包含 `type`（`rss`、`sitemap` 或 `html`）和对应 `url`；
+- `discovery`：有序数组；每项包含 `type`（`rss`、`sitemap`、`html` 或经逐站验证的 `json`）和对应 `url`；JSON 策略还包含同源 `detailUrl` 模板；
 - `articleUrlPatterns`：针对 canonical absolute URL 的 JavaScript 正则字符串；任一匹配即允许进入抓取流程；
+- 可选 `fetchUrlPatterns`：只约束与公开 URL 不同的同源抓取 URL；抓取 URL 不得进入 Feed 或作为 state canonical key；
 - `excludeUrlPatterns`：同样针对 absolute URL 的 JavaScript 正则字符串；任一匹配即拒绝，优先级高于允许规则；
 - `language`：来源主要语言；
 - 可选 `parser`：确有必要时选择已实现的站点规则；
 - 可选 `contentSelectors`：通用语义提取失败时使用的有限 CSS 选择器集合。
+- 可选 `contentSelectorPriority`：默认 `false`；仅当真实页面的语义 `article`/`main` 包含相关阅读等非正文块时设为 `true`，使该来源的选择器先于语义正文。
 
 `loadSources()` 使用该文件覆盖旧配置中的 `blogs`。发布配置中只允许 HTTPS 官网地址和采集器已支持的 discovery/parser 值。
 
@@ -99,7 +102,7 @@ feed-blogs.json config
 核心函数契约：
 
 - 所有异步函数共享 `BlogFetchOptions`：`{ fetchImpl = globalThis.fetch, now = Date.now, timeoutMs = 15000, errors = [], shadow = false }`。`errors` 是调用方拥有的可变字符串数组；函数只追加脱敏错误。
-- `discoverBlogArticles(source, options) -> Promise<Candidate[]>`：输入已验证的来源配置和完整 `BlogFetchOptions`；输出 `{ title, url, publishedAt, description }`。某个发现入口失败时向 `options.errors` 追加阶段错误并尝试下一入口；所有入口失败时返回空数组。
+- `discoverBlogArticles(source, options) -> Promise<Candidate[]>`：输入已验证的来源配置和完整 `BlogFetchOptions`；输出 `{ title, url, publishedAt, description }`，内部可带非枚举 `fetchUrl`。`url` 必须是公开文章 URL；`fetchUrl` 只用于同源官方资源抓取。某个发现入口失败时向 `options.errors` 追加阶段错误并尝试下一入口；所有入口失败时返回空数组。
 - `canonicalizeArticleUrl(url, baseUrl) -> string | null`：解析相对 URL、强制 HTTP(S)、删除 fragment 和 `utm_*`、`ref`、`source` 等追踪参数、保留其他业务参数、标准化默认端口与非根路径尾斜杠。
 - `extractBlogArticle(html, articleUrl, source) -> ArticleExtraction`：输出 `{ title, canonicalUrl, publishedAt, author, description, content }`，不负责网络请求或 state 写入。
 - `fetchBlogArticle(candidate, source, options) -> Promise<BlogItem | null>`：跟随重定向后抓取文章，运行提取器并校验必填字段；返回现有 Blog Feed item 或 `null`，失败写入 `options.errors`。
@@ -120,8 +123,9 @@ feed-blogs.json config
 
 1. JSON-LD `articleBody`；
 2. 站点专用解析器；
-3. `article` 或 `main` 内的正文段落、标题和列表；
-4. 明确配置的正文选择器。
+3. 当该来源显式设置 `contentSelectorPriority` 时，使用配置的正文选择器；
+4. `article` 或 `main` 内的正文段落、标题和列表；
+5. 默认优先级下的配置正文选择器。
 
 不得把导航、页脚、Cookie 文案或整页脚本内容当作正文。没有标题、URL 或有效正文的候选不进入 Feed。
 
@@ -131,6 +135,7 @@ feed-blogs.json config
 - 已知发布时间的文章必须在时间窗内；无可靠日期的文章只允许来自发现结果顶部，并限制扫描数量。
 - canonical URL 优先使用文章页 `<link rel="canonical">`，其次使用最终重定向 URL，最后使用发现 URL；随后执行统一 URL 规范化。
 - 最终 canonical URL 必须再次通过来源允许 host、`articleUrlPatterns` 和 `excludeUrlPatterns` 校验；跨站 canonical 或重定向不能进入 Feed 或 state。
+- 非枚举 `fetchUrl` 必须为 HTTPS、与来源同源并匹配 `fetchUrlPatterns`；正文提取产生的 canonical URL 仍必须匹配公开 `articleUrlPatterns`。
 - state 查询同时检查 canonical URL、最终 URL 和旧的原始 URL；新写入只保存 canonical URL。
 - 同一 canonical URL 在单次运行和跨运行状态中只出现一次，即使它被不同发现入口或不同来源重复列出。
 - RSS、Sitemap、索引页和文章页错误均带来源名、阶段和 HTTP 状态。
