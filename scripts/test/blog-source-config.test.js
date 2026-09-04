@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -29,6 +30,41 @@ function errorFor(result, sourceId, field) {
     error.includes(sourceId) && error.includes(field)
   ));
 }
+
+const approvedCandidateSources = [
+  ['anthropic-engineering', 'Anthropic Engineering'],
+  ['claude-blog', 'Claude Blog'],
+  ['anthropic-interpretability', 'Anthropic Interpretability'],
+  ['anthropic-science', 'Anthropic Science'],
+  ['openai-alignment', 'OpenAI Alignment Research Blog'],
+  ['google-antigravity', 'Google Antigravity Blog'],
+  ['google-deepmind', 'Google DeepMind Blog'],
+  ['google-research', 'Google Research Blog'],
+  ['microsoft-research', 'Microsoft Research Blog'],
+  ['amazon-science', 'Amazon Science Blog'],
+  ['ibm-research', 'IBM Research Blog'],
+  ['perplexity-research', 'Perplexity Research Articles'],
+  ['qwen-blog', 'Qwen Blog'],
+  ['kimi-blog', 'Kimi Research & Tech Blog'],
+  ['ernie-blog', 'ERNIE Blog'],
+  ['minimax-blog', 'MiniMax Blog'],
+  ['apple-ml-research', 'Apple Machine Learning Research'],
+];
+
+test('candidate inventory contains the exact approved source IDs and names', async () => {
+  const raw = await readFile(
+    new URL('../../config/blog-source-candidates.json', import.meta.url),
+    'utf8',
+  );
+  const config = JSON.parse(raw);
+
+  assert.deepEqual(
+    config.sources.map(({ id, name }) => [id, name]),
+    approvedCandidateSources,
+  );
+  assert.equal(config.sources.length, 17);
+  assert.deepEqual(validateBlogSources(config.sources), { valid: true, errors: [] });
+});
 
 test('a complete source configuration is valid', () => {
   assert.deepEqual(validateBlogSources([validSource()]), {

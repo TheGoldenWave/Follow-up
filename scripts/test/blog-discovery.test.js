@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
@@ -7,6 +8,18 @@ import {
   parseBlogIndex,
   parseSitemap,
 } from '../blog-discovery.js';
+import { matchesBlogSource } from '../blog-source-config.js';
+
+async function candidateConfig() {
+  return JSON.parse(await readFile(
+    new URL('../../config/blog-source-candidates.json', import.meta.url),
+    'utf8',
+  ));
+}
+
+async function candidateFixture(source, name) {
+  return readFile(new URL(`fixtures/blogs/${source.id}/${name}`, import.meta.url), 'utf8');
+}
 
 function source(overrides = {}) {
   return {
@@ -19,6 +32,34 @@ function source(overrides = {}) {
     ...overrides,
   };
 }
+
+test('every approved source fixture discovers a matching article with its first strategy', async () => {
+  const { sources } = await candidateConfig();
+
+  for (const configuredSource of sources) {
+    const strategy = configuredSource.discovery[0];
+    const extension = strategy.type === 'html' ? 'html' : 'xml';
+    const body = await candidateFixture(configuredSource, `discovery.${extension}`);
+    const candidates = await discoverBlogArticles(
+      { ...configuredSource, discovery: [strategy] },
+      {
+        fetchImpl: async (url) => ({
+          ok: true,
+          status: 200,
+          url,
+          headers: { get: () => null },
+          text: async () => body,
+        }),
+      },
+    );
+
+    assert.ok(candidates.length >= 1, configuredSource.id);
+    assert.ok(
+      candidates.every(({ url }) => matchesBlogSource(url, configuredSource)),
+      configuredSource.id,
+    );
+  }
+});
 
 test('parseBlogFeed parses RSS items, CDATA, entities, relative URLs, and descriptions', () => {
   const xml = `<?xml version="1.0"?>
@@ -416,18 +457,24 @@ test('discoverBlogArticles honors a custom timeout', async () => {
   let receivedSignal;
   const errors = [];
   const startedAt = Date.now();
-  const candidates = await discoverBlogArticles(source({
-    discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
-  }), {
-    timeoutMs: 10,
-    errors,
-    fetchImpl: async (_url, init) => {
-      receivedSignal = init.signal;
-      return new Promise((resolve, reject) => {
-        init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
-      });
-    },
-  });
+  const keepAlive = setTimeout(() => {}, 100);
+  let candidates;
+  try {
+    candidates = await discoverBlogArticles(source({
+      discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
+    }), {
+      timeoutMs: 10,
+      errors,
+      fetchImpl: async (_url, init) => {
+        receivedSignal = init.signal;
+        return new Promise((resolve, reject) => {
+          init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+        });
+      },
+    });
+  } finally {
+    clearTimeout(keepAlive);
+  }
 
   assert.deepEqual(candidates, []);
   assert.equal(receivedSignal.aborted, true);

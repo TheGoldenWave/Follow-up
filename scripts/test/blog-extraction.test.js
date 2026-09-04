@@ -7,10 +7,30 @@ import {
   extractAnthropicArticleContent,
   extractClaudeBlogArticleContent,
 } from '../blog-extraction.js';
+import { matchesBlogSource } from '../blog-source-config.js';
 
 async function fixture(path) {
   return readFile(new URL(`fixtures/blogs/${path}`, import.meta.url), 'utf8');
 }
+
+async function candidateSources() {
+  const raw = await readFile(
+    new URL('../../config/blog-source-candidates.json', import.meta.url),
+    'utf8',
+  );
+  return JSON.parse(raw).sources;
+}
+
+test('every approved source article fixture extracts valid source-matching content', async () => {
+  for (const source of await candidateSources()) {
+    const html = await fixture(`${source.id}/article.html`);
+    const extraction = blogExtraction.extractBlogArticle(html, source.url, source);
+
+    assert.ok(extraction?.title, source.id);
+    assert.ok(extraction.content.replace(/\s/g, '').length >= 200, source.id);
+    assert.ok(matchesBlogSource(extraction.canonicalUrl, source), source.id);
+  }
+});
 
 test('characterizes Anthropic Engineering article extraction', async () => {
   const html = await fixture('anthropic-engineering/article.html');
