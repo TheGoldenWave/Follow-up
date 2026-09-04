@@ -317,9 +317,24 @@ test('released RSS source configurations contain only public HTTPS sources', asy
 test('runtime blog configuration contains only sources with implemented collectors', async () => {
   const config = await readJson('config/feed-blogs.json');
 
-  assert.deepEqual(config.sources.map(({ name }) => name), [
-    'Anthropic Engineering',
-    'Claude Blog',
+  assert.deepEqual(config.sources.map(({ id, name }) => ({ id, name })), [
+    { id: 'anthropic-engineering', name: 'Anthropic Engineering' },
+    { id: 'claude-blog', name: 'Claude Blog' },
+    { id: 'anthropic-interpretability', name: 'Anthropic Interpretability' },
+    { id: 'anthropic-science', name: 'Anthropic Science' },
+    { id: 'openai-alignment', name: 'OpenAI Alignment Research Blog' },
+    { id: 'google-antigravity', name: 'Google Antigravity Blog' },
+    { id: 'google-deepmind', name: 'Google DeepMind Blog' },
+    { id: 'google-research', name: 'Google Research Blog' },
+    { id: 'microsoft-research', name: 'Microsoft Research Blog' },
+    { id: 'amazon-science', name: 'Amazon Science Blog' },
+    { id: 'ibm-research', name: 'IBM Research Blog' },
+    { id: 'perplexity-research', name: 'Perplexity Research Articles' },
+    { id: 'qwen-blog', name: 'Qwen Blog' },
+    { id: 'kimi-blog', name: 'Kimi Research & Tech Blog' },
+    { id: 'ernie-blog', name: 'ERNIE Blog' },
+    { id: 'minimax-blog', name: 'MiniMax Blog' },
+    { id: 'apple-ml-research', name: 'Apple Machine Learning Research' },
   ]);
   assert.deepEqual(validateBlogSources(config.sources), { valid: true, errors: [] });
 });
@@ -331,6 +346,7 @@ test('loadSources replaces legacy default blogs with feed-blogs configuration', 
   ]);
 
   assert.deepEqual(sources.blogs, blogConfig.sources);
+  assert.equal(sources.blogs.length, 17);
   assert.ok(sources.x_accounts.length > 0);
 });
 

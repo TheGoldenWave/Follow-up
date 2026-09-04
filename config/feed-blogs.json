@@ -6,13 +6,12 @@
       "url": "https://www.anthropic.com/engineering",
       "language": "en",
       "discovery": [
-        { "type": "html", "url": "https://www.anthropic.com/engineering" },
-        { "type": "sitemap", "url": "https://www.anthropic.com/sitemap.xml" }
+        { "type": "sitemap", "url": "https://www.anthropic.com/sitemap.xml" },
+        { "type": "html", "url": "https://www.anthropic.com/engineering" }
       ],
-      "articleUrlPatterns": ["^https://www\\.anthropic\\.com/engineering/[a-z0-9-]+$"],
+      "articleUrlPatterns": ["^https://www\\.anthropic\\.com/engineering/[^/?#]+/?$"],
       "excludeUrlPatterns": [],
-      "parser": "anthropic-engineering",
-      "contentSelectors": ["article", "main"]
+      "parser": "anthropic-engineering"
     },
     {
       "id": "claude-blog",
@@ -20,13 +19,200 @@
       "url": "https://claude.com/blog",
       "language": "en",
       "discovery": [
-        { "type": "html", "url": "https://claude.com/blog" },
-        { "type": "sitemap", "url": "https://claude.com/sitemap.xml" }
+        { "type": "html", "url": "https://claude.com/blog" }
       ],
-      "articleUrlPatterns": ["^https://claude\\.com/blog/[a-z0-9-]+$"],
+      "articleUrlPatterns": ["^https://claude\\.com/blog/[^/?#]+/?$"],
       "excludeUrlPatterns": [],
-      "parser": "claude-blog",
-      "contentSelectors": [".u-rich-text-blog", ".w-richtext", "article", "main"]
+      "parser": "claude-blog"
+    },
+    {
+      "id": "anthropic-interpretability",
+      "name": "Anthropic Interpretability",
+      "url": "https://www.anthropic.com/research/team/interpretability",
+      "language": "en",
+      "discovery": [
+        { "type": "html", "url": "https://www.anthropic.com/research/team/interpretability" }
+      ],
+      "articleUrlPatterns": ["^https://www\\.anthropic\\.com/research/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "anthropic-science",
+      "name": "Anthropic Science",
+      "url": "https://www.anthropic.com/science",
+      "language": "en",
+      "discovery": [
+        { "type": "html", "url": "https://www.anthropic.com/science" }
+      ],
+      "articleUrlPatterns": ["^https://www\\.anthropic\\.com/research/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "openai-alignment",
+      "name": "OpenAI Alignment Research Blog",
+      "url": "https://alignment.openai.com/",
+      "language": "en",
+      "discovery": [
+        { "type": "rss", "url": "https://alignment.openai.com/rss.xml" },
+        { "type": "html", "url": "https://alignment.openai.com/" }
+      ],
+      "articleUrlPatterns": ["^https://alignment\\.openai\\.com/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "google-antigravity",
+      "name": "Google Antigravity Blog",
+      "url": "https://antigravity.google/blog",
+      "language": "en",
+      "discovery": [
+        { "type": "rss", "url": "https://antigravity.google/blog/rss.xml" },
+        { "type": "html", "url": "https://antigravity.google/blog" }
+      ],
+      "articleUrlPatterns": ["^https://antigravity\\.google/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "google-deepmind",
+      "name": "Google DeepMind Blog",
+      "url": "https://deepmind.google/blog/",
+      "language": "en",
+      "discovery": [
+        { "type": "sitemap", "url": "https://deepmind.google/sitemap.xml" },
+        { "type": "html", "url": "https://deepmind.google/blog/" }
+      ],
+      "articleUrlPatterns": ["^https://deepmind\\.google/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "google-research",
+      "name": "Google Research Blog",
+      "url": "https://research.google/blog/",
+      "language": "en",
+      "discovery": [
+        { "type": "rss", "url": "https://research.google/blog/rss/" },
+        { "type": "html", "url": "https://research.google/blog/" }
+      ],
+      "articleUrlPatterns": ["^https://research\\.google/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "microsoft-research",
+      "name": "Microsoft Research Blog",
+      "url": "https://www.microsoft.com/en-us/research/blog/",
+      "language": "en",
+      "discovery": [
+        { "type": "html", "url": "https://www.microsoft.com/en-us/research/blog/" },
+        { "type": "rss", "url": "https://www.microsoft.com/en-us/research/feed/" }
+      ],
+      "articleUrlPatterns": ["^https://www\\.microsoft\\.com/en-us/research/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "amazon-science",
+      "name": "Amazon Science Blog",
+      "url": "https://www.amazon.science/blog/",
+      "language": "en",
+      "discovery": [
+        { "type": "rss", "url": "https://www.amazon.science/index.rss" },
+        { "type": "html", "url": "https://www.amazon.science/blog/" }
+      ],
+      "articleUrlPatterns": ["^https://www\\.amazon\\.science/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "ibm-research",
+      "name": "IBM Research Blog",
+      "url": "https://research.ibm.com/blog",
+      "language": "en",
+      "discovery": [
+        { "type": "rss", "url": "https://research.ibm.com/rss" },
+        { "type": "html", "url": "https://research.ibm.com/blog" }
+      ],
+      "articleUrlPatterns": ["^https://research\\.ibm\\.com/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": [],
+      "contentSelectors": ["main .FTOMS"],
+      "contentSelectorPriority": true
+    },
+    {
+      "id": "perplexity-research",
+      "name": "Perplexity Research Articles",
+      "url": "https://research.perplexity.ai/",
+      "language": "en",
+      "discovery": [
+        { "type": "html", "url": "https://research.perplexity.ai/" },
+        { "type": "sitemap", "url": "https://research.perplexity.ai/sitemap.xml" }
+      ],
+      "articleUrlPatterns": ["^https://research\\.perplexity\\.ai/articles/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "qwen-blog",
+      "name": "Qwen Blog",
+      "url": "https://qwen.ai/blog/",
+      "language": "en",
+      "discovery": [
+        {
+          "type": "json",
+          "url": "https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US",
+          "publicUrl": "https://qwen.ai/blog?id={path}",
+          "detailUrl": "https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path={path}"
+        },
+        { "type": "html", "url": "https://qwen.ai/blog/" }
+      ],
+      "articleUrlPatterns": ["^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$"],
+      "fetchUrlPatterns": [
+        "^https://qwen\\.ai/api/v2/article/retrieval\\?type=qwen_ai&language=en-US&path=[A-Za-z0-9._-]+$"
+      ],
+      "excludeUrlPatterns": [],
+      "parser": "qwen-blog"
+    },
+    {
+      "id": "kimi-blog",
+      "name": "Kimi Research & Tech Blog",
+      "url": "https://www.kimi.ai/blog/",
+      "language": "en",
+      "discovery": [
+        { "type": "html", "url": "https://www.kimi.ai/blog/" },
+        { "type": "sitemap", "url": "https://www.kimi.ai/sitemap.xml" }
+      ],
+      "articleUrlPatterns": ["^https://www\\.kimi\\.ai/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "ernie-blog",
+      "name": "ERNIE Blog",
+      "url": "https://ernie.baidu.com/blog/zh/",
+      "language": "zh-CN",
+      "discovery": [
+        { "type": "rss", "url": "https://ernie.baidu.com/blog/zh/index.xml" },
+        { "type": "html", "url": "https://ernie.baidu.com/blog/zh/" }
+      ],
+      "articleUrlPatterns": ["^https://ernie\\.baidu\\.com/blog/zh/posts/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "minimax-blog",
+      "name": "MiniMax Blog",
+      "url": "https://www.minimax.cn/blog",
+      "language": "zh-CN",
+      "discovery": [
+        { "type": "sitemap", "url": "https://www.minimax.cn/sitemap.xml" },
+        { "type": "html", "url": "https://www.minimax.cn/blog" }
+      ],
+      "articleUrlPatterns": ["^https://www\\.minimax\\.cn/blog/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
+    },
+    {
+      "id": "apple-ml-research",
+      "name": "Apple Machine Learning Research",
+      "url": "https://machinelearning.apple.com/",
+      "language": "en",
+      "discovery": [
+        { "type": "rss", "url": "https://machinelearning.apple.com/rss.xml" },
+        { "type": "sitemap", "url": "https://machinelearning.apple.com/sitemap.xml" }
+      ],
+      "articleUrlPatterns": ["^https://machinelearning\\.apple\\.com/research/[^/?#]+/?$"],
+      "excludeUrlPatterns": []
     }
   ]
 }

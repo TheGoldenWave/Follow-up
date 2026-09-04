@@ -132,19 +132,27 @@ summarized into key insights — no need to watch the full 2-hour video.
 Primary sources directly from the labs and companies building AI. No middleman, no
 spin — just the technical details and product announcements.
 
-**8+ official blogs:**
+**17 official blogs are in production.** Verification details and the broader candidate inventory are maintained in the [source catalog](docs/source-catalog.md).
 
 | Company | Blog | Focus |
 |---------|------|-------|
-| OpenAI | [openai.com/research](https://openai.com/research) | Research, product, safety |
 | Anthropic | [anthropic.com/engineering](https://www.anthropic.com/engineering) | Engineering deep-dives |
 | Anthropic | [claude.com/blog](https://claude.com/blog) | Claude product updates |
+| Anthropic | [Interpretability](https://www.anthropic.com/research/team/interpretability) | Interpretability research |
+| Anthropic | [Science](https://www.anthropic.com/science) | Science and research |
+| OpenAI | [Alignment Research](https://alignment.openai.com/) | Alignment research |
+| Google | [Antigravity Blog](https://antigravity.google/blog) | Agentic development and product engineering |
 | Google DeepMind | [deepmind.google/blog](https://deepmind.google/blog) | Research breakthroughs |
-| Google AI | [ai.googleblog.com](https://ai.googleblog.com) | Applied AI research |
-| Meta AI | [ai.meta.com/blog](https://ai.meta.com/blog) | Open-source AI, Llama |
+| Google Research | [research.google/blog](https://research.google/blog/) | Applied AI research |
 | Microsoft Research | [microsoft.com/research](https://www.microsoft.com/en-us/research/blog) | Systems & applied AI |
-| NVIDIA | [blogs.nvidia.com](https://blogs.nvidia.com) | Hardware, CUDA, AI infra |
-| Mistral AI | [mistral.ai/news](https://mistral.ai/news) | Open-weight models |
+| Amazon | [Amazon Science](https://www.amazon.science/blog/) | Science and applied research |
+| IBM | [IBM Research](https://research.ibm.com/blog) | Research and engineering |
+| Perplexity | [Research](https://research.perplexity.ai/) | Research articles |
+| Alibaba | [Qwen Blog](https://qwen.ai/blog/) | Models, research, and products |
+| Moonshot AI | [Kimi Research & Tech](https://www.kimi.ai/blog/) | Research and engineering |
+| Baidu | [ERNIE Blog](https://ernie.baidu.com/blog/zh/) | Models, research, and products |
+| MiniMax | [MiniMax Blog](https://www.minimax.cn/blog) | Research and products |
+| Apple | [Machine Learning Research](https://machinelearning.apple.com/) | Machine learning research |
 
 ### Channel 4: High-Quality Newsletters
 
@@ -285,15 +293,8 @@ The target cadence differs by source category:
 - [Lightcone (YC)](https://www.youtube.com/@ycombinator)
 - [Acquired](https://www.youtube.com/@AcquiredFM)
 
-### Official Blogs (8+)
-- [OpenAI Research](https://openai.com/research)
-- [Anthropic Engineering](https://www.anthropic.com/engineering)
-- [Claude Blog](https://claude.com/blog)
-- [Google DeepMind](https://deepmind.google/blog)
-- [Meta AI](https://ai.meta.com/blog)
-- [Microsoft Research](https://www.microsoft.com/en-us/research/blog)
-- [NVIDIA Blog](https://blogs.nvidia.com)
-- [Mistral AI News](https://mistral.ai/news)
+### Official Blogs (17)
+[Anthropic Engineering](https://www.anthropic.com/engineering), [Claude Blog](https://claude.com/blog), [Anthropic Interpretability](https://www.anthropic.com/research/team/interpretability), [Anthropic Science](https://www.anthropic.com/science), [OpenAI Alignment Research](https://alignment.openai.com/), [Google Antigravity](https://antigravity.google/blog), [Google DeepMind](https://deepmind.google/blog/), [Google Research](https://research.google/blog/), [Microsoft Research](https://www.microsoft.com/en-us/research/blog/), [Amazon Science](https://www.amazon.science/blog/), [IBM Research](https://research.ibm.com/blog), [Perplexity Research](https://research.perplexity.ai/), [Qwen Blog](https://qwen.ai/blog/), [Kimi Research & Tech](https://www.kimi.ai/blog/), [ERNIE Blog](https://ernie.baidu.com/blog/zh/), [MiniMax Blog](https://www.minimax.cn/blog), and [Apple Machine Learning Research](https://machinelearning.apple.com/). See the [source catalog](docs/source-catalog.md) for discovery and verification status.
 
 ### Newsletters (8)
 - [The Batch by Andrew Ng](https://www.deeplearning.ai/the-batch)

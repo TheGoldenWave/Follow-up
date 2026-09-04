@@ -125,19 +125,27 @@ Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。�
 
 来自 AI 实验室和科技公司的一手信息源。无中间商，无滤镜——只有技术细节和产品公告。
 
-**8+ 官方博客：**
+**当前生产配置包含 17 个官方博客。** 联网验证差异和更完整的候选范围见[信源目录](docs/source-catalog.md)。
 
 | 公司 | 博客 | 关注点 |
 |------|------|--------|
-| OpenAI | openai.com/research | 研究、产品、安全 |
 | Anthropic | anthropic.com/engineering | 工程深度文章 |
 | Anthropic | claude.com/blog | Claude 产品更新 |
+| Anthropic | Interpretability | 可解释性研究 |
+| Anthropic | Science | 科学与研究 |
+| OpenAI | alignment.openai.com | 对齐研究 |
+| Google | antigravity.google/blog | Agentic 开发与产品工程 |
 | Google DeepMind | deepmind.google/blog | 研究突破 |
-| Google AI | ai.googleblog.com | 应用 AI 研究 |
-| Meta AI | ai.meta.com/blog | 开源 AI、Llama |
+| Google Research | research.google/blog | 应用 AI 研究 |
 | Microsoft Research | microsoft.com/research | 系统与应用 AI |
-| NVIDIA | blogs.nvidia.com | 硬件、CUDA、AI 基础设施 |
-| Mistral AI | mistral.ai/news | 开源模型 |
+| Amazon | Amazon Science | 科学与应用研究 |
+| IBM | IBM Research | 研究与工程 |
+| Perplexity | Research | 研究文章 |
+| Alibaba | Qwen Blog | 模型、研究与产品 |
+| Moonshot AI | Kimi Research & Tech | 研究与工程 |
+| Baidu | ERNIE Blog | 模型、研究与产品 |
+| MiniMax | MiniMax Blog | 研究与产品 |
+| Apple | Machine Learning Research | 机器学习研究 |
 
 ### 频道 4：高质量 Newsletter
 
@@ -274,15 +282,8 @@ Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
 - [Lightcone (YC)](https://www.youtube.com/@ycombinator)
 - [Acquired](https://www.youtube.com/@AcquiredFM)
 
-### 官方博客（8+）
-- [OpenAI Research](https://openai.com/research)
-- [Anthropic Engineering](https://www.anthropic.com/engineering)
-- [Claude Blog](https://claude.com/blog)
-- [Google DeepMind](https://deepmind.google/blog)
-- [Meta AI](https://ai.meta.com/blog)
-- [Microsoft Research](https://www.microsoft.com/en-us/research/blog)
-- [NVIDIA Blog](https://blogs.nvidia.com)
-- [Mistral AI News](https://mistral.ai/news)
+### 官方博客（17 个）
+[Anthropic Engineering](https://www.anthropic.com/engineering)、[Claude Blog](https://claude.com/blog)、[Anthropic Interpretability](https://www.anthropic.com/research/team/interpretability)、[Anthropic Science](https://www.anthropic.com/science)、[OpenAI Alignment Research](https://alignment.openai.com/)、[Google Antigravity](https://antigravity.google/blog)、[Google DeepMind](https://deepmind.google/blog/)、[Google Research](https://research.google/blog/)、[Microsoft Research](https://www.microsoft.com/en-us/research/blog/)、[Amazon Science](https://www.amazon.science/blog/)、[IBM Research](https://research.ibm.com/blog)、[Perplexity Research](https://research.perplexity.ai/)、[Qwen Blog](https://qwen.ai/blog/)、[Kimi Research & Tech](https://www.kimi.ai/blog/)、[ERNIE Blog](https://ernie.baidu.com/blog/zh/)、[MiniMax Blog](https://www.minimax.cn/blog) 和 [Apple Machine Learning Research](https://machinelearning.apple.com/)。发现方式和验证状态见[信源目录](docs/source-catalog.md)。
 
 ### Newsletter（8 个）
 - [The Batch by Andrew Ng](https://www.deeplearning.ai/the-batch)
