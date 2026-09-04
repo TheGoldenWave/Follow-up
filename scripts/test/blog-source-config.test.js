@@ -51,6 +51,69 @@ const approvedCandidateSources = [
   ['apple-ml-research', 'Apple Machine Learning Research'],
 ];
 
+const approvedSourceRoutes = {
+  'anthropic-engineering': ['https://www.anthropic.com/engineering', [
+    ['sitemap', 'https://www.anthropic.com/sitemap.xml'],
+    ['html', 'https://www.anthropic.com/engineering'],
+  ]],
+  'claude-blog': ['https://claude.com/blog', [['html', 'https://claude.com/blog']]],
+  'anthropic-interpretability': ['https://www.anthropic.com/research/team/interpretability', [
+    ['html', 'https://www.anthropic.com/research/team/interpretability'],
+  ]],
+  'anthropic-science': ['https://www.anthropic.com/science', [
+    ['html', 'https://www.anthropic.com/science'],
+  ]],
+  'openai-alignment': ['https://alignment.openai.com/', [
+    ['rss', 'https://alignment.openai.com/rss.xml'],
+    ['html', 'https://alignment.openai.com/'],
+  ]],
+  'google-antigravity': ['https://antigravity.google/blog', [
+    ['html', 'https://antigravity.google/blog'],
+    ['sitemap', 'https://antigravity.google/sitemap.xml'],
+  ]],
+  'google-deepmind': ['https://deepmind.google/blog/', [
+    ['sitemap', 'https://deepmind.google/sitemap.xml'],
+    ['html', 'https://deepmind.google/blog/'],
+  ]],
+  'google-research': ['https://research.google/blog/', [
+    ['html', 'https://research.google/blog/'],
+    ['sitemap', 'https://research.google/sitemap.xml'],
+  ]],
+  'microsoft-research': ['https://www.microsoft.com/en-us/research/blog/', [
+    ['html', 'https://www.microsoft.com/en-us/research/blog/'],
+    ['rss', 'https://www.microsoft.com/en-us/research/feed/'],
+  ]],
+  'amazon-science': ['https://www.amazon.science/blog/', [
+    ['rss', 'https://www.amazon.science/index.rss'],
+    ['html', 'https://www.amazon.science/blog/'],
+  ]],
+  'ibm-research': ['https://research.ibm.com/blog', [
+    ['rss', 'https://research.ibm.com/rss'],
+    ['html', 'https://research.ibm.com/blog'],
+  ]],
+  'perplexity-research': ['https://research.perplexity.ai/articles', [
+    ['html', 'https://research.perplexity.ai/articles'],
+    ['sitemap', 'https://research.perplexity.ai/sitemap.xml'],
+  ]],
+  'qwen-blog': ['https://qwen.ai/blog/', [['html', 'https://qwen.ai/blog/']]],
+  'kimi-blog': ['https://www.kimi.ai/blog/', [
+    ['html', 'https://www.kimi.ai/blog/'],
+    ['sitemap', 'https://www.kimi.ai/sitemap.xml'],
+  ]],
+  'ernie-blog': ['https://ernie.baidu.com/blog/zh/', [
+    ['rss', 'https://ernie.baidu.com/blog/zh/index.xml'],
+    ['html', 'https://ernie.baidu.com/blog/zh/'],
+  ]],
+  'minimax-blog': ['https://www.minimax.cn/blog', [
+    ['sitemap', 'https://www.minimax.cn/sitemap.xml'],
+    ['html', 'https://www.minimax.cn/blog'],
+  ]],
+  'apple-ml-research': ['https://machinelearning.apple.com/', [
+    ['rss', 'https://machinelearning.apple.com/rss.xml'],
+    ['sitemap', 'https://machinelearning.apple.com/sitemap.xml'],
+  ]],
+};
+
 test('candidate inventory contains the exact approved source IDs and names', async () => {
   const raw = await readFile(
     new URL('../../config/blog-source-candidates.json', import.meta.url),
@@ -64,6 +127,23 @@ test('candidate inventory contains the exact approved source IDs and names', asy
   );
   assert.equal(config.sources.length, 17);
   assert.deepEqual(validateBlogSources(config.sources), { valid: true, errors: [] });
+});
+
+test('candidate inventory pins approved origins and ordered discovery endpoints', async () => {
+  const { sources } = JSON.parse(await readFile(
+    new URL('../../config/blog-source-candidates.json', import.meta.url),
+    'utf8',
+  ));
+
+  for (const source of sources) {
+    const [url, discovery] = approvedSourceRoutes[source.id];
+    assert.equal(source.url, url, source.id);
+    assert.deepEqual(
+      source.discovery.map(({ type, url: endpoint }) => [type, endpoint]),
+      discovery,
+      source.id,
+    );
+  }
 });
 
 test('a complete source configuration is valid', () => {

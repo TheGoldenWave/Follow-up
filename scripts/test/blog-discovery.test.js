@@ -21,6 +21,26 @@ async function candidateFixture(source, name) {
   return readFile(new URL(`fixtures/blogs/${source.id}/${name}`, import.meta.url), 'utf8');
 }
 
+const expectedFixtureCandidates = {
+  'anthropic-engineering': ['', 'https://www.anthropic.com/engineering/reliable-agents', '2026-09-03'],
+  'claude-blog': ['Claude for focused work', 'https://claude.com/blog/focused-work', '2026-09-03'],
+  'anthropic-interpretability': ['Natural language autoencoders', 'https://www.anthropic.com/research/natural-language-autoencoders', '2026-09-03'],
+  'anthropic-science': ['Reasoning about the Riemann zeta function', 'https://www.anthropic.com/research/riemann-zeta', '2026-09-03'],
+  'openai-alignment': ['Alignment research update', 'https://alignment.openai.com/alignment-research-update', 'Thu, 03 Sep 2026 08:00:00 GMT'],
+  'google-antigravity': ['Reliable agent workflows', 'https://antigravity.google/blog/reliable-agent-workflows', '2026-09-03'],
+  'google-deepmind': ['', 'https://deepmind.google/blog/scaling-reasoning-systems', '2026-09-03'],
+  'google-research': ['Efficient learning systems', 'https://research.google/blog/efficient-learning-systems', '2026-09-03'],
+  'microsoft-research': ['Responsible agent evaluation', 'https://www.microsoft.com/en-us/research/blog/responsible-agent-evaluation', '2026-09-03'],
+  'amazon-science': ['Robust multimodal models', 'https://www.amazon.science/blog/robust-multimodal-models', 'Thu, 03 Sep 2026 09:00:00 GMT'],
+  'ibm-research': ['Trustworthy foundation models', 'https://research.ibm.com/blog/trustworthy-foundation-models', 'Thu, 03 Sep 2026 10:00:00 GMT'],
+  'perplexity-research': ['Retrieval at scale', 'https://research.perplexity.ai/articles/retrieval-at-scale', '2026-09-03'],
+  'qwen-blog': ['Qwen3.8 technical report', 'https://qwen.ai/blog?id=qwen3.8', '2026-09-03'],
+  'kimi-blog': ['Kimi K3 technical overview', 'https://www.kimi.ai/blog/kimi-k3', '2026-09-03'],
+  'ernie-blog': ['ERNIE reasoning update', 'https://ernie.baidu.com/blog/zh/posts/ernie-reasoning', 'Thu, 03 Sep 2026 11:00:00 GMT'],
+  'minimax-blog': ['', 'https://www.minimax.cn/blog/minimax-music-3-0-cn', '2026-09-03'],
+  'apple-ml-research': ['On-device model adaptation', 'https://machinelearning.apple.com/research/on-device-model-adaptation', 'Thu, 03 Sep 2026 12:00:00 GMT'],
+};
+
 function source(overrides = {}) {
   return {
     id: 'example-blog',
@@ -53,12 +73,43 @@ test('every approved source fixture discovers a matching article with its first 
       },
     );
 
-    assert.ok(candidates.length >= 1, configuredSource.id);
-    assert.ok(
-      candidates.every(({ url }) => matchesBlogSource(url, configuredSource)),
-      configuredSource.id,
-    );
+    const [title, url, publishedAt] = expectedFixtureCandidates[configuredSource.id];
+    assert.deepEqual(candidates[0], { title, url, publishedAt, description: '' });
+    assert.ok(matchesBlogSource(candidates[0].url, configuredSource), configuredSource.id);
   }
+});
+
+test('MiniMax falls back from an empty sitemap to same-origin HTML with a relative article URL', async () => {
+  const { sources } = await candidateConfig();
+  const configuredSource = sources.find(({ id }) => id === 'minimax-blog');
+  const fallback = await candidateFixture(configuredSource, 'discovery-fallback.html');
+  const requested = [];
+
+  const candidates = await discoverBlogArticles(configuredSource, {
+    fetchImpl: async (url) => {
+      requested.push(url);
+      return {
+        ok: true,
+        status: 200,
+        url,
+        headers: { get: () => null },
+        text: async () => url.endsWith('sitemap.xml')
+          ? '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>'
+          : fallback,
+      };
+    },
+  });
+
+  assert.deepEqual(requested, [
+    'https://www.minimax.cn/sitemap.xml',
+    'https://www.minimax.cn/blog',
+  ]);
+  assert.deepEqual(candidates[0], {
+    title: 'MiniMax Music 3.0',
+    url: 'https://www.minimax.cn/blog/minimax-music-3-0-cn',
+    publishedAt: '2026-09-03',
+    description: '',
+  });
 });
 
 test('parseBlogFeed parses RSS items, CDATA, entities, relative URLs, and descriptions', () => {

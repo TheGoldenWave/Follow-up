@@ -185,7 +185,7 @@
       "language": "zh-CN",
       "discovery": [
         { "type": "sitemap", "url": "https://www.minimax.cn/sitemap.xml" },
-        { "type": "html", "url": "https://minimaxi.com/blog" }
+        { "type": "html", "url": "https://www.minimax.cn/blog" }
       ],
       "articleUrlPatterns": ["^https://www\\.minimax\\.cn/blog/[^/?#]+/?$"],
       "excludeUrlPatterns": []
