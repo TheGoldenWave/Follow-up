@@ -1,11 +1,16 @@
 import {
   discoverBlogArticles,
+  getBlogCandidateFetchUrl,
   fetchBlogResource,
   getBlogCandidateRawUrl,
   sanitizeBlogErrorMessage,
 } from './blog-discovery.js';
 import { extractBlogArticle } from './blog-extraction.js';
-import { canonicalizeArticleUrl, matchesBlogSource } from './blog-source-config.js';
+import {
+  canonicalizeArticleUrl,
+  matchesBlogFetchSource,
+  matchesBlogSource,
+} from './blog-source-config.js';
 
 const BLOG_LOOKBACK_HOURS = 72;
 const MAX_ARTICLES_PER_SOURCE = 3;
@@ -71,15 +76,23 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
   const errors = options.errors ?? [];
 
   try {
-    const resource = await fetchBlogResource(candidate.url, {
+    const fetchUrl = getBlogCandidateFetchUrl(candidate);
+    const resource = await fetchBlogResource(fetchUrl, {
       fetchImpl,
       timeoutMs,
       accept: 'text/html,application/xhtml+xml;q=0.9',
     });
-    if (!matchesBlogSource(resource.url, source)) {
+    if (fetchUrl !== candidate.url) {
+      if (!matchesBlogFetchSource(resource.url, source)) {
+        throw new Error('Final fetch URL is not allowed for this source');
+      }
+    } else if (!matchesBlogSource(resource.url, source)) {
       throw new Error('Final URL is not allowed for this source');
     }
-    const extracted = extractBlogArticle(resource.body, resource.url || candidate.url, source);
+    const extractionUrl = fetchUrl !== candidate.url
+      ? candidate.url
+      : resource.url || candidate.url;
+    const extracted = extractBlogArticle(resource.body, extractionUrl, source);
     if (!extracted) {
       throw new Error('Invalid or underlength article content');
     }
@@ -102,6 +115,7 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
         source,
         getBlogCandidateRawUrl(candidate),
         candidate.url,
+        fetchUrl,
         resource.url,
         extracted.canonicalUrl,
       ),
@@ -140,6 +154,7 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
           source,
           getBlogCandidateRawUrl(candidate),
           candidate.url,
+          getBlogCandidateFetchUrl(candidate),
         );
         if (hasSeenIdentity(state.seenArticles, identities)) continue;
         const publishedMs = candidate.publishedAt ? Date.parse(candidate.publishedAt) : Number.NaN;

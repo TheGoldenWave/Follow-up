@@ -36,7 +36,7 @@ const expectedFixtureCandidates = {
   'perplexity-research': ['Retrieval at scale', 'https://research.perplexity.ai/articles/retrieval-at-scale', '2026-09-03'],
   'qwen-blog': [
     'Qwen3.8 technical report',
-    'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path=qwen3.8',
+    'https://qwen.ai/blog?id=qwen3.8',
     '2026-09-03',
   ],
   'kimi-blog': ['Kimi K3 technical overview', 'https://www.kimi.ai/blog/kimi-k3', '2026-09-03'],
@@ -479,7 +479,7 @@ test('parseBlogIndex discovers a statically assigned blog route from the Qwen sh
   }]);
 });
 
-test('discoverBlogArticles converts a JSON article listing into detail API candidates', async () => {
+test('discoverBlogArticles keeps JSON public URLs enumerable and detail fetch URLs private', async () => {
   const body = JSON.stringify({ data: { articles: [{
     path: 'qwen3.8',
     title: 'Qwen3.8-Max: A New Bar for Coding and Cowork',
@@ -490,10 +490,11 @@ test('discoverBlogArticles converts a JSON article listing into detail API candi
     discovery: [{
       type: 'json',
       url: 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US',
+      publicUrl: 'https://qwen.ai/blog?id={path}',
       detailUrl: 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path={path}',
     }],
-    articleUrlPatterns: [
-      '^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$',
+    articleUrlPatterns: ['^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$'],
+    fetchUrlPatterns: [
       '^https://qwen\\.ai/api/v2/article/retrieval\\?type=qwen_ai&language=en-US&path=[A-Za-z0-9._-]+$',
     ],
     excludeUrlPatterns: [],
@@ -505,10 +506,18 @@ test('discoverBlogArticles converts a JSON article listing into detail API candi
 
   assert.deepEqual(candidates, [{
     title: 'Qwen3.8-Max: A New Bar for Coding and Cowork',
-    url: 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path=qwen3.8',
+    url: 'https://qwen.ai/blog?id=qwen3.8',
     publishedAt: '2026-08-03T10:00:00+08:00',
     description: 'Official Qwen article.',
   }]);
+  assert.equal(
+    candidates[0][Symbol.for('follow-up.blog.fetch-url')],
+    'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path=qwen3.8',
+  );
+  assert.equal(
+    Object.getOwnPropertyDescriptor(candidates[0], Symbol.for('follow-up.blog.fetch-url')).enumerable,
+    false,
+  );
 });
 
 test('feed, sitemap, and HTML candidates retain exact raw URLs as non-enumerable metadata', () => {

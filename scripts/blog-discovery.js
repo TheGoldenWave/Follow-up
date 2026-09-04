@@ -2,6 +2,7 @@ import { isIP } from 'node:net';
 
 import {
   canonicalizeArticleUrl,
+  matchesBlogFetchSource,
   matchesBlogSource,
 } from './blog-source-config.js';
 
@@ -10,14 +11,20 @@ const MAX_REDIRECTS = 3;
 const DEFAULT_TIMEOUT_MS = 15000;
 const BLOG_USER_AGENT = 'Mozilla/5.0 (compatible; FollowBuilders/1.0; +https://github.com/)';
 const RAW_BLOG_URL = Symbol.for('follow-up.blog.raw-url');
+const BLOG_FETCH_URL = Symbol.for('follow-up.blog.fetch-url');
 
-function candidateWithRawUrl(candidate, rawUrl) {
+function candidateWithRawUrl(candidate, rawUrl, fetchUrl) {
   Object.defineProperty(candidate, RAW_BLOG_URL, { value: rawUrl });
+  if (fetchUrl) Object.defineProperty(candidate, BLOG_FETCH_URL, { value: fetchUrl });
   return candidate;
 }
 
 export function getBlogCandidateRawUrl(candidate) {
   return candidate?.[RAW_BLOG_URL] ?? candidate?.url;
+}
+
+export function getBlogCandidateFetchUrl(candidate) {
+  return candidate?.[BLOG_FETCH_URL] ?? candidate?.url;
 }
 
 function decodeNumericEntity(match, code, radix) {
@@ -364,12 +371,20 @@ function parseBlogJson(body, source, discovery, baseUrl) {
   const seen = new Set();
   for (const article of articles) {
     if (typeof article?.path !== 'string') continue;
-    const rawUrl = discovery.detailUrl.replace('{path}', encodeURIComponent(article.path));
-    addCandidate(candidates, seen, source, rawUrl, baseUrl, {
-      title: String(article.title || '').trim(),
-      publishedAt: article.extra?.date,
+    const path = encodeURIComponent(article.path);
+    const rawUrl = discovery.publicUrl.replace('{path}', path);
+    const url = canonicalizeArticleUrl(rawUrl, baseUrl);
+    const fetchUrl = canonicalizeArticleUrl(discovery.detailUrl.replace('{path}', path), baseUrl);
+    const title = String(article.title || '').trim();
+    if (!url || !fetchUrl || !matchesBlogSource(url, source)
+      || !matchesBlogFetchSource(fetchUrl, source) || seen.has(url) || !title) continue;
+    seen.add(url);
+    candidates.push(candidateWithRawUrl({
+      title,
+      url,
+      publishedAt: normalizeDate(article.extra?.date),
       description: String(article.extra?.description || '').trim(),
-    });
+    }, rawUrl, fetchUrl));
   }
   candidates.sort((left, right) => {
     if (left.publishedAt === null) return right.publishedAt === null ? 0 : 1;

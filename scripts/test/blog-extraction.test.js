@@ -301,8 +301,23 @@ test('configured content selectors outrank a related-post article in the IBM pag
       ...genericSource,
       url: 'https://research.ibm.com/blog',
       contentSelectors: ['main .FTOMS'],
+      contentSelectorPriority: true,
     },
   )?.content, selected);
+});
+
+test('semantic article content outranks configured selectors by default', () => {
+  const semantic = longText('Semantic article content');
+  const selected = longText('Configured selector content');
+  const html = `<html><body><h1>Default precedence</h1>
+    <article>${semantic}</article><main><div class="copy">${selected}</div></main>
+  </body></html>`;
+
+  assert.equal(blogExtraction.extractBlogArticle(
+    html,
+    'https://example.com/blog/default-precedence',
+    { ...genericSource, contentSelectors: ['main .copy'] },
+  )?.content, semantic);
 });
 
 test('Qwen parser extracts an official article API response', () => {
@@ -320,7 +335,7 @@ test('Qwen parser extracts an official article API response', () => {
 
   assert.deepEqual(blogExtraction.extractBlogArticle(
     response,
-    'https://qwen.ai/api/v2/article/?language=en-US&path=qwen3.8&type=qwen_ai',
+    'https://qwen.ai/blog?id=qwen3.8',
     {
       ...genericSource,
       url: 'https://qwen.ai/blog/',
@@ -355,7 +370,7 @@ test('Qwen parser ignores embedded metadata from other articles in a retrieval r
 
   const result = blogExtraction.extractBlogArticle(
     response,
-    'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path=qwen3.8',
+    'https://qwen.ai/blog?id=qwen3.8',
     { ...genericSource, url: 'https://qwen.ai/blog/', parser: 'qwen-blog' },
   );
 

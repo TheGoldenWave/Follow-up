@@ -235,25 +235,70 @@ test('parser names are limited to implemented source parsers', () => {
   assert.ok(errorFor(result, 'example-blog', 'parser'));
 });
 
-test('JSON discovery requires a same-origin HTTPS detail URL template with a path placeholder', () => {
+test('JSON discovery requires matching same-origin public and detail URL templates', () => {
   const valid = validateBlogSources([validSource({
     discovery: [{
       type: 'json',
       url: 'https://example.com/api/articles',
+      publicUrl: 'https://example.com/blog?id={path}',
       detailUrl: 'https://example.com/api/article?path={path}',
     }],
+    articleUrlPatterns: ['^https://example\\.com/blog\\?id=[A-Za-z0-9._-]+$'],
+    fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
   })]);
   assert.equal(valid.valid, true, valid.errors.join('; '));
 
-  for (const detailUrl of [
-    'http://example.com/api/article?path={path}',
-    'https://attacker.example/api/article?path={path}',
-    'https://example.com/api/article',
+  for (const [field, value] of [
+    ['publicUrl', 'http://example.com/blog?id={path}'],
+    ['publicUrl', 'https://attacker.example/blog?id={path}'],
+    ['publicUrl', 'https://example.com/blog'],
+    ['publicUrl', 'https://example.com/about?id={path}'],
+    ['detailUrl', 'http://example.com/api/article?path={path}'],
+    ['detailUrl', 'https://attacker.example/api/article?path={path}'],
+    ['detailUrl', 'https://example.com/api/article'],
+    ['detailUrl', 'https://example.com/private?path={path}'],
   ]) {
     const invalid = validateBlogSources([validSource({
-      discovery: [{ type: 'json', url: 'https://example.com/api/articles', detailUrl }],
+      discovery: [{
+        type: 'json',
+        url: 'https://example.com/api/articles',
+        publicUrl: 'https://example.com/blog?id={path}',
+        detailUrl: 'https://example.com/api/article?path={path}',
+        [field]: value,
+      }],
+      articleUrlPatterns: ['^https://example\\.com/blog\\?id=[A-Za-z0-9._-]+$'],
+      fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
     })]);
-    assert.ok(errorFor(invalid, 'example-blog', 'discovery[0].detailUrl'), detailUrl);
+    assert.ok(errorFor(invalid, 'example-blog', `discovery[0].${field}`), `${field}: ${value}`);
+  }
+});
+
+test('JSON discovery requires nonempty fetch URL patterns', () => {
+  const jsonDiscovery = [{
+    type: 'json',
+    url: 'https://example.com/api/articles',
+    publicUrl: 'https://example.com/blog?id={path}',
+    detailUrl: 'https://example.com/api/article?path={path}',
+  }];
+  for (const fetchUrlPatterns of [undefined, []]) {
+    const result = validateBlogSources([validSource({ discovery: jsonDiscovery, fetchUrlPatterns })]);
+    assert.ok(errorFor(result, 'example-blog', 'fetchUrlPatterns'));
+  }
+});
+
+test('contentSelectorPriority is boolean and requires nonempty content selectors', () => {
+  assert.equal(validateBlogSources([validSource({
+    contentSelectorPriority: true,
+    contentSelectors: ['main .body'],
+  })]).valid, true);
+
+  for (const overrides of [
+    { contentSelectorPriority: 'true', contentSelectors: ['main .body'] },
+    { contentSelectorPriority: true },
+    { contentSelectorPriority: true, contentSelectors: [] },
+  ]) {
+    const result = validateBlogSources([validSource(overrides)]);
+    assert.ok(errorFor(result, 'example-blog', 'contentSelectorPriority'));
   }
 });
 

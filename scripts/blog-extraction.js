@@ -239,7 +239,8 @@ function siteExtraction(html, parser, articleUrl) {
 function extractQwenBlogArticleContent(body, articleUrl) {
   try {
     const data = JSON.parse(body)?.data;
-    const requestedPath = new URL(articleUrl).searchParams.get('path');
+    const parameters = new URL(articleUrl).searchParams;
+    const requestedPath = parameters.get('path') || parameters.get('id');
     const article = Array.isArray(data?.articles)
       ? data.articles.find(({ path }) => path === requestedPath)
       : data;
@@ -251,7 +252,7 @@ function extractQwenBlogArticleContent(body, articleUrl) {
       publishedAt: article.extra?.date || null,
       author: String(article.extra?.author || '').trim(),
       description: String(article.extra?.description || '').trim(),
-      canonicalUrl: `https://qwen.ai/blog?id=${encodeURIComponent(article.path)}`,
+      canonicalUrl: articleUrl,
       content: article.content,
     };
   } catch {
@@ -318,13 +319,19 @@ export function extractBlogArticle(html, articleUrl, source = {}) {
     ? cleanHtmlText(structured.articleBody)
     : '';
   if (!content && site?.content) content = cleanSiteParserContent(site.content, html);
-  if (!content) {
+  if (!content && source.contentSelectorPriority === true) {
     for (const selector of source.contentSelectors || []) {
       content = semanticText(html, selector);
       if (content) break;
     }
   }
   if (!content) content = semanticText(html, 'article') || semanticText(html, 'main');
+  if (!content) {
+    for (const selector of source.contentSelectors || []) {
+      content = semanticText(html, selector);
+      if (content) break;
+    }
+  }
 
   if (!title || !canonicalUrl || content.replace(/\s/g, '').length < 200) return null;
   return { title, canonicalUrl, publishedAt, author, description, content };

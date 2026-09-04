@@ -47,6 +47,20 @@ function validatePatterns(errors, source, index, field, { required = false } = {
   });
 }
 
+function matchesPatterns(value, source, patterns) {
+  const canonicalUrl = canonicalizeArticleUrl(value, source?.url);
+  if (!canonicalUrl) return false;
+
+  let sourceOrigin;
+  try {
+    sourceOrigin = new URL(source.url).origin;
+  } catch {
+    return false;
+  }
+  if (new URL(canonicalUrl).origin !== sourceOrigin) return false;
+  return (patterns ?? []).some((pattern) => new RegExp(pattern).test(canonicalUrl));
+}
+
 export function validateBlogSources(sources) {
   const errors = [];
   if (!Array.isArray(sources)) {
@@ -104,31 +118,41 @@ export function validateBlogSources(sources) {
           );
         }
         if (entry.type === 'json') {
-          const detailUrl = entry.detailUrl;
-          let validTemplate = isNonemptyString(detailUrl) && detailUrl.includes('{path}');
-          if (validTemplate) {
-            try {
-              const detail = new URL(detailUrl.replace('{path}', 'example'));
-              validTemplate = detail.protocol === 'https:'
-                && detail.origin === new URL(entry.url).origin;
-            } catch {
-              validTemplate = false;
+          for (const [field, patterns] of [
+            ['publicUrl', source.articleUrlPatterns],
+            ['detailUrl', source.fetchUrlPatterns],
+          ]) {
+            const template = entry[field];
+            let validTemplate = isNonemptyString(template) && template.includes('{path}');
+            if (validTemplate) {
+              try {
+                const resolved = new URL(template.replace('{path}', 'example'));
+                validTemplate = resolved.protocol === 'https:'
+                  && resolved.origin === new URL(source.url).origin
+                  && matchesPatterns(resolved.href, source, patterns);
+              } catch {
+                validTemplate = false;
+              }
             }
-          }
-          if (!validTemplate) {
-            addError(
-              errors,
-              source,
-              index,
-              `discovery[${discoveryIndex}].detailUrl`,
-              'must be a same-origin HTTPS URL template containing {path}',
-            );
+            if (!validTemplate) {
+              addError(
+                errors,
+                source,
+                index,
+                `discovery[${discoveryIndex}].${field}`,
+                'must be a same-origin HTTPS URL template containing {path} and matching its allow list',
+              );
+            }
           }
         }
       });
     }
 
     validatePatterns(errors, source, index, 'articleUrlPatterns', { required: true });
+    const emitsFetchUrl = source.discovery?.some((entry) => entry?.type === 'json');
+    if (emitsFetchUrl || source.fetchUrlPatterns !== undefined) {
+      validatePatterns(errors, source, index, 'fetchUrlPatterns', { required: true });
+    }
     if (source.excludeUrlPatterns !== undefined) {
       validatePatterns(errors, source, index, 'excludeUrlPatterns');
     }
@@ -153,6 +177,20 @@ export function validateBlogSources(sources) {
           }
         });
       }
+    }
+    if (source.contentSelectorPriority !== undefined
+      && typeof source.contentSelectorPriority !== 'boolean') {
+      addError(errors, source, index, 'contentSelectorPriority', 'must be a boolean');
+    }
+    if (source.contentSelectorPriority === true
+      && (!Array.isArray(source.contentSelectors) || source.contentSelectors.length === 0)) {
+      addError(
+        errors,
+        source,
+        index,
+        'contentSelectorPriority',
+        'requires nonempty contentSelectors',
+      );
     }
   });
 
@@ -198,4 +236,8 @@ export function matchesBlogSource(value, source) {
 
   return (source?.articleUrlPatterns ?? [])
     .some((pattern) => new RegExp(pattern).test(canonicalUrl));
+}
+
+export function matchesBlogFetchSource(value, source) {
+  return matchesPatterns(value, source, source?.fetchUrlPatterns);
 }

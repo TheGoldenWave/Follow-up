@@ -100,6 +100,49 @@ test('fetchBlogArticle canonical precedence is page canonical, then final URL, t
   assert.equal(candidateCanonical.url, 'https://example.com/blog/candidate');
 });
 
+test('fetchBlogArticle fetches a private detail URL but emits the public candidate URL', async () => {
+  const candidate = {
+    title: 'Public candidate',
+    url: 'https://example.com/blog/public',
+    publishedAt: null,
+    description: '',
+  };
+  Object.defineProperty(candidate, Symbol.for('follow-up.blog.fetch-url'), {
+    value: 'https://example.com/api/article?path=public',
+  });
+  const requested = [];
+  const item = await fetchBlogArticle(candidate, source({
+    fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
+  }), {
+    fetchImpl: async (url) => {
+      requested.push(url);
+      return response(articleHtml({ canonical: '' }), { url });
+    },
+  });
+
+  assert.deepEqual(requested, ['https://example.com/api/article?path=public']);
+  assert.equal(item?.url, 'https://example.com/blog/public');
+});
+
+test('fetchBlogArticle validates detail responses against fetch URL patterns', async () => {
+  const candidate = { url: 'https://example.com/blog/public' };
+  Object.defineProperty(candidate, Symbol.for('follow-up.blog.fetch-url'), {
+    value: 'https://example.com/api/article?path=public',
+  });
+  const errors = [];
+  const item = await fetchBlogArticle(candidate, source({
+    fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
+  }), {
+    errors,
+    fetchImpl: async () => response(articleHtml({ canonical: '' }), {
+      url: 'https://example.com/api/private?path=public',
+    }),
+  });
+
+  assert.equal(item, null);
+  assert.deepEqual(errors, ['Blog: Example Blog: article: Final fetch URL is not allowed for this source']);
+});
+
 test('fetchBlogArticle rejects canonical URLs outside the exact source origin or source rules', async () => {
   for (const canonical of ['https://www.example.com/blog/post', 'https://example.com/about']) {
     const errors = [];
