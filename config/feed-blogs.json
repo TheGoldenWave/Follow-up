@@ -1,0 +1,32 @@
+{
+  "sources": [
+    {
+      "id": "anthropic-engineering",
+      "name": "Anthropic Engineering",
+      "url": "https://www.anthropic.com/engineering",
+      "language": "en",
+      "discovery": [
+        { "type": "html", "url": "https://www.anthropic.com/engineering" },
+        { "type": "sitemap", "url": "https://www.anthropic.com/sitemap.xml" }
+      ],
+      "articleUrlPatterns": ["^https://www\\.anthropic\\.com/engineering/[a-z0-9-]+$"],
+      "excludeUrlPatterns": [],
+      "parser": "anthropic-engineering",
+      "contentSelectors": ["article", "main"]
+    },
+    {
+      "id": "claude-blog",
+      "name": "Claude Blog",
+      "url": "https://claude.com/blog",
+      "language": "en",
+      "discovery": [
+        { "type": "html", "url": "https://claude.com/blog" },
+        { "type": "sitemap", "url": "https://claude.com/sitemap.xml" }
+      ],
+      "articleUrlPatterns": ["^https://claude\\.com/blog/[a-z0-9-]+$"],
+      "excludeUrlPatterns": [],
+      "parser": "claude-blog",
+      "contentSelectors": [".u-rich-text-blog", ".w-richtext", "article", "main"]
+    }
+  ]
+}

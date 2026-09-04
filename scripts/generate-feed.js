@@ -19,10 +19,8 @@ import { join } from "path";
 import { pathToFileURL } from "url";
 
 import { createFeedEnvelope } from "./feed-contract.js";
-import {
-  extractAnthropicArticleContent,
-  extractClaudeBlogArticleContent,
-} from "./blog-extraction.js";
+import { fetchBlogContent } from "./blog-collector.js";
+import { validateBlogSources } from "./blog-source-config.js";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -36,7 +34,6 @@ const TWEET_LOOKBACK_HOURS = 24;
 const PODCAST_LOOKBACK_HOURS = 336; // 14 days — podcasts publish weekly/biweekly, not daily
 const BLOG_LOOKBACK_HOURS = 72;
 const MAX_TWEETS_PER_USER = 3;
-const MAX_ARTICLES_PER_BLOG = 3;
 const NEWSLETTER_LOOKBACK_HOURS = 72;
 const ACADEMIC_LOOKBACK_HOURS = 168; // 7 days for papers
 const ZH_TECH_LOOKBACK_HOURS = 72;
@@ -114,6 +111,16 @@ async function loadSources() {
   const newslettersPath = join(SCRIPT_DIR, "..", "config", "feed-newsletters.json");
   const academicPath = join(SCRIPT_DIR, "..", "config", "feed-academic.json");
   const zhTechPath = join(SCRIPT_DIR, "..", "config", "feed-zh-tech.json");
+  const blogsPath = join(SCRIPT_DIR, "..", "config", "feed-blogs.json");
+
+  if (existsSync(blogsPath)) {
+    const blogConfig = JSON.parse(await readFile(blogsPath, "utf-8"));
+    const validation = validateBlogSources(blogConfig.sources);
+    if (!validation.valid) {
+      throw new Error(`Invalid blog source configuration: ${validation.errors.join('; ')}`);
+    }
+    sources.blogs = blogConfig.sources;
+  }
 
   sources.newsletters = existsSync(newslettersPath)
     ? JSON.parse(await readFile(newslettersPath, "utf-8")).sources
@@ -712,205 +719,6 @@ async function fetchXContent(xAccounts, bearerToken, state, errors) {
   return results;
 }
 
-// -- Blog Fetching (HTML scraping) -------------------------------------------
-
-// Scrapes the Anthropic Engineering blog index page.
-// The page is a Next.js app that embeds article data as JSON in <script> tags.
-// We parse that JSON to extract article metadata (title, slug, date, summary).
-// Falls back to regex-based HTML parsing if the JSON approach fails.
-function parseAnthropicEngineeringIndex(html) {
-  const articles = [];
-
-  // Strategy 1: Look for article data in Next.js __NEXT_DATA__ script tag
-  const nextDataMatch = html.match(
-    /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i,
-  );
-  if (nextDataMatch) {
-    try {
-      const data = JSON.parse(nextDataMatch[1]);
-      // Navigate the Next.js page props to find article entries
-      const pageProps = data?.props?.pageProps;
-      const posts =
-        pageProps?.posts || pageProps?.articles || pageProps?.entries || [];
-      for (const post of posts) {
-        const slug = post.slug?.current || post.slug || "";
-        articles.push({
-          title: post.title || "Untitled",
-          url: `https://www.anthropic.com/engineering/${slug}`,
-          publishedAt:
-            post.publishedOn || post.publishedAt || post.date || null,
-          description: post.summary || post.description || "",
-        });
-      }
-      if (articles.length > 0) return articles;
-    } catch {
-      // JSON parsing failed, fall through to regex approach
-    }
-  }
-
-  // Strategy 2: Regex-based extraction from the rendered HTML.
-  // Anthropic engineering articles follow the pattern /engineering/<slug>
-  const linkRegex = /href="\/engineering\/([a-z0-9-]+)"/gi;
-  const seenSlugs = new Set();
-  let linkMatch;
-  while ((linkMatch = linkRegex.exec(html)) !== null) {
-    const slug = linkMatch[1];
-    if (seenSlugs.has(slug)) continue;
-    seenSlugs.add(slug);
-    articles.push({
-      title: "", // Will be filled when we fetch the article page
-      url: `https://www.anthropic.com/engineering/${slug}`,
-      publishedAt: null,
-      description: "",
-    });
-  }
-  return articles;
-}
-
-// Scrapes the Claude Blog index page (claude.com/blog).
-// This is a Webflow site. We extract article links, titles, and dates
-// from the HTML structure.
-function parseClaudeBlogIndex(html) {
-  const articles = [];
-  const seenSlugs = new Set();
-
-  // Match blog post links — they follow the pattern /blog/<slug>
-  // We capture surrounding context to extract titles and dates
-  const linkRegex = /href="\/blog\/([a-z0-9-]+)"/gi;
-  let linkMatch;
-  while ((linkMatch = linkRegex.exec(html)) !== null) {
-    const slug = linkMatch[1];
-    if (seenSlugs.has(slug)) continue;
-    seenSlugs.add(slug);
-    articles.push({
-      title: "", // Will be filled when we fetch the article page
-      url: `https://claude.com/blog/${slug}`,
-      publishedAt: null,
-      description: "",
-    });
-  }
-  return articles;
-}
-
-// Main blog fetching orchestrator.
-// For each blog source in the config, discovers new articles, deduplicates
-// against previously seen URLs, fetches full article content, and returns
-// the results for feed-blogs.json.
-async function fetchBlogContent(blogs, state, errors) {
-  const results = [];
-  const cutoff = new Date(Date.now() - BLOG_LOOKBACK_HOURS * 60 * 60 * 1000);
-
-  for (const blog of blogs) {
-    console.error(`  Processing blog: ${blog.name}...`);
-    let candidates = [];
-
-    try {
-      // Step 1: Discover articles from the blog index page
-      const indexRes = await fetch(blog.indexUrl, {
-        headers: { "User-Agent": "FollowBuilders/1.0 (feed aggregator)" },
-      });
-      if (!indexRes.ok) {
-        errors.push(
-          `Blog: Failed to fetch index for ${blog.name}: HTTP ${indexRes.status}`,
-        );
-        continue;
-      }
-      const indexHtml = await indexRes.text();
-
-      // Use the right parser based on which blog this is
-      if (blog.indexUrl.includes("anthropic.com")) {
-        candidates = parseAnthropicEngineeringIndex(indexHtml);
-      } else if (blog.indexUrl.includes("claude.com")) {
-        candidates = parseClaudeBlogIndex(indexHtml);
-      }
-
-      // Step 2: Filter to unseen articles, cap at MAX_ARTICLES_PER_BLOG.
-      // Blog index pages list articles newest-first. We only consider the
-      // first few entries (MAX_INDEX_SCAN) to avoid crawling the entire
-      // backlog on first run. Articles with a known date must fall within
-      // the lookback window; articles without dates are accepted if they
-      // appear near the top of the listing (likely recent).
-      const MAX_INDEX_SCAN = MAX_ARTICLES_PER_BLOG; // only look at the N most recent entries
-      const newArticles = [];
-      for (const article of candidates.slice(0, MAX_INDEX_SCAN)) {
-        if (state.seenArticles[article.url]) continue; // already seen
-        // If we have a date, check it's within the lookback window
-        if (article.publishedAt && new Date(article.publishedAt) < cutoff)
-          continue;
-        newArticles.push(article);
-        if (newArticles.length >= MAX_ARTICLES_PER_BLOG) break;
-      }
-
-      if (newArticles.length === 0) {
-        console.error(`    No new articles found`);
-        continue;
-      }
-
-      console.error(
-        `    Found ${newArticles.length} new article(s), fetching content...`,
-      );
-
-      // Step 3: Fetch full article content for each new article
-      for (const article of newArticles) {
-        try {
-          // Fetch the full article page
-          const articleRes = await fetch(article.url, {
-            headers: { "User-Agent": "FollowBuilders/1.0 (feed aggregator)" },
-          });
-          if (!articleRes.ok) {
-            errors.push(
-              `Blog: Failed to fetch article ${article.url}: HTTP ${articleRes.status}`,
-            );
-            continue;
-          }
-          const articleHtml = await articleRes.text();
-
-          // Use the right content extractor based on the blog
-          let extracted;
-          if (article.url.includes("anthropic.com/engineering")) {
-            extracted = extractAnthropicArticleContent(articleHtml);
-          } else if (article.url.includes("claude.com/blog")) {
-            extracted = extractClaudeBlogArticleContent(articleHtml);
-          }
-
-          if (!extracted || !extracted.content) {
-            errors.push(`Blog: No content extracted from ${article.url}`);
-            continue;
-          }
-
-          // Merge extracted data with what we already have from the index
-          results.push({
-            source: "blog",
-            name: blog.name,
-            title: extracted.title || article.title || "Untitled",
-            url: article.url,
-            publishedAt: normalizePublishedAt(
-              extracted.publishedAt || article.publishedAt,
-            ),
-            author: extracted.author || "",
-            description: article.description || "",
-            content: extracted.content,
-          });
-
-          // Mark as seen
-          state.seenArticles[article.url] = Date.now();
-
-          // Small delay between article fetches to be polite
-          await new Promise((r) => setTimeout(r, 500));
-        } catch (err) {
-          errors.push(
-            `Blog: Error fetching article ${article.url}: ${err.message}`,
-          );
-        }
-      }
-    } catch (err) {
-      errors.push(`Blog: Error processing ${blog.name}: ${err.message}`);
-    }
-  }
-
-  return results;
-}
-
 // -- Generic RSS Feed Fetcher (Newsletters, Academic, Chinese Tech) ----------
 
 // Unified RSS-based feed fetching for newsletters, academic papers, and
@@ -1032,8 +840,15 @@ async function fetchRssFeeds(
 
 // -- Main --------------------------------------------------------------------
 
-async function main() {
-  const args = process.argv.slice(2);
+async function main(options = {}) {
+  const args = options.args ?? process.argv.slice(2);
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
+  const stdout = options.stdout ?? console.log;
+  const stderr = options.stderr ?? console.error;
+  const loadSourcesImpl = options.loadSourcesImpl ?? loadSources;
+  const shadow = args.includes("--shadow");
+  const blogSourceId = args.find((arg) => arg.startsWith("--blog-source="))?.slice("--blog-source=".length);
   const tweetsOnly = args.includes("--tweets-only");
   const podcastsOnly = args.includes("--podcasts-only");
   const blogsOnly = args.includes("--blogs-only");
@@ -1051,6 +866,35 @@ async function main() {
   const runAcademic = academicOnly || !anyOnly;
   const runZhTech = zhTechOnly || !anyOnly;
 
+  const sources = await loadSourcesImpl();
+
+  if (shadow) {
+    const selectedBlogs = blogSourceId
+      ? (sources.blogs ?? []).filter(({ id }) => id === blogSourceId)
+      : sources.blogs ?? [];
+    if (blogSourceId && selectedBlogs.length === 0) {
+      throw new Error(`Unknown blog source: ${blogSourceId}`);
+    }
+    const state = { seenTweets: {}, seenVideos: {}, seenArticles: {} };
+    const errors = [];
+    for (const blog of selectedBlogs) stderr(`Processing blog: ${blog.name}`);
+    const blogs = await fetchBlogContent(selectedBlogs, state, errors, {
+      fetchImpl,
+      now,
+      shadow: true,
+    });
+    const envelope = createFeedEnvelope({
+      generatedAt: new Date(now()).toISOString(),
+      lookbackHours: BLOG_LOOKBACK_HOURS,
+      blogs,
+      stats: { blogPosts: blogs.length },
+      errors: errors.length > 0 ? errors : undefined,
+    });
+    const serialized = JSON.stringify(envelope, null, 2);
+    stdout(serialized);
+    return JSON.parse(serialized);
+  }
+
   const xBearerToken = process.env.X_BEARER_TOKEN;
   const pod2txtKey = process.env.POD2TXT_API_KEY;
 
@@ -1063,7 +907,6 @@ async function main() {
     process.exit(1);
   }
 
-  const sources = await loadSources();
   const state = await loadState();
   const errors = [];
 
@@ -1141,7 +984,13 @@ async function main() {
   // Fetch blog posts
   if (runBlogs && sources.blogs && sources.blogs.length > 0) {
     console.error("Fetching blog content...");
-    const blogContent = await fetchBlogContent(sources.blogs, state, errors);
+    const selectedBlogs = blogSourceId
+      ? sources.blogs.filter(({ id }) => id === blogSourceId)
+      : sources.blogs;
+    if (blogSourceId && selectedBlogs.length === 0) {
+      throw new Error(`Unknown blog source: ${blogSourceId}`);
+    }
+    const blogContent = await fetchBlogContent(selectedBlogs, state, errors, { fetchImpl, now });
     console.error(`  Found ${blogContent.length} new blog post(s)`);
 
     const blogFeed = createFeedEnvelope({
@@ -1272,6 +1121,7 @@ async function main() {
 export {
   errorsSince,
   fetchRssFeeds,
+  loadSources,
   main,
   normalizePublishedAt,
   parseRssFeed,

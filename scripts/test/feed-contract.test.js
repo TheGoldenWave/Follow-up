@@ -14,10 +14,13 @@ import {
 import {
   errorsSince,
   fetchRssFeeds,
+  loadSources,
+  main as runGenerator,
   normalizePublishedAt,
   parseRssFeed,
   pruneState,
 } from '../generate-feed.js';
+import { validateBlogSources } from '../blog-source-config.js';
 import {
   CENTRAL_FEEDS,
   fetchJSON as fetchDigestJSON,
@@ -312,12 +315,64 @@ test('released RSS source configurations contain only public HTTPS sources', asy
 });
 
 test('runtime blog configuration contains only sources with implemented collectors', async () => {
-  const config = await readJson('config/default-sources.json');
+  const config = await readJson('config/feed-blogs.json');
 
-  assert.deepEqual(config.blogs.map(({ name }) => name), [
+  assert.deepEqual(config.sources.map(({ name }) => name), [
     'Anthropic Engineering',
     'Claude Blog',
   ]);
+  assert.deepEqual(validateBlogSources(config.sources), { valid: true, errors: [] });
+});
+
+test('loadSources replaces legacy default blogs with feed-blogs configuration', async () => {
+  const [sources, blogConfig] = await Promise.all([
+    loadSources(),
+    readJson('config/feed-blogs.json'),
+  ]);
+
+  assert.deepEqual(sources.blogs, blogConfig.sources);
+  assert.ok(sources.x_accounts.length > 0);
+});
+
+test('blog shadow mode selects one source, emits a valid envelope, and performs no writes', async () => {
+  const outputs = [];
+  const diagnostics = [];
+  const blog = {
+    id: 'shadow-blog',
+    name: 'Shadow Blog',
+    url: 'https://example.com/blog/',
+    language: 'en',
+    discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
+    articleUrlPatterns: ['^https://example\\.com/blog/[^/?]+$'],
+    excludeUrlPatterns: [],
+  };
+  const fetchImpl = async (url) => {
+    if (url.endsWith('feed.xml')) return {
+      ok: true, status: 200, url, headers: { get: () => null },
+      text: async () => '<rss><channel><item><title>Shadow post</title><link>/blog/shadow</link><pubDate>2026-09-03</pubDate></item></channel></rss>',
+    };
+    return {
+      ok: true, status: 200, url, headers: { get: () => null },
+      text: async () => `<h1>Shadow post</h1><article>${'Valid shadow content '.repeat(15)}</article>`,
+    };
+  };
+
+  const result = await runGenerator({
+    args: ['--shadow', '--blog-source=shadow-blog'],
+    fetchImpl,
+    loadSourcesImpl: async () => ({ x_accounts: [], podcasts: [], blogs: [blog] }),
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+    stdout: (line) => outputs.push(line),
+    stderr: (line) => diagnostics.push(line),
+    writeFileImpl: async () => { throw new Error('shadow mode must not write'); },
+  });
+  const envelope = JSON.parse(outputs.join('\n'));
+
+  assert.deepEqual(result, envelope);
+  assert.deepEqual(validateFeed(envelope, 'blogs'), { valid: true, errors: [] });
+  assert.equal(envelope.blogs.length, 1);
+  assert.equal(envelope.generatedAt, '2026-09-04T00:00:00.000Z');
+  assert.ok(diagnostics.some((line) => line.includes('Shadow Blog')));
 });
 
 test('checked-in state prevents every published tweet and podcast from republishing', async () => {

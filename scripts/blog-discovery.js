@@ -312,7 +312,7 @@ export function parseBlogIndex(html, source, baseUrl) {
   return candidates;
 }
 
-function sanitizeErrorMessage(error) {
+export function sanitizeBlogErrorMessage(error) {
   const raw = error instanceof Error ? error.message : String(error);
   return raw
     .replace(/https?:\/\/[^\s]+/gi, (value) => {
@@ -330,7 +330,11 @@ function sanitizeErrorMessage(error) {
     .slice(0, 300) || 'Unknown error';
 }
 
-async function fetchText(url, fetchImpl, timeoutMs) {
+export async function fetchBlogResource(url, {
+  fetchImpl = globalThis.fetch,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  accept = 'application/atom+xml, application/rss+xml, application/xml, text/xml, text/html;q=0.9',
+} = {}) {
   const approvedOrigin = new URL(url).origin;
   let currentUrl = url;
   let redirects = 0;
@@ -339,7 +343,7 @@ async function fetchText(url, fetchImpl, timeoutMs) {
   while (true) {
     const response = await fetchImpl(currentUrl, {
       headers: {
-        Accept: 'application/atom+xml, application/rss+xml, application/xml, text/xml, text/html;q=0.9',
+        Accept: accept,
         'User-Agent': BLOG_USER_AGENT,
       },
       redirect: 'manual',
@@ -361,7 +365,7 @@ async function fetchText(url, fetchImpl, timeoutMs) {
     if (response.url && !safeRedirectUrl(response.url, currentUrl, approvedOrigin)) {
       throw new Error('Redirected to a disallowed URL');
     }
-    return response.text();
+    return { body: await response.text(), url: response.url || currentUrl };
   }
 }
 
@@ -392,7 +396,7 @@ export async function discoverBlogArticles(source, options = {}) {
 
   for (const discovery of source?.discovery ?? []) {
     try {
-      const body = await fetchText(discovery.url, options.fetchImpl, options.timeoutMs);
+      const { body } = await fetchBlogResource(discovery.url, options);
       let candidates;
 
       if (discovery.type === 'rss') {
@@ -404,11 +408,11 @@ export async function discoverBlogArticles(source, options = {}) {
         const groups = [parsed.candidates];
         for (const childUrl of parsed.sitemapUrls) {
           try {
-            const childBody = await fetchText(childUrl, options.fetchImpl, options.timeoutMs);
+            const { body: childBody } = await fetchBlogResource(childUrl, options);
             groups.push(parseSitemap(childBody, source, childUrl).candidates);
           } catch (error) {
             options.errors.push(
-              `Blog: ${source.name}: discovery-sitemap: ${sanitizeErrorMessage(error)}`,
+              `Blog: ${source.name}: discovery-sitemap: ${sanitizeBlogErrorMessage(error)}`,
             );
           }
         }
@@ -420,7 +424,7 @@ export async function discoverBlogArticles(source, options = {}) {
       if (candidates.length > 0) return candidates.slice(0, MAX_CANDIDATES);
     } catch (error) {
       options.errors.push(
-        `Blog: ${source.name}: discovery-${discovery.type}: ${sanitizeErrorMessage(error)}`,
+        `Blog: ${source.name}: discovery-${discovery.type}: ${sanitizeBlogErrorMessage(error)}`,
       );
     }
   }
