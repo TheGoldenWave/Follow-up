@@ -187,20 +187,44 @@ function indexDate(block) {
   return normalizeDate(attributeValue(time[1], 'datetime') || cleanText(time[2]));
 }
 
+function elementRanges(html, expression) {
+  return [...html.matchAll(expression)].map((match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+}
+
+function includesPosition(ranges, position) {
+  return ranges.some(({ start, end }) => position >= start && position < end);
+}
+
 export function parseBlogIndex(html, source, baseUrl) {
   if (typeof html !== 'string' || !html.trim()) return [];
 
   const candidates = [];
   const seen = new Set();
+  const mainRanges = elementRanges(html, /<main\b[^>]*>[\s\S]*?<\/main\s*>/gi);
+  const excludedRanges = [
+    ...elementRanges(html, /<(nav|footer|aside)\b[^>]*>[\s\S]*?<\/\1\s*>/gi),
+    ...elementRanges(
+      html,
+      /<([\w.-]+)\b[^>]*(?:class|id)\s*=\s*(["'])[^"']*\b(?:related|recommended)[^"']*\2[^>]*>[\s\S]*?<\/\1\s*>/gi,
+    ),
+  ];
   const anchors = html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi);
   for (const match of anchors) {
+    if ((mainRanges.length > 0 && !includesPosition(mainRanges, match.index))
+      || includesPosition(excludedRanges, match.index)) continue;
+
     const rawUrl = attributeValue(match[1], 'href');
     const url = canonicalizeArticleUrl(rawUrl, baseUrl);
     if (!url || !matchesBlogSource(url, source) || seen.has(url)) continue;
 
     const block = enclosingBlock(html, match.index, match.index + match[0].length);
     const titleAttribute = attributeValue(match[1], 'title');
-    const title = titleAttribute || cleanText(match[2]);
+    const anchorText = cleanText(match[2]);
+    const heading = block ? elementValue(block, ['h2', 'h3']) : '';
+    const title = titleAttribute || (/^read more$/i.test(anchorText) ? heading : anchorText);
     if (!title) continue;
 
     seen.add(url);

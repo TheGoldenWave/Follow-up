@@ -218,6 +218,35 @@ test('parseBlogIndex parses quoted and unquoted anchors with nearby title and ti
   ]);
 });
 
+test('parseBlogIndex ignores article-shaped links outside the main listing', () => {
+  const html = `<body>
+    <nav><a href="/blog/navigation-post">Navigation post</a></nav>
+    <main><article><h2><a href="/blog/listed-post">Listed post</a></h2></article></main>
+    <aside><a href="/blog/sidebar-post">Sidebar post</a></aside>
+    <section class="related-content"><a href="/blog/related-post">Related post</a></section>
+    <footer><a href="/blog/footer-post">Footer post</a></footer>
+  </body>`;
+
+  assert.deepEqual(
+    parseBlogIndex(html, source(), 'https://example.com/blog/').map(({ url }) => url),
+    ['https://example.com/blog/listed-post'],
+  );
+});
+
+test('parseBlogIndex uses the enclosing heading when anchor text is generic', () => {
+  const html = `<main><ul>
+    <li><h3>A Specific Research Result</h3>
+      <p>Summary text.</p><a href="/blog/research-result">Read more</a></li>
+  </ul></main>`;
+
+  assert.deepEqual(parseBlogIndex(html, source(), 'https://example.com/blog/'), [{
+    title: 'A Specific Research Result',
+    url: 'https://example.com/blog/research-result',
+    publishedAt: null,
+    description: 'Summary text.',
+  }]);
+});
+
 test('parseBlogIndex deduplicates, filters URLs, and caps candidates at 12', () => {
   const anchors = [
     '<a href="/blog/post-0?source=index">First</a>',
