@@ -10,6 +10,7 @@
     "test": "node --test test/*.test.js",
     "test:archive": "FOLLOW_UP_RELEASE_MODE=archive node --test test/feed-contract.test.js test/prepare-digest.test.js test/release-manifest.test.js",
     "validate-feeds": "node feed-contract.js",
+    "validate-blog-sources": "node validate-blog-sources.js",
     "generate-feed": "node generate-feed.js",
     "prepare-digest": "node prepare-digest.js",
     "test:release": "node --test test/release-manifest.test.js test/release-build.test.js",
