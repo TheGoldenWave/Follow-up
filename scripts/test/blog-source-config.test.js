@@ -37,6 +37,13 @@ test('a complete source configuration is valid', () => {
   });
 });
 
+test('the source collection must be an array', () => {
+  assert.deepEqual(validateBlogSources(null), {
+    valid: false,
+    errors: ['sources: must be an array'],
+  });
+});
+
 for (const field of ['id', 'name', 'language']) {
   test(`source ${field} is required`, () => {
     const source = validSource({ [field]: '' });
@@ -129,6 +136,18 @@ test('exclude URL patterns take precedence over allow patterns', () => {
 
   assert.equal(matchesBlogSource('https://example.com/blog/new-post', source), true);
   assert.equal(matchesBlogSource('https://example.com/blog/archive/2025', source), false);
+});
+
+test('broad allow patterns cannot admit absolute URLs from another origin', () => {
+  const source = validSource({ articleUrlPatterns: ['.*'] });
+
+  assert.equal(matchesBlogSource('https://attacker.example/blog/post', source), false);
+});
+
+test('broad allow patterns cannot admit protocol-relative URLs from another origin', () => {
+  const source = validSource({ articleUrlPatterns: ['.*'] });
+
+  assert.equal(matchesBlogSource('//attacker.example/blog/post', source), false);
 });
 
 test('canonical URLs resolve relative values against the source URL', () => {

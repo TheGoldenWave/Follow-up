@@ -50,7 +50,7 @@ function validatePatterns(errors, source, index, field, { required = false } = {
 export function validateBlogSources(sources) {
   const errors = [];
   if (!Array.isArray(sources)) {
-    return { valid: false, errors: ['source[0].sources: must be an array'] };
+    return { valid: false, errors: ['sources: must be an array'] };
   }
 
   const seenIds = new Set();
@@ -161,6 +161,14 @@ export function canonicalizeArticleUrl(value, baseUrl) {
 export function matchesBlogSource(value, source) {
   const canonicalUrl = canonicalizeArticleUrl(value, source?.url);
   if (!canonicalUrl) return false;
+
+  let sourceOrigin;
+  try {
+    sourceOrigin = new URL(source.url).origin;
+  } catch {
+    return false;
+  }
+  if (new URL(canonicalUrl).origin !== sourceOrigin) return false;
 
   const excluded = (source?.excludeUrlPatterns ?? [])
     .some((pattern) => new RegExp(pattern).test(canonicalUrl));
