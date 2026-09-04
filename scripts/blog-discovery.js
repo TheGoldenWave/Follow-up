@@ -1,3 +1,5 @@
+import { isIP } from 'node:net';
+
 import {
   canonicalizeArticleUrl,
   matchesBlogSource,
@@ -7,11 +9,19 @@ const MAX_CANDIDATES = 12;
 const DEFAULT_TIMEOUT_MS = 15000;
 const BLOG_USER_AGENT = 'Mozilla/5.0 (compatible; FollowBuilders/1.0; +https://github.com/)';
 
+function decodeNumericEntity(match, code, radix) {
+  const value = Number.parseInt(code, radix);
+  if (!Number.isFinite(value) || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+    return match;
+  }
+  return String.fromCodePoint(value);
+}
+
 function decodeXml(value) {
   return String(value ?? '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(Number.parseInt(code, 16)))
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number.parseInt(code, 10)))
+    .replace(/&#x([0-9a-f]+);/gi, (match, code) => decodeNumericEntity(match, code, 16))
+    .replace(/&#(\d+);/g, (match, code) => decodeNumericEntity(match, code, 10))
     .replace(/&quot;/gi, '"')
     .replace(/&apos;/gi, "'")
     .replace(/&lt;/gi, '<')
@@ -68,10 +78,47 @@ function elementValue(block, localNames) {
 }
 
 function attributeValue(tag, name) {
-  const quoted = tag.match(new RegExp(`\\b${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, 'i'));
+  const prefix = `(?:^|\\s)${name}\\s*=\\s*`;
+  const quoted = tag.match(new RegExp(`${prefix}(["'])([\\s\\S]*?)\\1`, 'i'));
   if (quoted) return decodeXml(quoted[2]).trim();
-  const unquoted = tag.match(new RegExp(`\\b${name}\\s*=\\s*([^\\s>]+)`, 'i'));
+  const unquoted = tag.match(new RegExp(`${prefix}([^\\s>]+)`, 'i'));
   return unquoted ? decodeXml(unquoted[1]).trim() : '';
+}
+
+function isPrivateIpLiteral(hostname) {
+  const value = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const version = isIP(value);
+  if (version === 4) {
+    const [first, second] = value.split('.').map(Number);
+    return first === 10
+      || first === 127
+      || (first === 169 && second === 254)
+      || (first === 172 && second >= 16 && second <= 31)
+      || (first === 192 && second === 168);
+  }
+  if (version === 6) {
+    if (value === '::' || value === '::1') return true;
+    if (value.startsWith('::ffff:')) return isPrivateIpLiteral(value.slice(7));
+    const first = Number.parseInt(value.split(':', 1)[0], 16);
+    return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+  }
+  return false;
+}
+
+function safeChildSitemapUrl(value, parentUrl) {
+  const canonicalUrl = canonicalizeArticleUrl(value, parentUrl);
+  if (!canonicalUrl) return null;
+
+  try {
+    const candidate = new URL(canonicalUrl);
+    const parent = new URL(parentUrl);
+    if (candidate.protocol !== 'https:'
+      || candidate.origin !== parent.origin
+      || isPrivateIpLiteral(candidate.hostname)) return null;
+    return canonicalUrl;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeDate(value) {
@@ -102,7 +149,14 @@ export function parseBlogFeed(xml, source, baseUrl) {
     let rawUrl = '';
     if (kind.toLowerCase() === 'entry') {
       const linkTags = block.match(/<(?:[\w.-]+:)?link\b[^>]*\/?>/gi) ?? [];
-      const alternate = linkTags.find((tag) => attributeValue(tag, 'rel').toLowerCase() === 'alternate');
+      const alternateLinks = linkTags.filter((tag) => {
+        const rel = attributeValue(tag, 'rel').toLowerCase();
+        return !rel || rel === 'alternate';
+      });
+      const alternate = alternateLinks.find((tag) => {
+        const type = attributeValue(tag, 'type').toLowerCase();
+        return !type || type === 'text/html';
+      }) ?? alternateLinks[0];
       rawUrl = attributeValue(alternate ?? linkTags[0] ?? '', 'href');
     } else {
       rawUrl = elementValue(block, ['link']);
@@ -140,7 +194,7 @@ export function parseSitemap(xml, source, baseUrl) {
     const seen = new Set();
     const sitemapUrls = [];
     for (const block of blocks) {
-      const url = canonicalizeArticleUrl(elementValue(block, ['loc']), baseUrl);
+      const url = safeChildSitemapUrl(elementValue(block, ['loc']), baseUrl);
       if (!url || seen.has(url)) continue;
       seen.add(url);
       sitemapUrls.push(url);
@@ -267,6 +321,18 @@ async function fetchText(url, fetchImpl, timeoutMs) {
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response?.ok) throw new Error(`HTTP ${response?.status ?? 'unknown'}`);
+  if (response.url) {
+    try {
+      const requested = new URL(url);
+      const final = new URL(response.url);
+      if (final.protocol !== 'https:' || final.origin !== requested.origin) {
+        throw new Error('Redirected to a disallowed URL');
+      }
+    } catch (error) {
+      if (error?.message === 'Redirected to a disallowed URL') throw error;
+      throw new Error('Redirected to a disallowed URL');
+    }
+  }
   return response.text();
 }
 

@@ -72,6 +72,31 @@ test('parseBlogFeed parses Atom entries and prefers alternate links', () => {
   }]);
 });
 
+test('parseBlogFeed treats an Atom link without rel as alternate before self', () => {
+  const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><entry>
+    <title>No-rel alternate</title>
+    <link rel="self" href="/feeds/entry.xml" />
+    <link href="/blog/no-rel-post" />
+  </entry></feed>`;
+
+  assert.equal(
+    parseBlogFeed(xml, source(), 'https://example.com/feed.atom')[0].url,
+    'https://example.com/blog/no-rel-post',
+  );
+});
+
+test('pure parsers preserve invalid numeric entities instead of throwing', () => {
+  const xml = `<rss><channel><item>
+    <title>Invalid &#x110000; and &#999999999999;</title><link>/blog/entities</link>
+  </item></channel></rss>`;
+
+  assert.doesNotThrow(() => parseBlogFeed(xml, source(), 'https://example.com/feed.xml'));
+  assert.equal(
+    parseBlogFeed(xml, source(), 'https://example.com/feed.xml')[0].title,
+    'Invalid &#x110000; and &#999999999999;',
+  );
+});
+
 test('parseBlogFeed filters non-article URLs and excluded URLs', () => {
   const xml = `<rss><channel>
     <item><title>Valid</title><link>/blog/valid</link></item>
@@ -173,6 +198,30 @@ test('parseSitemap returns canonical child URLs for a sitemap index', () => {
   });
 });
 
+test('parseSitemap restricts child maps to public HTTPS URLs on the parent origin', () => {
+  const publicIndex = `<sitemapindex>
+    <sitemap><loc>/valid.xml</loc></sitemap>
+    <sitemap><loc>http://example.com/insecure.xml</loc></sitemap>
+    <sitemap><loc>https://other.example/cross-origin.xml</loc></sitemap>
+    <sitemap><loc>https://127.0.0.1/loopback.xml</loc></sitemap>
+    <sitemap><loc>https://10.0.0.8/private.xml</loc></sitemap>
+    <sitemap><loc>https://169.254.1.2/link-local.xml</loc></sitemap>
+  </sitemapindex>`;
+  const privateIndex = '<sitemapindex><sitemap><loc>/child.xml</loc></sitemap></sitemapindex>';
+
+  assert.deepEqual(
+    parseSitemap(publicIndex, source(), 'https://example.com/sitemap.xml').sitemapUrls,
+    ['https://example.com/valid.xml'],
+  );
+  for (const parent of [
+    'https://127.0.0.1/sitemap.xml',
+    'https://192.168.1.10/sitemap.xml',
+    'https://169.254.1.2/sitemap.xml',
+  ]) {
+    assert.deepEqual(parseSitemap(privateIndex, source(), parent).sitemapUrls, [], parent);
+  }
+});
+
 test('parseSitemap rejects malformed XML and caps deduplicated candidates at 12', () => {
   assert.deepEqual(
     parseSitemap('<urlset><url><loc>/blog/broken</url></urlset>', source(), 'https://example.com/map.xml'),
@@ -216,6 +265,15 @@ test('parseBlogIndex parses quoted and unquoted anchors with nearby title and ti
       description: '',
     },
   ]);
+});
+
+test('parseBlogIndex matches href exactly instead of data-href', () => {
+  const html = '<a data-href="/blog/trap" href="/blog/real">Real article</a>';
+
+  assert.equal(
+    parseBlogIndex(html, source(), 'https://example.com/blog/')[0].url,
+    'https://example.com/blog/real',
+  );
 });
 
 test('parseBlogIndex ignores article-shaped links outside the main listing', () => {
@@ -485,4 +543,22 @@ test('discoverBlogArticles fetches sitemap index children one level only', async
     'https://example.com/blog/older',
   ]);
   assert.deepEqual(errors, []);
+});
+
+test('discoverBlogArticles rejects a redirect escape before parsing the response', async () => {
+  const errors = [];
+  const candidates = await discoverBlogArticles(source({
+    discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
+  }), {
+    errors,
+    fetchImpl: async () => response(
+      '<rss><channel><item><title>Escaped</title><link>/blog/escaped</link></item></channel></rss>',
+      { url: 'https://attacker.example/feed.xml' },
+    ),
+  });
+
+  assert.deepEqual(candidates, []);
+  assert.deepEqual(errors, [
+    'Blog: Example Blog: discovery-rss: Redirected to a disallowed URL',
+  ]);
 });
