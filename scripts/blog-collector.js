@@ -1,6 +1,7 @@
 import {
   discoverBlogArticles,
   fetchBlogResource,
+  getBlogCandidateRawUrl,
   sanitizeBlogErrorMessage,
 } from './blog-discovery.js';
 import { extractBlogArticle } from './blog-extraction.js';
@@ -48,7 +49,12 @@ function articleIdentities(source, ...values) {
   const identities = new Set();
   for (const value of values) {
     if (typeof value !== 'string' || !value) continue;
-    identities.add(value);
+    try {
+      new URL(value);
+      identities.add(value);
+    } catch {
+      // Relative discovery URLs are only unique after source-based normalization.
+    }
     const normalized = canonicalizeArticleUrl(value, source.url);
     if (normalized) identities.add(normalized);
   }
@@ -92,7 +98,13 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
       content: extracted.content,
     };
     Object.defineProperty(item, ARTICLE_IDENTITIES, {
-      value: articleIdentities(source, candidate.url, resource.url, extracted.canonicalUrl),
+      value: articleIdentities(
+        source,
+        getBlogCandidateRawUrl(candidate),
+        candidate.url,
+        resource.url,
+        extracted.canonicalUrl,
+      ),
     });
     return item;
   } catch (error) {
@@ -123,7 +135,12 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
       });
       const selected = [];
       for (const [index, candidate] of candidates.entries()) {
-        if (hasSeenIdentity(state.seenArticles, articleIdentities(source, candidate.url))) continue;
+        const identities = articleIdentities(
+          source,
+          getBlogCandidateRawUrl(candidate),
+          candidate.url,
+        );
+        if (hasSeenIdentity(state.seenArticles, identities)) continue;
         const publishedMs = candidate.publishedAt ? Date.parse(candidate.publishedAt) : Number.NaN;
         if (Number.isFinite(publishedMs)) {
           if (publishedMs < cutoffMs) continue;

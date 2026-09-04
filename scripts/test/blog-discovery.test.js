@@ -346,6 +346,34 @@ test('parseBlogIndex handles malformed or non-string HTML without throwing', () 
   assert.deepEqual(parseBlogIndex('<a href="/blog/incomplete"', source(), 'https://example.com/blog/'), []);
 });
 
+test('feed, sitemap, and HTML candidates retain exact raw URLs as non-enumerable metadata', () => {
+  const rawUrl = 'https://example.com/blog/tracked?utm_source=legacy#section';
+  const rawUrlSymbol = Symbol.for('follow-up.blog.raw-url');
+  const candidates = [
+    parseBlogFeed(
+      `<rss><channel><item><title>Feed</title><link>${rawUrl}</link></item></channel></rss>`,
+      source(),
+      'https://example.com/feed.xml',
+    )[0],
+    parseSitemap(
+      `<urlset><url><loc>${rawUrl}</loc><lastmod>2026-09-03</lastmod></url></urlset>`,
+      source(),
+      'https://example.com/sitemap.xml',
+    ).candidates[0],
+    parseBlogIndex(
+      `<main><a href="${rawUrl}">HTML</a></main>`,
+      source(),
+      'https://example.com/blog/',
+    )[0],
+  ];
+
+  for (const candidate of candidates) {
+    assert.equal(candidate[rawUrlSymbol], rawUrl);
+    assert.equal(Object.getOwnPropertyDescriptor(candidate, rawUrlSymbol).enumerable, false);
+    assert.deepEqual(Object.keys(candidate), ['title', 'url', 'publishedAt', 'description']);
+  }
+});
+
 function response(body, overrides = {}) {
   return {
     ok: true,

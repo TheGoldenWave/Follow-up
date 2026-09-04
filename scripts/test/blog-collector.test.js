@@ -289,6 +289,29 @@ test('fetchBlogContent checks both raw and normalized candidate URLs in state be
   assert.deepEqual(fetched, []);
 });
 
+test('fetchBlogContent skips an exact raw tracking URL from real RSS discovery state', async () => {
+  const rawUrl = 'https://example.com/blog/tracked?utm_source=legacy';
+  const requested = [];
+  const results = await fetchBlogContent(
+    [source()],
+    { seenArticles: { [rawUrl]: 1 } },
+    [],
+    {
+      fetchImpl: async (url) => {
+        requested.push(url);
+        if (url.endsWith('feed.xml')) {
+          return response(rss([{ title: 'Tracked', url: rawUrl, date: '2026-09-03' }]), { url });
+        }
+        return response(articleHtml(), { url });
+      },
+      now: () => Date.parse('2026-09-04T00:00:00Z'),
+    },
+  );
+
+  assert.deepEqual(results, []);
+  assert.deepEqual(requested, ['https://example.com/feed.xml']);
+});
+
 test('fetchBlogContent checks a legacy final redirect URL in state before emitting canonical content', async () => {
   const state = { seenArticles: { 'https://example.com/blog/final': 1 } };
   const results = await fetchBlogContent([source()], state, [], {

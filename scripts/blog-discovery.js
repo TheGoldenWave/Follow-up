@@ -9,6 +9,16 @@ const MAX_CANDIDATES = 12;
 const MAX_REDIRECTS = 3;
 const DEFAULT_TIMEOUT_MS = 15000;
 const BLOG_USER_AGENT = 'Mozilla/5.0 (compatible; FollowBuilders/1.0; +https://github.com/)';
+const RAW_BLOG_URL = Symbol.for('follow-up.blog.raw-url');
+
+function candidateWithRawUrl(candidate, rawUrl) {
+  Object.defineProperty(candidate, RAW_BLOG_URL, { value: rawUrl });
+  return candidate;
+}
+
+export function getBlogCandidateRawUrl(candidate) {
+  return candidate?.[RAW_BLOG_URL] ?? candidate?.url;
+}
 
 function decodeNumericEntity(match, code, radix) {
   const value = Number.parseInt(code, radix);
@@ -144,16 +154,17 @@ function normalizeDate(value) {
 }
 
 function addCandidate(candidates, seen, source, rawUrl, baseUrl, metadata) {
-  const url = canonicalizeArticleUrl(decodeXml(rawUrl), baseUrl);
+  const decodedRawUrl = decodeXml(rawUrl).trim();
+  const url = canonicalizeArticleUrl(decodedRawUrl, baseUrl);
   if (!url || !matchesBlogSource(url, source) || seen.has(url) || !metadata.title) return;
 
   seen.add(url);
-  candidates.push({
+  candidates.push(candidateWithRawUrl({
     title: metadata.title,
     url,
     publishedAt: normalizeDate(metadata.publishedAt),
     description: metadata.description,
-  });
+  }, decodedRawUrl));
 }
 
 export function parseBlogFeed(xml, source, baseUrl) {
@@ -224,11 +235,15 @@ export function parseSitemap(xml, source, baseUrl) {
   const seen = new Set();
   const candidates = [];
   for (const block of blocks) {
-    const url = canonicalizeArticleUrl(elementValue(block, ['loc']), baseUrl);
+    const rawUrl = elementValue(block, ['loc']);
+    const url = canonicalizeArticleUrl(rawUrl, baseUrl);
     if (!url || !matchesBlogSource(url, source) || seen.has(url)) continue;
     seen.add(url);
     const publishedAt = normalizeDate(elementValue(block, ['lastmod']));
-    candidates.push({ title: '', url, publishedAt, description: '' });
+    candidates.push(candidateWithRawUrl(
+      { title: '', url, publishedAt, description: '' },
+      rawUrl,
+    ));
   }
 
   candidates.sort((left, right) => {
@@ -300,12 +315,12 @@ export function parseBlogIndex(html, source, baseUrl) {
     if (!title) continue;
 
     seen.add(url);
-    candidates.push({
+    candidates.push(candidateWithRawUrl({
       title,
       url,
       publishedAt: block ? indexDate(block) : null,
       description: block ? elementValue(block, ['p']) : '',
-    });
+    }, rawUrl));
     if (candidates.length === MAX_CANDIDATES) break;
   }
 
