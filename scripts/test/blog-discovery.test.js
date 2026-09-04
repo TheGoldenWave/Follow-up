@@ -355,6 +355,14 @@ function response(body, overrides = {}) {
   };
 }
 
+function redirectResponse(location, status = 302) {
+  return response('', {
+    ok: false,
+    status,
+    headers: { get: (name) => name.toLowerCase() === 'location' ? location : null },
+  });
+}
+
 test('discoverBlogArticles passes a timeout AbortSignal and applies option defaults', async () => {
   let receivedSignal;
   const options = {
@@ -545,20 +553,74 @@ test('discoverBlogArticles fetches sitemap index children one level only', async
   assert.deepEqual(errors, []);
 });
 
-test('discoverBlogArticles rejects a redirect escape before parsing the response', async () => {
+test('discoverBlogArticles never requests a cross-origin redirect target', async () => {
+  const calls = [];
   const errors = [];
   const candidates = await discoverBlogArticles(source({
     discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
   }), {
     errors,
-    fetchImpl: async () => response(
-      '<rss><channel><item><title>Escaped</title><link>/blog/escaped</link></item></channel></rss>',
-      { url: 'https://attacker.example/feed.xml' },
-    ),
+    fetchImpl: async (url, init) => {
+      calls.push({ url, redirect: init.redirect });
+      if (url === 'https://attacker.example/stolen.xml') {
+        throw new Error('unsafe target was requested');
+      }
+      return redirectResponse('https://attacker.example/stolen.xml');
+    },
   });
 
   assert.deepEqual(candidates, []);
+  assert.deepEqual(calls, [{ url: 'https://example.com/feed.xml', redirect: 'manual' }]);
   assert.deepEqual(errors, [
     'Blog: Example Blog: discovery-rss: Redirected to a disallowed URL',
   ]);
+});
+
+test('discoverBlogArticles follows a same-origin redirect manually', async () => {
+  const calls = [];
+  const candidates = await discoverBlogArticles(source({
+    discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
+  }), {
+    fetchImpl: async (url, init) => {
+      calls.push({ url, redirect: init.redirect, signal: init.signal });
+      if (url === 'https://example.com/feed.xml') return redirectResponse('/feeds/final.xml');
+      return response('<rss><channel><item><title>Safe</title><link>/blog/safe</link></item></channel></rss>');
+    },
+  });
+
+  assert.deepEqual(calls.map(({ url, redirect }) => ({ url, redirect })), [
+    { url: 'https://example.com/feed.xml', redirect: 'manual' },
+    { url: 'https://example.com/feeds/final.xml', redirect: 'manual' },
+  ]);
+  assert.ok(calls.every(({ signal }) => signal instanceof AbortSignal));
+  assert.equal(calls[0].signal, calls[1].signal);
+  assert.equal(candidates[0].url, 'https://example.com/blog/safe');
+});
+
+test('discoverBlogArticles bounds redirect loops and rejects missing locations', async () => {
+  const loopCalls = [];
+  const loopErrors = [];
+  const configuredSource = source({
+    discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
+  });
+  const loopCandidates = await discoverBlogArticles(configuredSource, {
+    errors: loopErrors,
+    fetchImpl: async (url, init) => {
+      loopCalls.push({ url, redirect: init.redirect });
+      return redirectResponse(url.endsWith('/feed.xml') ? '/feeds/loop.xml' : '/feed.xml');
+    },
+  });
+
+  const missingErrors = [];
+  const missingCandidates = await discoverBlogArticles(configuredSource, {
+    errors: missingErrors,
+    fetchImpl: async () => redirectResponse(null),
+  });
+
+  assert.deepEqual(loopCandidates, []);
+  assert.equal(loopCalls.length, 4);
+  assert.ok(loopCalls.every(({ redirect }) => redirect === 'manual'));
+  assert.deepEqual(loopErrors, ['Blog: Example Blog: discovery-rss: Too many redirects']);
+  assert.deepEqual(missingCandidates, []);
+  assert.deepEqual(missingErrors, ['Blog: Example Blog: discovery-rss: Redirect response missing Location']);
 });

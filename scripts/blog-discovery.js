@@ -6,6 +6,7 @@ import {
 } from './blog-source-config.js';
 
 const MAX_CANDIDATES = 12;
+const MAX_REDIRECTS = 3;
 const DEFAULT_TIMEOUT_MS = 15000;
 const BLOG_USER_AGENT = 'Mozilla/5.0 (compatible; FollowBuilders/1.0; +https://github.com/)';
 
@@ -116,6 +117,23 @@ function safeChildSitemapUrl(value, parentUrl) {
       || candidate.origin !== parent.origin
       || isPrivateIpLiteral(candidate.hostname)) return null;
     return canonicalUrl;
+  } catch {
+    return null;
+  }
+}
+
+function safeRedirectUrl(value, currentUrl, approvedOrigin) {
+  if (!value) return null;
+
+  try {
+    const target = new URL(value, currentUrl);
+    if (target.protocol !== 'https:'
+      || target.origin !== approvedOrigin
+      || target.username
+      || target.password
+      || isPrivateIpLiteral(target.hostname)) return null;
+    target.hash = '';
+    return target.href;
   } catch {
     return null;
   }
@@ -313,27 +331,38 @@ function sanitizeErrorMessage(error) {
 }
 
 async function fetchText(url, fetchImpl, timeoutMs) {
-  const response = await fetchImpl(url, {
-    headers: {
-      Accept: 'application/atom+xml, application/rss+xml, application/xml, text/xml, text/html;q=0.9',
-      'User-Agent': BLOG_USER_AGENT,
-    },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!response?.ok) throw new Error(`HTTP ${response?.status ?? 'unknown'}`);
-  if (response.url) {
-    try {
-      const requested = new URL(url);
-      const final = new URL(response.url);
-      if (final.protocol !== 'https:' || final.origin !== requested.origin) {
-        throw new Error('Redirected to a disallowed URL');
-      }
-    } catch (error) {
-      if (error?.message === 'Redirected to a disallowed URL') throw error;
+  const approvedOrigin = new URL(url).origin;
+  let currentUrl = url;
+  let redirects = 0;
+  const signal = AbortSignal.timeout(timeoutMs);
+
+  while (true) {
+    const response = await fetchImpl(currentUrl, {
+      headers: {
+        Accept: 'application/atom+xml, application/rss+xml, application/xml, text/xml, text/html;q=0.9',
+        'User-Agent': BLOG_USER_AGENT,
+      },
+      redirect: 'manual',
+      signal,
+    });
+
+    if (response?.status >= 300 && response.status < 400) {
+      if (redirects >= MAX_REDIRECTS) throw new Error('Too many redirects');
+      const location = response.headers?.get?.('location');
+      if (!location) throw new Error('Redirect response missing Location');
+      const targetUrl = safeRedirectUrl(location, currentUrl, approvedOrigin);
+      if (!targetUrl) throw new Error('Redirected to a disallowed URL');
+      currentUrl = targetUrl;
+      redirects += 1;
+      continue;
+    }
+
+    if (!response?.ok) throw new Error(`HTTP ${response?.status ?? 'unknown'}`);
+    if (response.url && !safeRedirectUrl(response.url, currentUrl, approvedOrigin)) {
       throw new Error('Redirected to a disallowed URL');
     }
+    return response.text();
   }
-  return response.text();
 }
 
 function mergeSitemapCandidates(groups) {
