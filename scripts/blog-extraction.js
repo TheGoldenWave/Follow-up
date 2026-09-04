@@ -226,6 +226,19 @@ function siteExtraction(html, parser) {
   return null;
 }
 
+function cleanSiteParserContent(content, html) {
+  let cleaned = cleanHtmlText(content);
+  for (const tag of ['script', 'style', 'nav', 'footer', 'aside', 'header']) {
+    const pattern = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}\\s*>`, 'gi');
+    let match;
+    while ((match = pattern.exec(html)) !== null) {
+      const boilerplate = cleanHtmlText(match[1]);
+      if (boilerplate) cleaned = cleaned.split(boilerplate).join(' ');
+    }
+  }
+  return cleaned.replace(/\s+/g, ' ').trim();
+}
+
 export function extractBlogArticle(html, articleUrl, source = {}) {
   if (typeof html !== 'string') return null;
 
@@ -255,7 +268,7 @@ export function extractBlogArticle(html, articleUrl, source = {}) {
   let content = typeof structured?.articleBody === 'string'
     ? decodeEntities(structured.articleBody).replace(/\s+/g, ' ').trim()
     : '';
-  if (!content && site?.content) content = cleanHtmlText(site.content);
+  if (!content && site?.content) content = cleanSiteParserContent(site.content, html);
   if (!content) content = semanticText(html, 'article') || semanticText(html, 'main');
   if (!content) {
     for (const selector of source.contentSelectors || []) {
@@ -319,7 +332,18 @@ export function extractAnthropicArticleContent(html) {
   const bodyHtml = articleMatch ? articleMatch[1] : html;
 
   // Strip script/style tags first, then all remaining HTML tags
-  content = cleanHtmlText(bodyHtml);
+  content = bodyHtml
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   return { title, author, publishedAt, content };
 }
@@ -358,7 +382,18 @@ export function extractClaudeBlogArticleContent(html) {
     html.match(/<div[^>]*class="[^"]*w-richtext[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
 
   if (richTextMatch) {
-    content = cleanHtmlText(richTextMatch[1]);
+    content = richTextMatch[1]
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   // If rich text extraction failed, try a broader approach
@@ -370,7 +405,21 @@ export function extractClaudeBlogArticleContent(html) {
     }
 
     // Strip the whole page down to text as a last resort
-    content = cleanHtmlText(html);
+    content = html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+      .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+      .replace(/<header[\s\S]*?<\/header>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
 
   return { title, author, publishedAt, content };

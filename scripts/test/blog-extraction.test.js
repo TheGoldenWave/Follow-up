@@ -34,6 +34,28 @@ test('characterizes Claude Blog article extraction', async () => {
   });
 });
 
+test('preserves Anthropic legacy fallback cleanup and entity behavior', async () => {
+  const html = await fixture('anthropic-engineering/fallback-with-boilerplate.html');
+
+  assert.deepEqual(extractAnthropicArticleContent(html), {
+    title: 'Anthropic fallback',
+    author: '',
+    publishedAt: null,
+    content: `${`Legacy header text. Legacy navigation text. Legacy aside text. Useful Anthropic fallback content & clear evidence ${'useful fallback content '.repeat(14)}`.trim()}.`,
+  });
+});
+
+test('preserves Claude legacy broad fallback cleanup and entity behavior', async () => {
+  const html = await fixture('claude-blog/fallback-with-boilerplate.html');
+
+  assert.deepEqual(extractClaudeBlogArticleContent(html), {
+    title: 'Fallback article',
+    author: '',
+    publishedAt: null,
+    content: `${`Fallback article Related links must not become article content. Useful fallback content & clear evidence ${'useful fallback content '.repeat(14)}`.trim()}.`,
+  });
+});
+
 test('exports the generic blog article extractor', () => {
   assert.equal(typeof blogExtraction.extractBlogArticle, 'function');
 });
@@ -235,7 +257,19 @@ test('site-parser broad fallback removes boilerplate before generic validation',
   );
 
   assert.match(result.content, /Useful fallback content/);
-  assert.doesNotMatch(result.content, /Navigation|Related links/);
+  assert.doesNotMatch(result.content, /Header|Navigation|Related links|Footer/);
+});
+
+test('generic Anthropic site parsing removes boilerplate without changing the legacy export', async () => {
+  const html = await fixture('anthropic-engineering/fallback-with-boilerplate.html');
+  const result = blogExtraction.extractBlogArticle(
+    html,
+    'https://example.com/blog/anthropic-fallback-cleaning',
+    { ...genericSource, parser: 'anthropic-engineering' },
+  );
+
+  assert.match(result.content, /Useful Anthropic fallback content & clear evidence/);
+  assert.doesNotMatch(result.content, /Legacy header|Legacy navigation|Legacy aside/);
 });
 
 test('content extraction decodes entities and removes non-content elements', () => {
