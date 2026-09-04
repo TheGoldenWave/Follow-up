@@ -149,10 +149,6 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
       const items = [];
       const sourceIdentities = new Set();
       for (const [index, candidate] of candidates.slice(0, 12).entries()) {
-        const fetchUrl = getBlogCandidateFetchUrl(candidate);
-        if (fetchUrl !== candidate.url && state.seenArticles?.[fetchUrl]) {
-          delete state.seenArticles[fetchUrl];
-        }
         const identities = articleIdentities(
           source,
           getBlogCandidateRawUrl(candidate),

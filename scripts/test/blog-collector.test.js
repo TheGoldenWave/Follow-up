@@ -407,7 +407,10 @@ test('fetch-only URLs neither suppress public candidates nor become state identi
   assert.deepEqual(requested, [fetchUrl]);
   assert.deepEqual(results.map(({ url }) => url), [publicUrl]);
   assert.equal(state.seenArticles[publicUrl], Date.parse('2026-09-04T00:00:00Z'));
-  assert.deepEqual(Object.keys(state.seenArticles), [publicUrl]);
+  assert.deepEqual(state.seenArticles, {
+    [fetchUrl]: 1,
+    [publicUrl]: Date.parse('2026-09-04T00:00:00Z'),
+  });
 });
 
 test('fetchBlogContent skips an exact raw tracking URL from real RSS discovery state', async () => {
