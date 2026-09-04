@@ -77,6 +77,9 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
 
   try {
     const fetchUrl = getBlogCandidateFetchUrl(candidate);
+    if (fetchUrl !== candidate.url && !matchesBlogFetchSource(fetchUrl, source)) {
+      throw new Error('Fetch URL is not allowed for this source');
+    }
     const resource = await fetchBlogResource(fetchUrl, {
       fetchImpl,
       timeoutMs,

@@ -60,7 +60,7 @@ Research Root、Publications、API 文档、GitHub 和模型仓库不属于本�
 | Qwen Blog | `https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US` JSON | `https://qwen.ai/blog/` HTML | 公开 URL 为 `^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$`；抓取 URL 限同源 `/api/v2/article/` | 2026-09-04 HTML HTTP 200 但仅为应用壳；同源 JSON 接口可发现并返回正文 |
 | Kimi Blog | `https://www.kimi.ai/blog/` HTML | `https://www.kimi.ai/sitemap.xml` | `^https://www\\.kimi\\.ai/blog/[^/?#]+/?$` | 2026-09-04 HTTP 200，HTML 含 `/blog/kimi-k3` 等文章及日期 |
 | ERNIE Blog | `https://ernie.baidu.com/blog/zh/index.xml` | `https://ernie.baidu.com/blog/zh/` HTML | `^https://ernie\\.baidu\\.com/blog/zh/posts/[^/?#]+/?$` | 2026-09-04 RSS HTTP 200；链接为相对 URL |
-| MiniMax Blog | `https://www.minimax.cn/sitemap.xml` | `https://minimaxi.com/blog` HTML | `^https://www\\.minimax\\.cn/blog/[^/?#]+/?$`；默认使用中文 canonical URL | 2026-09-04 Sitemap HTTP 200，含 `/blog/minimax-music-3-0-cn` |
+| MiniMax Blog | `https://www.minimax.cn/sitemap.xml` | `https://www.minimax.cn/blog` HTML | `^https://www\\.minimax\\.cn/blog/[^/?#]+/?$`；默认使用中文 canonical URL | 2026-09-04 Sitemap HTTP 200，含 `/blog/minimax-music-3-0-cn` |
 | Apple ML Research | `https://machinelearning.apple.com/rss.xml` | `https://machinelearning.apple.com/sitemap.xml` | `^https://machinelearning\\.apple\\.com/research/[^/?#]+/?$` | 2026-09-04 RSS 与 Sitemap 均 HTTP 200 |
 
 上表的“当前核验”是设计阶段的可用性记录，不等于生产验收。实现时每个来源仍必须通过离线 Fixture 和 shadow 抓取。对 DeepMind、Qwen、Kimi、ERNIE、MiniMax 和 Apple 这类混合入口，分类只用于纳入文章型内容和排除 R0 索引、R1 列表、分类页及产品静态页；当前 Feed schema 不新增分类字段。

@@ -143,6 +143,33 @@ test('fetchBlogArticle validates detail responses against fetch URL patterns', a
   assert.deepEqual(errors, ['Blog: Example Blog: article: Final fetch URL is not allowed for this source']);
 });
 
+test('fetchBlogArticle rejects an unapproved initial fetch URL before network access', async () => {
+  for (const fetchUrl of [
+    'https://attacker.example/api/article?path=public',
+    'https://127.0.0.1/api/article?path=public',
+    'https://example.com/private?path=public',
+  ]) {
+    const candidate = { url: 'https://example.com/blog/public' };
+    Object.defineProperty(candidate, Symbol.for('follow-up.blog.fetch-url'), { value: fetchUrl });
+    const requested = [];
+    const errors = [];
+
+    const item = await fetchBlogArticle(candidate, source({
+      fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
+    }), {
+      errors,
+      fetchImpl: async (url) => {
+        requested.push(url);
+        return response(articleHtml(), { url });
+      },
+    });
+
+    assert.equal(item, null, fetchUrl);
+    assert.deepEqual(requested, [], fetchUrl);
+    assert.deepEqual(errors, ['Blog: Example Blog: article: Fetch URL is not allowed for this source']);
+  }
+});
+
 test('fetchBlogArticle rejects canonical URLs outside the exact source origin or source rules', async () => {
   for (const canonical of ['https://www.example.com/blog/post', 'https://example.com/about']) {
     const errors = [];

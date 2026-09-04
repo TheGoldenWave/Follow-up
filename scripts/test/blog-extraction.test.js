@@ -379,6 +379,21 @@ test('Qwen parser ignores embedded metadata from other articles in a retrieval r
   assert.equal(result?.content, requestedContent);
 });
 
+test('Qwen parser rejects a single article response for a different requested path', () => {
+  const response = JSON.stringify({ data: {
+    path: 'other-post',
+    title: 'Other Qwen post',
+    content: `<p>${longText('Other Qwen article')}</p>`,
+    extra: {},
+  } });
+
+  assert.equal(blogExtraction.extractBlogArticle(
+    response,
+    'https://qwen.ai/blog?id=qwen3.8',
+    { ...genericSource, url: 'https://qwen.ai/blog/', parser: 'qwen-blog' },
+  ), null);
+});
+
 test('a configured site parser runs before semantic and configured selector fallbacks', () => {
   const preferred = longText('Portable text from the site parser');
   const semantic = longText('Semantic fallback');

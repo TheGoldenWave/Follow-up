@@ -244,7 +244,7 @@ function extractQwenBlogArticleContent(body, articleUrl) {
     const article = Array.isArray(data?.articles)
       ? data.articles.find(({ path }) => path === requestedPath)
       : data;
-    if (!article || typeof article.path !== 'string' || typeof article.content !== 'string') {
+    if (!article || article.path !== requestedPath || typeof article.content !== 'string') {
       return null;
     }
     return {
