@@ -193,7 +193,7 @@ Antigravity Blog 不应替代 Google Research 或 Google DeepMind Research。它
 
 - 有效来源加载：`scripts/generate-feed.js` 的 `loadSources()`。
 - 官网 Blog 生产配置：`config/feed-blogs.json`。
-- 官网 Blog 解析：`scripts/generate-feed.js` 的 `fetchBlogContent()`。
+- 官网 Blog 采集编排：`scripts/blog-collector.js` 的 `fetchBlogContent()`；`scripts/generate-feed.js` 负责加载配置与写入 Feed。
 - Newsletter：`config/feed-newsletters.json`。
 - 学术研究：`config/feed-academic.json`。
 - 中文科技：`config/feed-zh-tech.json`。
