@@ -133,8 +133,9 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
         errors: sourceErrors,
         shadow: options.shadow ?? false,
       });
-      const selected = [];
-      for (const [index, candidate] of candidates.entries()) {
+      const items = [];
+      const sourceIdentities = new Set();
+      for (const [index, candidate] of candidates.slice(0, 12).entries()) {
         const identities = articleIdentities(
           source,
           getBlogCandidateRawUrl(candidate),
@@ -147,23 +148,26 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
         } else if (index >= MAX_ARTICLES_PER_SOURCE) {
           continue;
         }
-        selected.push(candidate);
-        if (selected.length === MAX_ARTICLES_PER_SOURCE) break;
-      }
-
-      const fetched = await Promise.all(selected.map(async (candidate) => {
         const articleErrors = [];
         const item = await fetchBlogArticle(candidate, source, {
           fetchImpl: limitedFetch,
           timeoutMs,
           errors: articleErrors,
         });
-        return { item, errors: articleErrors };
-      }));
-      const items = [];
-      for (const result of fetched) {
-        sourceErrors.push(...result.errors);
-        items.push(result.item);
+        sourceErrors.push(...articleErrors);
+        if (!item) continue;
+        const authoritativePublishedMs = item.publishedAt
+          ? Date.parse(item.publishedAt)
+          : Number.NaN;
+        if (Number.isFinite(authoritativePublishedMs) && authoritativePublishedMs < cutoffMs) {
+          continue;
+        }
+        const itemIdentities = item[ARTICLE_IDENTITIES] ?? [item.url];
+        if (hasSeenIdentity(state.seenArticles, itemIdentities)
+          || itemIdentities.some((identity) => sourceIdentities.has(identity))) continue;
+        for (const identity of itemIdentities) sourceIdentities.add(identity);
+        items.push(item);
+        if (items.length === MAX_ARTICLES_PER_SOURCE) break;
       }
       return { items, errors: sourceErrors };
     } catch (error) {

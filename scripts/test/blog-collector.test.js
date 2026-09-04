@@ -210,6 +210,54 @@ test('fetchBlogContent injects time and fetch, applies 72 hours, limits undated 
   assert.deepEqual(Object.keys(state.seenArticles), results.map(({ url }) => url));
 });
 
+test('fetchBlogContent rejects an undated candidate when its authoritative article date is stale', async () => {
+  const state = { seenArticles: {} };
+  const results = await fetchBlogContent([source()], state, [], {
+    discoverImpl: async () => [{
+      title: 'Apparently recent',
+      url: 'https://example.com/blog/stale',
+      publishedAt: null,
+    }],
+    fetchImpl: async (url) => response(articleHtml({
+      canonical: '/blog/stale',
+      publishedAt: '2026-08-01T00:00:00Z',
+    }), { url }),
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+  });
+
+  assert.deepEqual(results, []);
+  assert.deepEqual(state, { seenArticles: {} });
+});
+
+test('fetchBlogContent continues through candidates until it has three valid unique items', async () => {
+  const requested = [];
+  const candidates = ['invalid', 'alias-a', 'alias-b', 'second', 'third'].map((slug) => ({
+    title: slug,
+    url: `https://example.com/blog/${slug}`,
+    publishedAt: '2026-09-03T00:00:00Z',
+  }));
+  const results = await fetchBlogContent([source()], { seenArticles: {} }, [], {
+    discoverImpl: async () => candidates,
+    fetchImpl: async (url) => {
+      requested.push(url);
+      const slug = new URL(url).pathname.split('/').pop();
+      if (slug === 'invalid') {
+        return response(articleHtml({ canonical: '/blog/invalid', content: 'short' }), { url });
+      }
+      const canonical = slug.startsWith('alias-') ? '/blog/first' : `/blog/${slug}`;
+      return response(articleHtml({ canonical }), { url });
+    },
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+  });
+
+  assert.deepEqual(results.map(({ url }) => url), [
+    'https://example.com/blog/first',
+    'https://example.com/blog/second',
+    'https://example.com/blog/third',
+  ]);
+  assert.deepEqual(requested, candidates.map(({ url }) => url));
+});
+
 test('fetchBlogContent shares a four-request limiter across discovery and article fetches', async () => {
   const sources = ['one', 'two', 'three', 'four', 'five'].map((id) => source({
     id,

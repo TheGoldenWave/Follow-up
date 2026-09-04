@@ -625,6 +625,61 @@ test('discoverBlogArticles follows a same-origin redirect manually', async () =>
   assert.equal(candidates[0].url, 'https://example.com/blog/safe');
 });
 
+test('discoverBlogArticles resolves RSS and HTML relative links against their final redirected URL', async () => {
+  for (const type of ['rss', 'html']) {
+    const initialUrl = `https://example.com/${type}`;
+    const finalUrl = `https://example.com/feeds/${type}/index`;
+    const body = type === 'rss'
+      ? '<rss><channel><item><title>Relative</title><link>article</link></item></channel></rss>'
+      : '<main><a href="article">Relative</a></main>';
+    const candidates = await discoverBlogArticles(source({
+      url: 'https://example.com/',
+      discovery: [{ type, url: initialUrl }],
+      articleUrlPatterns: [`^https://example\\.com/feeds/${type}/article$`],
+      excludeUrlPatterns: [],
+    }), {
+      fetchImpl: async (url) => url === initialUrl
+        ? redirectResponse(`/feeds/${type}/index`)
+        : response(body, { url: finalUrl }),
+    });
+
+    assert.equal(candidates[0].url, `https://example.com/feeds/${type}/article`, type);
+  }
+});
+
+test('discoverBlogArticles resolves redirected sitemap children and articles against final URLs', async () => {
+  const requested = [];
+  const candidates = await discoverBlogArticles(source({
+    url: 'https://example.com/',
+    discovery: [{ type: 'sitemap', url: 'https://example.com/sitemap.xml' }],
+    articleUrlPatterns: ['^https://example\\.com/maps/2026/article$'],
+    excludeUrlPatterns: [],
+  }), {
+    fetchImpl: async (url) => {
+      requested.push(url);
+      if (url === 'https://example.com/sitemap.xml') return redirectResponse('/maps/index.xml');
+      if (url === 'https://example.com/maps/index.xml') {
+        return response('<sitemapindex><sitemap><loc>child.xml</loc></sitemap></sitemapindex>', { url });
+      }
+      if (url === 'https://example.com/maps/child.xml') return redirectResponse('/maps/2026/posts.xml');
+      if (url === 'https://example.com/maps/2026/posts.xml') {
+        return response('<urlset><url><loc>article</loc><lastmod>2026-09-03</lastmod></url></urlset>', { url });
+      }
+      throw new Error(`Unexpected URL: ${url}`);
+    },
+  });
+
+  assert.deepEqual(requested, [
+    'https://example.com/sitemap.xml',
+    'https://example.com/maps/index.xml',
+    'https://example.com/maps/child.xml',
+    'https://example.com/maps/2026/posts.xml',
+  ]);
+  assert.deepEqual(candidates.map(({ url }) => url), [
+    'https://example.com/maps/2026/article',
+  ]);
+});
+
 test('discoverBlogArticles bounds redirect loops and rejects missing locations', async () => {
   const loopCalls = [];
   const loopErrors = [];

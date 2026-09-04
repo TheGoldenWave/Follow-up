@@ -411,20 +411,20 @@ export async function discoverBlogArticles(source, options = {}) {
 
   for (const discovery of source?.discovery ?? []) {
     try {
-      const { body } = await fetchBlogResource(discovery.url, options);
+      const { body, url: finalUrl } = await fetchBlogResource(discovery.url, options);
       let candidates;
 
       if (discovery.type === 'rss') {
-        candidates = parseBlogFeed(body, source, discovery.url);
+        candidates = parseBlogFeed(body, source, finalUrl);
       } else if (discovery.type === 'html') {
-        candidates = parseBlogIndex(body, source, discovery.url);
+        candidates = parseBlogIndex(body, source, finalUrl);
       } else if (discovery.type === 'sitemap') {
-        const parsed = parseSitemap(body, source, discovery.url);
+        const parsed = parseSitemap(body, source, finalUrl);
         const groups = [parsed.candidates];
         for (const childUrl of parsed.sitemapUrls) {
           try {
-            const { body: childBody } = await fetchBlogResource(childUrl, options);
-            groups.push(parseSitemap(childBody, source, childUrl).candidates);
+            const child = await fetchBlogResource(childUrl, options);
+            groups.push(parseSitemap(child.body, source, child.url).candidates);
           } catch (error) {
             options.errors.push(
               `Blog: ${source.name}: discovery-sitemap: ${sanitizeBlogErrorMessage(error)}`,
