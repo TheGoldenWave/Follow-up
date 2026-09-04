@@ -333,8 +333,9 @@ The target cadence differs by source category:
 ### Current release
 
 1. **Central Feed generation:** GitHub Actions run daily to fetch content from six
-   live categories (X/Twitter API, YouTube transcripts via Pod2Text, RSS feeds for
-   blogs and newsletters, arXiv API for papers, web scraping for Chinese sources)
+   live categories (X/Twitter API, podcast RSS and Pod2Text transcripts,
+   configuration-driven RSS/Sitemap/HTML/JSON discovery for official blogs,
+   Newsletter RSS, arXiv RSS for papers, and Chinese technology RSS)
 2. **Your agent fetches the feed:** One HTTP request, no API keys needed
 3. **AI remixes Signals:** Your agent uses the prompt files to remix raw content
    into a structured, scannable digest tailored to your preferences

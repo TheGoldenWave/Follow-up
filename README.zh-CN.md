@@ -322,8 +322,9 @@ Skill 使用纯文本 prompt 文件来控制每个频道的摘要方式。
 ### 当前版本
 
 1. **中心化 Feed 生成：** GitHub Actions 每日运行，从 6 类实时来源抓取内容
-   （X/Twitter API、YouTube 字幕通过 Pod2Text、博客和 Newsletter 的 RSS、
-   arXiv API、中文源的网页抓取）
+   （X/Twitter API、播客 RSS 与 Pod2Text 转录、官网 Blog 的配置驱动
+   RSS/Sitemap/HTML/JSON 混合发现、Newsletter RSS、论文的 arXiv RSS、
+   中文科技 RSS）
 2. **你的 Agent 获取 Feed：** 一次 HTTP 请求，无需 API key
 3. **AI 混编 Signal：** Agent 使用 prompt 文件将原始内容重组为结构化、
    可扫描的摘要，根据你的偏好定制

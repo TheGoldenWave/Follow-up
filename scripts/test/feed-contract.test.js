@@ -315,7 +315,10 @@ test('released RSS source configurations contain only public HTTPS sources', asy
 });
 
 test('runtime blog configuration contains only sources with implemented collectors', async () => {
-  const config = await readJson('config/feed-blogs.json');
+  const [config, candidates] = await Promise.all([
+    readJson('config/feed-blogs.json'),
+    readJson('config/blog-source-candidates.json'),
+  ]);
 
   assert.deepEqual(config.sources.map(({ id, name }) => ({ id, name })), [
     { id: 'anthropic-engineering', name: 'Anthropic Engineering' },
@@ -337,6 +340,7 @@ test('runtime blog configuration contains only sources with implemented collecto
     { id: 'apple-ml-research', name: 'Apple Machine Learning Research' },
   ]);
   assert.deepEqual(validateBlogSources(config.sources), { valid: true, errors: [] });
+  assert.deepEqual(config, candidates);
 });
 
 test('loadSources replaces legacy default blogs with feed-blogs configuration', async () => {
