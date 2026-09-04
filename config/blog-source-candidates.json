@@ -129,7 +129,8 @@
         { "type": "html", "url": "https://research.ibm.com/blog" }
       ],
       "articleUrlPatterns": ["^https://research\\.ibm\\.com/blog/[^/?#]+/?$"],
-      "excludeUrlPatterns": []
+      "excludeUrlPatterns": [],
+      "contentSelectors": ["main .FTOMS"]
     },
     {
       "id": "perplexity-research",
@@ -149,10 +150,19 @@
       "url": "https://qwen.ai/blog/",
       "language": "en",
       "discovery": [
+        {
+          "type": "json",
+          "url": "https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US",
+          "detailUrl": "https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path={path}"
+        },
         { "type": "html", "url": "https://qwen.ai/blog/" }
       ],
-      "articleUrlPatterns": ["^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$"],
-      "excludeUrlPatterns": []
+      "articleUrlPatterns": [
+        "^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$",
+        "^https://qwen\\.ai/api/v2/article/retrieval\\?type=qwen_ai&language=en-US&path=[A-Za-z0-9._-]+$"
+      ],
+      "excludeUrlPatterns": [],
+      "parser": "qwen-blog"
     },
     {
       "id": "kimi-blog",

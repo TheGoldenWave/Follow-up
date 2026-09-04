@@ -95,7 +95,10 @@ const approvedSourceRoutes = {
     ['html', 'https://research.perplexity.ai/articles'],
     ['sitemap', 'https://research.perplexity.ai/sitemap.xml'],
   ]],
-  'qwen-blog': ['https://qwen.ai/blog/', [['html', 'https://qwen.ai/blog/']]],
+  'qwen-blog': ['https://qwen.ai/blog/', [
+    ['json', 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US'],
+    ['html', 'https://qwen.ai/blog/'],
+  ]],
   'kimi-blog': ['https://www.kimi.ai/blog/', [
     ['html', 'https://www.kimi.ai/blog/'],
     ['sitemap', 'https://www.kimi.ai/sitemap.xml'],
@@ -224,12 +227,34 @@ test('allow and exclude patterns must be valid JavaScript regular expressions', 
 });
 
 test('parser names are limited to implemented source parsers', () => {
-  for (const parser of ['anthropic-engineering', 'claude-blog']) {
+  for (const parser of ['anthropic-engineering', 'claude-blog', 'qwen-blog']) {
     assert.equal(validateBlogSources([validSource({ parser })]).valid, true, parser);
   }
 
   const result = validateBlogSources([validSource({ parser: 'made-up-parser' })]);
   assert.ok(errorFor(result, 'example-blog', 'parser'));
+});
+
+test('JSON discovery requires a same-origin HTTPS detail URL template with a path placeholder', () => {
+  const valid = validateBlogSources([validSource({
+    discovery: [{
+      type: 'json',
+      url: 'https://example.com/api/articles',
+      detailUrl: 'https://example.com/api/article?path={path}',
+    }],
+  })]);
+  assert.equal(valid.valid, true, valid.errors.join('; '));
+
+  for (const detailUrl of [
+    'http://example.com/api/article?path={path}',
+    'https://attacker.example/api/article?path={path}',
+    'https://example.com/api/article',
+  ]) {
+    const invalid = validateBlogSources([validSource({
+      discovery: [{ type: 'json', url: 'https://example.com/api/articles', detailUrl }],
+    })]);
+    assert.ok(errorFor(invalid, 'example-blog', 'discovery[0].detailUrl'), detailUrl);
+  }
 });
 
 test('contentSelectors values must be strings', () => {

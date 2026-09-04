@@ -34,7 +34,11 @@ const expectedFixtureCandidates = {
   'amazon-science': ['Robust multimodal models', 'https://www.amazon.science/blog/robust-multimodal-models', 'Thu, 03 Sep 2026 09:00:00 GMT'],
   'ibm-research': ['Trustworthy foundation models', 'https://research.ibm.com/blog/trustworthy-foundation-models', 'Thu, 03 Sep 2026 10:00:00 GMT'],
   'perplexity-research': ['Retrieval at scale', 'https://research.perplexity.ai/articles/retrieval-at-scale', '2026-09-03'],
-  'qwen-blog': ['Qwen3.8 technical report', 'https://qwen.ai/blog?id=qwen3.8', '2026-09-03'],
+  'qwen-blog': [
+    'Qwen3.8 technical report',
+    'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path=qwen3.8',
+    '2026-09-03',
+  ],
   'kimi-blog': ['Kimi K3 technical overview', 'https://www.kimi.ai/blog/kimi-k3', '2026-09-03'],
   'ernie-blog': ['ERNIE reasoning update', 'https://ernie.baidu.com/blog/zh/posts/ernie-reasoning', 'Thu, 03 Sep 2026 11:00:00 GMT'],
   'minimax-blog': ['', 'https://www.minimax.cn/blog/minimax-music-3-0-cn', '2026-09-03'],
@@ -58,7 +62,7 @@ test('every approved source fixture discovers a matching article with its first 
 
   for (const configuredSource of sources) {
     const strategy = configuredSource.discovery[0];
-    const extension = strategy.type === 'html' ? 'html' : 'xml';
+    const extension = strategy.type === 'html' ? 'html' : strategy.type === 'json' ? 'json' : 'xml';
     const body = await candidateFixture(configuredSource, `discovery.${extension}`);
     const candidates = await discoverBlogArticles(
       { ...configuredSource, discovery: [strategy] },
@@ -436,6 +440,75 @@ test('parseBlogIndex keeps Anthropic Interpretability and Science membership pag
 test('parseBlogIndex handles malformed or non-string HTML without throwing', () => {
   assert.deepEqual(parseBlogIndex(null, source(), 'https://example.com/blog/'), []);
   assert.deepEqual(parseBlogIndex('<a href="/blog/incomplete"', source(), 'https://example.com/blog/'), []);
+});
+
+test('parseBlogIndex uses aria-label for empty overlay links from the Kimi listing', () => {
+  const html = `<main><section>
+    <a href="/blog/kimi-k3" aria-label="Kimi K3" class="absolute inset-0"></a>
+    <div><h2>Kimi K3</h2><p>2026-07-21</p></div>
+  </section></main>`;
+
+  assert.deepEqual(parseBlogIndex(html, source({
+    url: 'https://www.kimi.ai/blog/',
+    articleUrlPatterns: ['^https://www\\.kimi\\.ai/blog/[^/?#]+$'],
+    excludeUrlPatterns: [],
+  }), 'https://www.kimi.ai/blog/'), [{
+    title: 'Kimi K3',
+    url: 'https://www.kimi.ai/blog/kimi-k3',
+    publishedAt: null,
+    description: '',
+  }]);
+});
+
+test('parseBlogIndex discovers a statically assigned blog route from the Qwen shell', () => {
+  const html = `<html><body><script>
+    var detail = document.createElement('a');
+    detail.href = '/blog?id=qwen3.8';
+    detail.textContent = detailLabel;
+  </script></body></html>`;
+
+  assert.deepEqual(parseBlogIndex(html, source({
+    url: 'https://qwen.ai/blog/',
+    articleUrlPatterns: ['^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$'],
+    excludeUrlPatterns: [],
+  }), 'https://qwen.ai/blog/'), [{
+    title: 'qwen3.8',
+    url: 'https://qwen.ai/blog?id=qwen3.8',
+    publishedAt: null,
+    description: '',
+  }]);
+});
+
+test('discoverBlogArticles converts a JSON article listing into detail API candidates', async () => {
+  const body = JSON.stringify({ data: { articles: [{
+    path: 'qwen3.8',
+    title: 'Qwen3.8-Max: A New Bar for Coding and Cowork',
+    extra: { date: '2026-08-03T10:00:00+08:00', description: 'Official Qwen article.' },
+  }] } });
+  const configuredSource = source({
+    url: 'https://qwen.ai/blog/',
+    discovery: [{
+      type: 'json',
+      url: 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US',
+      detailUrl: 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path={path}',
+    }],
+    articleUrlPatterns: [
+      '^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$',
+      '^https://qwen\\.ai/api/v2/article/retrieval\\?type=qwen_ai&language=en-US&path=[A-Za-z0-9._-]+$',
+    ],
+    excludeUrlPatterns: [],
+  });
+
+  const candidates = await discoverBlogArticles(configuredSource, {
+    fetchImpl: async (url) => response(body, { url }),
+  });
+
+  assert.deepEqual(candidates, [{
+    title: 'Qwen3.8-Max: A New Bar for Coding and Cowork',
+    url: 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path=qwen3.8',
+    publishedAt: '2026-08-03T10:00:00+08:00',
+    description: 'Official Qwen article.',
+  }]);
 });
 
 test('feed, sitemap, and HTML candidates retain exact raw URLs as non-enumerable metadata', () => {

@@ -282,6 +282,88 @@ test('configured descendant selectors reject an earlier match outside the reques
   )?.content, inside);
 });
 
+test('configured content selectors outrank a related-post article in the IBM page shell', () => {
+  const selected = longText('IBM main blog body');
+  const html = `<html><head><script type="application/ld+json">${JSON.stringify({
+    '@type': 'Article',
+    headline: 'IBM article title',
+    url: 'https://research.ibm.com/blog/future-of-computing',
+  })}</script></head><body>
+    <main data-testid="blog-post"><div class="FTOMS"><div class="nEgU0"><p>${selected}</p></div></div>
+      <section><h2>Related posts</h2><article><h3>Related card</h3></article></section>
+    </main>
+  </body></html>`;
+
+  assert.equal(blogExtraction.extractBlogArticle(
+    html,
+    'https://research.ibm.com/blog/future-of-computing',
+    {
+      ...genericSource,
+      url: 'https://research.ibm.com/blog',
+      contentSelectors: ['main .FTOMS'],
+    },
+  )?.content, selected);
+});
+
+test('Qwen parser extracts an official article API response', () => {
+  const content = longText('Qwen API article body');
+  const response = JSON.stringify({ data: {
+    path: 'qwen3.8',
+    title: 'Qwen3.8-Max: A New Bar for Coding and Cowork',
+    content: `<p>${content}</p>`,
+    extra: {
+      date: '2026-08-03T10:00:00+08:00',
+      author: 'Qwen Team',
+      description: 'Official Qwen article.',
+    },
+  } });
+
+  assert.deepEqual(blogExtraction.extractBlogArticle(
+    response,
+    'https://qwen.ai/api/v2/article/?language=en-US&path=qwen3.8&type=qwen_ai',
+    {
+      ...genericSource,
+      url: 'https://qwen.ai/blog/',
+      parser: 'qwen-blog',
+    },
+  ), {
+    title: 'Qwen3.8-Max: A New Bar for Coding and Cowork',
+    canonicalUrl: 'https://qwen.ai/blog?id=qwen3.8',
+    publishedAt: '2026-08-03T10:00:00+08:00',
+    author: 'Qwen Team',
+    description: 'Official Qwen article.',
+    content,
+  });
+});
+
+test('Qwen parser ignores embedded metadata from other articles in a retrieval response', () => {
+  const requestedContent = longText('Requested Qwen article');
+  const response = JSON.stringify({ data: { articles: [
+    {
+      path: 'other-post',
+      title: 'Other post',
+      content: '<link rel="canonical" href="https://qwenlm.github.io/blog/other-post"><h1>Other</h1>',
+      extra: {},
+    },
+    {
+      path: 'qwen3.8',
+      title: 'Requested Qwen post',
+      content: `<p>${requestedContent}</p>`,
+      extra: { date: '2026-08-03', author: 'Qwen Team' },
+    },
+  ] } });
+
+  const result = blogExtraction.extractBlogArticle(
+    response,
+    'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path=qwen3.8',
+    { ...genericSource, url: 'https://qwen.ai/blog/', parser: 'qwen-blog' },
+  );
+
+  assert.equal(result?.title, 'Requested Qwen post');
+  assert.equal(result?.canonicalUrl, 'https://qwen.ai/blog?id=qwen3.8');
+  assert.equal(result?.content, requestedContent);
+});
+
 test('a configured site parser runs before semantic and configured selector fallbacks', () => {
   const preferred = longText('Portable text from the site parser');
   const semantic = longText('Semantic fallback');

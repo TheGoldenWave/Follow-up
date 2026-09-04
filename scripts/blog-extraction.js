@@ -229,10 +229,34 @@ function jsonLdUrl(article) {
   return article?.mainEntityOfPage?.['@id'] || '';
 }
 
-function siteExtraction(html, parser) {
+function siteExtraction(html, parser, articleUrl) {
   if (parser === 'anthropic-engineering') return extractAnthropicArticleContent(html);
   if (parser === 'claude-blog') return extractClaudeBlogArticleContent(html);
+  if (parser === 'qwen-blog') return extractQwenBlogArticleContent(html, articleUrl);
   return null;
+}
+
+function extractQwenBlogArticleContent(body, articleUrl) {
+  try {
+    const data = JSON.parse(body)?.data;
+    const requestedPath = new URL(articleUrl).searchParams.get('path');
+    const article = Array.isArray(data?.articles)
+      ? data.articles.find(({ path }) => path === requestedPath)
+      : data;
+    if (!article || typeof article.path !== 'string' || typeof article.content !== 'string') {
+      return null;
+    }
+    return {
+      title: String(article.title || '').trim(),
+      publishedAt: article.extra?.date || null,
+      author: String(article.extra?.author || '').trim(),
+      description: String(article.extra?.description || '').trim(),
+      canonicalUrl: `https://qwen.ai/blog?id=${encodeURIComponent(article.path)}`,
+      content: article.content,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function cleanSiteParserContent(content, html) {
@@ -252,7 +276,20 @@ export function extractBlogArticle(html, articleUrl, source = {}) {
   if (typeof html !== 'string') return null;
 
   const structured = extractArticleJsonLd(html);
-  const site = siteExtraction(html, source.parser);
+  const site = siteExtraction(html, source.parser, articleUrl);
+  if (source.parser === 'qwen-blog' && site) {
+    const content = cleanSiteParserContent(site.content, html);
+    const canonicalUrl = canonicalizeArticleUrl(site.canonicalUrl, source.url);
+    if (!site.title || !canonicalUrl || content.replace(/\s/g, '').length < 200) return null;
+    return {
+      title: decodeEntities(site.title),
+      canonicalUrl,
+      publishedAt: firstParseableDate([site.publishedAt]),
+      author: decodeEntities(site.author),
+      description: decodeEntities(site.description),
+      content,
+    };
+  }
   const title = decodeEntities(String(
     structured?.headline || structured?.name ||
     firstMeta(html, ['og:title', 'twitter:title', 'title']) ||
@@ -268,24 +305,26 @@ export function extractBlogArticle(html, articleUrl, source = {}) {
     authorName(structured?.author) || firstMeta(html, ['author', 'article:author']) || site?.author || '',
   ).trim();
   const description = decodeEntities(String(
-    structured?.description || firstMeta(html, ['og:description', 'description', 'twitter:description']) || '',
+    structured?.description || firstMeta(html, ['og:description', 'description', 'twitter:description'])
+    || site?.description || '',
   )).trim();
 
   const canonicalCandidate =
-    findCanonicalLink(html) || jsonLdUrl(structured) || firstMeta(html, ['og:url']) || articleUrl;
+    findCanonicalLink(html) || jsonLdUrl(structured) || firstMeta(html, ['og:url'])
+    || site?.canonicalUrl || articleUrl;
   const canonicalUrl = canonicalizeArticleUrl(canonicalCandidate, articleUrl || source.url);
 
   let content = typeof structured?.articleBody === 'string'
     ? cleanHtmlText(structured.articleBody)
     : '';
   if (!content && site?.content) content = cleanSiteParserContent(site.content, html);
-  if (!content) content = semanticText(html, 'article') || semanticText(html, 'main');
   if (!content) {
     for (const selector of source.contentSelectors || []) {
       content = semanticText(html, selector);
       if (content) break;
     }
   }
+  if (!content) content = semanticText(html, 'article') || semanticText(html, 'main');
 
   if (!title || !canonicalUrl || content.replace(/\s/g, '').length < 200) return null;
   return { title, canonicalUrl, publishedAt, author, description, content };

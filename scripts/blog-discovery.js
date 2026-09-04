@@ -308,7 +308,8 @@ export function parseBlogIndex(html, source, baseUrl) {
     if (!url || !matchesBlogSource(url, source) || seen.has(url)) continue;
 
     const block = enclosingBlock(html, match.index, match.index + match[0].length);
-    const titleAttribute = attributeValue(match[1], 'title');
+    const titleAttribute = attributeValue(match[1], 'title')
+      || attributeValue(match[1], 'aria-label');
     const anchorText = cleanText(match[2]);
     const heading = block ? elementValue(block, ['h2', 'h3']) : '';
     const title = titleAttribute || (/^read more$/i.test(anchorText) ? heading : anchorText);
@@ -324,7 +325,58 @@ export function parseBlogIndex(html, source, baseUrl) {
     if (candidates.length === MAX_CANDIDATES) break;
   }
 
+  const scripts = html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi);
+  for (const script of scripts) {
+    const assignments = script[1].matchAll(/(?:\b[\w$]+\.)?href\s*=\s*(["'])(.*?)\1/g);
+    for (const assignment of assignments) {
+      const rawUrl = assignment[2];
+      const url = canonicalizeArticleUrl(rawUrl, baseUrl);
+      if (!url || !matchesBlogSource(url, source) || seen.has(url)) continue;
+
+      const parsed = new URL(url);
+      const title = parsed.searchParams.get('id') || parsed.pathname.split('/').filter(Boolean).pop();
+      if (!title) continue;
+      seen.add(url);
+      candidates.push(candidateWithRawUrl({
+        title,
+        url,
+        publishedAt: null,
+        description: '',
+      }, rawUrl));
+      if (candidates.length === MAX_CANDIDATES) return candidates;
+    }
+  }
+
   return candidates;
+}
+
+function parseBlogJson(body, source, discovery, baseUrl) {
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    return [];
+  }
+
+  const articles = payload?.data?.articles;
+  if (!Array.isArray(articles)) return [];
+  const candidates = [];
+  const seen = new Set();
+  for (const article of articles) {
+    if (typeof article?.path !== 'string') continue;
+    const rawUrl = discovery.detailUrl.replace('{path}', encodeURIComponent(article.path));
+    addCandidate(candidates, seen, source, rawUrl, baseUrl, {
+      title: String(article.title || '').trim(),
+      publishedAt: article.extra?.date,
+      description: String(article.extra?.description || '').trim(),
+    });
+  }
+  candidates.sort((left, right) => {
+    if (left.publishedAt === null) return right.publishedAt === null ? 0 : 1;
+    if (right.publishedAt === null) return -1;
+    return Date.parse(right.publishedAt) - Date.parse(left.publishedAt);
+  });
+  return candidates.slice(0, MAX_CANDIDATES);
 }
 
 export function sanitizeBlogErrorMessage(error) {
@@ -418,6 +470,8 @@ export async function discoverBlogArticles(source, options = {}) {
         candidates = parseBlogFeed(body, source, finalUrl);
       } else if (discovery.type === 'html') {
         candidates = parseBlogIndex(body, source, finalUrl);
+      } else if (discovery.type === 'json') {
+        candidates = parseBlogJson(body, source, discovery, finalUrl);
       } else if (discovery.type === 'sitemap') {
         const parsed = parseSitemap(body, source, finalUrl);
         const groups = [parsed.candidates];

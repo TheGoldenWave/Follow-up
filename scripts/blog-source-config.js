@@ -1,5 +1,5 @@
-const DISCOVERY_TYPES = new Set(['rss', 'sitemap', 'html']);
-const SUPPORTED_PARSERS = new Set(['anthropic-engineering', 'claude-blog']);
+const DISCOVERY_TYPES = new Set(['rss', 'sitemap', 'html', 'json']);
+const SUPPORTED_PARSERS = new Set(['anthropic-engineering', 'claude-blog', 'qwen-blog']);
 const TRACKING_PARAMETERS = /^(?:utm_.+|ref|source)$/i;
 
 function isNonemptyString(value) {
@@ -91,7 +91,7 @@ export function validateBlogSources(sources) {
             source,
             index,
             `discovery[${discoveryIndex}].type`,
-            'must be one of rss, sitemap, or html',
+            'must be one of rss, sitemap, html, or json',
           );
         }
         if (!isHttpsUrl(entry.url)) {
@@ -102,6 +102,28 @@ export function validateBlogSources(sources) {
             `discovery[${discoveryIndex}].url`,
             'must be an absolute HTTPS URL',
           );
+        }
+        if (entry.type === 'json') {
+          const detailUrl = entry.detailUrl;
+          let validTemplate = isNonemptyString(detailUrl) && detailUrl.includes('{path}');
+          if (validTemplate) {
+            try {
+              const detail = new URL(detailUrl.replace('{path}', 'example'));
+              validTemplate = detail.protocol === 'https:'
+                && detail.origin === new URL(entry.url).origin;
+            } catch {
+              validTemplate = false;
+            }
+          }
+          if (!validTemplate) {
+            addError(
+              errors,
+              source,
+              index,
+              `discovery[${discoveryIndex}].detailUrl`,
+              'must be a same-origin HTTPS URL template containing {path}',
+            );
+          }
         }
       });
     }
