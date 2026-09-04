@@ -113,6 +113,23 @@ test('fetchBlogArticle rejects canonical URLs outside the exact source origin or
   }
 });
 
+test('fetchBlogArticle rejects a same-origin final URL outside source rules before trusting its allowed page canonical', async () => {
+  const errors = [];
+  const result = await fetchBlogArticle(
+    { url: 'https://example.com/blog/candidate' },
+    source(),
+    {
+      errors,
+      fetchImpl: async (url) => url.endsWith('/candidate')
+        ? response('', { status: 302, location: '/not-an-article' })
+        : response(articleHtml({ canonical: '/blog/allowed' }), { url }),
+    },
+  );
+
+  assert.equal(result, null);
+  assert.deepEqual(errors, ['Blog: Example Blog: article: Final URL is not allowed for this source']);
+});
+
 test('fetchBlogArticle rejects invalid and underlength extracted content', async () => {
   for (const html of [null, articleHtml({ content: 'too short' })]) {
     const errors = [];
@@ -249,6 +266,46 @@ test('fetchBlogContent recognizes raw and canonical legacy state, deduplicates c
   assert.deepEqual(results.map(({ url }) => url), ['https://example.com/blog/shared']);
   assert.equal(state.seenArticles['https://example.com/blog/shared'], Date.parse('2026-09-04T00:00:00Z'));
   assert.equal(state.seenArticles['https://example.com/blog/invalid'], undefined);
+});
+
+test('fetchBlogContent checks both raw and normalized candidate URLs in state before fetching', async () => {
+  const rawUrl = 'https://example.com/blog/raw?utm_source=feed';
+  const normalizedUrl = 'https://example.com/blog/normalized';
+  const state = { seenArticles: { [rawUrl]: 1, [normalizedUrl]: 2 } };
+  const fetched = [];
+  const results = await fetchBlogContent([source()], state, [], {
+    discoverImpl: async () => [
+      { title: 'Raw', url: rawUrl, publishedAt: '2026-09-03' },
+      { title: 'Normalized', url: `${normalizedUrl}?utm_source=feed`, publishedAt: '2026-09-03' },
+    ],
+    fetchImpl: async (url) => {
+      fetched.push(url);
+      return response(articleHtml(), { url });
+    },
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+  });
+
+  assert.deepEqual(results, []);
+  assert.deepEqual(fetched, []);
+});
+
+test('fetchBlogContent checks a legacy final redirect URL in state before emitting canonical content', async () => {
+  const state = { seenArticles: { 'https://example.com/blog/final': 1 } };
+  const results = await fetchBlogContent([source()], state, [], {
+    discoverImpl: async () => [{
+      title: 'Redirected',
+      url: 'https://example.com/blog/candidate',
+      publishedAt: '2026-09-03',
+    }],
+    fetchImpl: async () => response(
+      articleHtml({ canonical: '/blog/canonical' }),
+      { url: 'https://example.com/blog/final' },
+    ),
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+  });
+
+  assert.deepEqual(results, []);
+  assert.deepEqual(state, { seenArticles: { 'https://example.com/blog/final': 1 } });
 });
 
 test('fetchBlogContent isolates source failures and appends exact source-ordered errors', async () => {

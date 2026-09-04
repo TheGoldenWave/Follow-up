@@ -4,12 +4,13 @@ import {
   sanitizeBlogErrorMessage,
 } from './blog-discovery.js';
 import { extractBlogArticle } from './blog-extraction.js';
-import { matchesBlogSource } from './blog-source-config.js';
+import { canonicalizeArticleUrl, matchesBlogSource } from './blog-source-config.js';
 
 const BLOG_LOOKBACK_HOURS = 72;
 const MAX_ARTICLES_PER_SOURCE = 3;
 const MAX_CONCURRENT_REQUESTS = 4;
 const DEFAULT_TIMEOUT_MS = 15000;
+const ARTICLE_IDENTITIES = Symbol('articleIdentities');
 
 function normalizePublishedAt(value) {
   if (!value || !Number.isFinite(Date.parse(value))) return null;
@@ -43,6 +44,21 @@ function recordArticleError(errors, source, error) {
   errors.push(`Blog: ${source.name}: article: ${sanitizeBlogErrorMessage(error)}`);
 }
 
+function articleIdentities(source, ...values) {
+  const identities = new Set();
+  for (const value of values) {
+    if (typeof value !== 'string' || !value) continue;
+    identities.add(value);
+    const normalized = canonicalizeArticleUrl(value, source.url);
+    if (normalized) identities.add(normalized);
+  }
+  return [...identities];
+}
+
+function hasSeenIdentity(seenArticles, identities) {
+  return identities.some((identity) => seenArticles?.[identity]);
+}
+
 export async function fetchBlogArticle(candidate, source, options = {}) {
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -54,6 +70,9 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
       timeoutMs,
       accept: 'text/html,application/xhtml+xml;q=0.9',
     });
+    if (!matchesBlogSource(resource.url, source)) {
+      throw new Error('Final URL is not allowed for this source');
+    }
     const extracted = extractBlogArticle(resource.body, resource.url || candidate.url, source);
     if (!extracted) {
       throw new Error('Invalid or underlength article content');
@@ -62,7 +81,7 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
       throw new Error('Canonical URL is not allowed for this source');
     }
 
-    return {
+    const item = {
       source: 'blog',
       name: source.name,
       title: extracted.title || candidate.title || 'Untitled',
@@ -72,6 +91,10 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
       description: extracted.description || candidate.description || '',
       content: extracted.content,
     };
+    Object.defineProperty(item, ARTICLE_IDENTITIES, {
+      value: articleIdentities(source, candidate.url, resource.url, extracted.canonicalUrl),
+    });
+    return item;
   } catch (error) {
     recordArticleError(errors, source, error);
     return null;
@@ -100,7 +123,7 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
       });
       const selected = [];
       for (const [index, candidate] of candidates.entries()) {
-        if (state.seenArticles?.[candidate.url]) continue;
+        if (hasSeenIdentity(state.seenArticles, articleIdentities(source, candidate.url))) continue;
         const publishedMs = candidate.publishedAt ? Date.parse(candidate.publishedAt) : Number.NaN;
         if (Number.isFinite(publishedMs)) {
           if (publishedMs < cutoffMs) continue;
@@ -133,12 +156,15 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
   }));
 
   const results = [];
-  const seenCanonicals = new Set();
+  const seenIdentities = new Set();
   for (const run of sourceRuns) {
     errors.push(...run.errors);
     for (const item of run.items) {
-      if (!item || state.seenArticles?.[item.url] || seenCanonicals.has(item.url)) continue;
-      seenCanonicals.add(item.url);
+      if (!item) continue;
+      const identities = item[ARTICLE_IDENTITIES] ?? [item.url];
+      if (hasSeenIdentity(state.seenArticles, identities)
+        || identities.some((identity) => seenIdentities.has(identity))) continue;
+      for (const identity of identities) seenIdentities.add(identity);
       results.push(item);
       state.seenArticles ??= {};
       state.seenArticles[item.url] = nowMs;
