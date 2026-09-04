@@ -27,13 +27,25 @@ const expectedFixtureCandidates = {
   'anthropic-interpretability': ['Natural language autoencoders', 'https://www.anthropic.com/research/natural-language-autoencoders', '2026-09-03'],
   'anthropic-science': ['Reasoning about the Riemann zeta function', 'https://www.anthropic.com/research/riemann-zeta', '2026-09-03'],
   'openai-alignment': ['Alignment research update', 'https://alignment.openai.com/alignment-research-update', 'Thu, 03 Sep 2026 08:00:00 GMT'],
-  'google-antigravity': ['Reliable agent workflows', 'https://antigravity.google/blog/reliable-agent-workflows', '2026-09-03'],
+  'google-antigravity': [
+    'Teamwork: When AI Becomes a Research Partner',
+    'https://antigravity.google/blog/teamwork-when-ai-becomes-a-research-partner',
+    'Thu, 27 Aug 2026 00:00:00 GMT',
+  ],
   'google-deepmind': ['', 'https://deepmind.google/blog/scaling-reasoning-systems', '2026-09-03'],
-  'google-research': ['Efficient learning systems', 'https://research.google/blog/efficient-learning-systems', '2026-09-03'],
+  'google-research': [
+    'Transfer learning for genomic prediction in underrepresented populations',
+    'https://research.google/blog/transfer-learning-for-genomic-prediction-in-underrepresented-populations',
+    'Thu, 03 Sep 2026 00:00:00 GMT',
+  ],
   'microsoft-research': ['Responsible agent evaluation', 'https://www.microsoft.com/en-us/research/blog/responsible-agent-evaluation', '2026-09-03'],
   'amazon-science': ['Robust multimodal models', 'https://www.amazon.science/blog/robust-multimodal-models', 'Thu, 03 Sep 2026 09:00:00 GMT'],
   'ibm-research': ['Trustworthy foundation models', 'https://research.ibm.com/blog/trustworthy-foundation-models', 'Thu, 03 Sep 2026 10:00:00 GMT'],
-  'perplexity-research': ['Retrieval at scale', 'https://research.perplexity.ai/articles/retrieval-at-scale', '2026-09-03'],
+  'perplexity-research': [
+    'Securing agents across Perplexity’s client endpoints with Numbat',
+    'https://research.perplexity.ai/articles/securing-agents-across-perplexity%E2%80%99s-client-endpoints-with-numbat',
+    '2026-07-29',
+  ],
   'qwen-blog': [
     'Qwen3.8 technical report',
     'https://qwen.ai/blog?id=qwen3.8',

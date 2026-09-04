@@ -68,16 +68,16 @@ const approvedSourceRoutes = {
     ['html', 'https://alignment.openai.com/'],
   ]],
   'google-antigravity': ['https://antigravity.google/blog', [
+    ['rss', 'https://antigravity.google/blog/rss.xml'],
     ['html', 'https://antigravity.google/blog'],
-    ['sitemap', 'https://antigravity.google/sitemap.xml'],
   ]],
   'google-deepmind': ['https://deepmind.google/blog/', [
     ['sitemap', 'https://deepmind.google/sitemap.xml'],
     ['html', 'https://deepmind.google/blog/'],
   ]],
   'google-research': ['https://research.google/blog/', [
+    ['rss', 'https://research.google/blog/rss/'],
     ['html', 'https://research.google/blog/'],
-    ['sitemap', 'https://research.google/sitemap.xml'],
   ]],
   'microsoft-research': ['https://www.microsoft.com/en-us/research/blog/', [
     ['html', 'https://www.microsoft.com/en-us/research/blog/'],
@@ -91,8 +91,8 @@ const approvedSourceRoutes = {
     ['rss', 'https://research.ibm.com/rss'],
     ['html', 'https://research.ibm.com/blog'],
   ]],
-  'perplexity-research': ['https://research.perplexity.ai/articles', [
-    ['html', 'https://research.perplexity.ai/articles'],
+  'perplexity-research': ['https://research.perplexity.ai/', [
+    ['html', 'https://research.perplexity.ai/'],
     ['sitemap', 'https://research.perplexity.ai/sitemap.xml'],
   ]],
   'qwen-blog': ['https://qwen.ai/blog/', [

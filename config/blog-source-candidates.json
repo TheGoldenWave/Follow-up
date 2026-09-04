@@ -65,8 +65,8 @@
       "url": "https://antigravity.google/blog",
       "language": "en",
       "discovery": [
-        { "type": "html", "url": "https://antigravity.google/blog" },
-        { "type": "sitemap", "url": "https://antigravity.google/sitemap.xml" }
+        { "type": "rss", "url": "https://antigravity.google/blog/rss.xml" },
+        { "type": "html", "url": "https://antigravity.google/blog" }
       ],
       "articleUrlPatterns": ["^https://antigravity\\.google/blog/[^/?#]+/?$"],
       "excludeUrlPatterns": []
@@ -89,8 +89,8 @@
       "url": "https://research.google/blog/",
       "language": "en",
       "discovery": [
-        { "type": "html", "url": "https://research.google/blog/" },
-        { "type": "sitemap", "url": "https://research.google/sitemap.xml" }
+        { "type": "rss", "url": "https://research.google/blog/rss/" },
+        { "type": "html", "url": "https://research.google/blog/" }
       ],
       "articleUrlPatterns": ["^https://research\\.google/blog/[^/?#]+/?$"],
       "excludeUrlPatterns": []
@@ -136,10 +136,10 @@
     {
       "id": "perplexity-research",
       "name": "Perplexity Research Articles",
-      "url": "https://research.perplexity.ai/articles",
+      "url": "https://research.perplexity.ai/",
       "language": "en",
       "discovery": [
-        { "type": "html", "url": "https://research.perplexity.ai/articles" },
+        { "type": "html", "url": "https://research.perplexity.ai/" },
         { "type": "sitemap", "url": "https://research.perplexity.ai/sitemap.xml" }
       ],
       "articleUrlPatterns": ["^https://research\\.perplexity\\.ai/articles/[^/?#]+/?$"],
