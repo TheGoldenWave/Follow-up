@@ -214,6 +214,15 @@ function semanticTime(html) {
   return (attributes.datetime || attributes.content || cleanHtmlText(match[2])).trim();
 }
 
+function firstParseableDate(values) {
+  for (const value of values) {
+    if (typeof value !== 'string' && typeof value !== 'number') continue;
+    const raw = String(value).trim();
+    if (raw && !Number.isNaN(Date.parse(raw))) return raw;
+  }
+  return null;
+}
+
 function jsonLdUrl(article) {
   if (typeof article?.url === 'string') return article.url;
   if (typeof article?.mainEntityOfPage === 'string') return article.mainEntityOfPage;
@@ -249,11 +258,12 @@ export function extractBlogArticle(html, articleUrl, source = {}) {
     firstMeta(html, ['og:title', 'twitter:title', 'title']) ||
     semanticText(html, 'h1') || site?.title || '',
   )).trim();
-  const publishedAt = String(
-    structured?.datePublished ||
-    firstMeta(html, ['article:published_time', 'datepublished', 'date', 'pubdate']) ||
-    semanticTime(html) || site?.publishedAt || '',
-  ).trim() || null;
+  const publishedAt = firstParseableDate([
+    structured?.datePublished,
+    firstMeta(html, ['article:published_time', 'datepublished', 'date', 'pubdate']),
+    semanticTime(html),
+    site?.publishedAt,
+  ]);
   const author = decodeEntities(
     authorName(structured?.author) || firstMeta(html, ['author', 'article:author']) || site?.author || '',
   ).trim();
@@ -266,7 +276,7 @@ export function extractBlogArticle(html, articleUrl, source = {}) {
   const canonicalUrl = canonicalizeArticleUrl(canonicalCandidate, articleUrl || source.url);
 
   let content = typeof structured?.articleBody === 'string'
-    ? decodeEntities(structured.articleBody).replace(/\s+/g, ' ').trim()
+    ? cleanHtmlText(structured.articleBody)
     : '';
   if (!content && site?.content) content = cleanSiteParserContent(site.content, html);
   if (!content) content = semanticText(html, 'article') || semanticText(html, 'main');

@@ -68,7 +68,8 @@ const genericSource = {
 };
 
 function jsonLdHtml(value, body = '') {
-  return `<html><head><script type="application/ld+json">${JSON.stringify(value)}</script></head><body>${body}</body></html>`;
+  const json = JSON.stringify(value).replace(/<\/script>/gi, '<\\/script>');
+  return `<html><head><script type="application/ld+json">${json}</script></head><body>${body}</body></html>`;
 }
 
 test('extractBlogArticle finds every approved article type in JSON-LD objects, arrays, and @graph', () => {
@@ -136,6 +137,41 @@ test('JSON-LD metadata wins over Open Graph and semantic metadata', () => {
     description: 'Structured description',
     content: body,
   });
+});
+
+test('invalid or non-scalar publish dates from JSON-LD, meta, and time become null', () => {
+  const body = longText('Date validation body');
+  const cases = [
+    jsonLdHtml({
+      '@type': 'Article',
+      headline: 'Structured invalid date',
+      datePublished: { value: '2026-09-03' },
+      articleBody: body,
+    }),
+    `<html><head><meta name="date" content="not-a-date"></head><body><h1>Meta invalid date</h1><article>${body}</article></body></html>`,
+    `<html><body><h1>Time invalid date</h1><time datetime="not-a-date"></time><article>${body}</article></body></html>`,
+  ];
+
+  for (const [index, html] of cases.entries()) {
+    assert.equal(blogExtraction.extractBlogArticle(
+      html,
+      `https://example.com/blog/invalid-date-${index}`,
+      genericSource,
+    )?.publishedAt, null);
+  }
+});
+
+test('a valid scalar publish date remains raw and parseable', () => {
+  const rawDate = 'Sep 3, 2026';
+  const result = blogExtraction.extractBlogArticle(jsonLdHtml({
+    '@type': 'Article',
+    headline: 'Raw valid date',
+    datePublished: rawDate,
+    articleBody: longText('Raw date body'),
+  }), 'https://example.com/blog/raw-date', genericSource);
+
+  assert.equal(result.publishedAt, rawDate);
+  assert.equal(Number.isNaN(Date.parse(result.publishedAt)), false);
 });
 
 test('Open Graph and standard meta values provide metadata fallbacks', () => {
@@ -290,6 +326,29 @@ test('content extraction decodes entities and removes non-content elements', () 
   );
   assert.equal(result?.content, `Research & development \u2014 ${'meaningful text '.repeat(18)}`.trim());
   assert.doesNotMatch(result.content, /noise|secret|hidden/);
+});
+
+test('JSON-LD articleBody uses shared entity and boilerplate cleaning', () => {
+  const visible = `Structured &amp; clean ${'meaningful paragraph '.repeat(16)}`.trim();
+  const articleBody = `<nav>${'navigation noise '.repeat(30)}</nav><script>${'script noise '.repeat(30)}</script><p>${visible}</p>`;
+  const result = blogExtraction.extractBlogArticle(jsonLdHtml({
+    '@type': 'Article',
+    headline: 'Clean structured body',
+    articleBody,
+  }), 'https://example.com/blog/clean-structured-body', genericSource);
+
+  assert.equal(result.content, `Structured & clean ${'meaningful paragraph '.repeat(16)}`.trim());
+  assert.doesNotMatch(result.content, /navigation|script/);
+});
+
+test('JSON-LD articleBody length threshold counts only cleaned content', () => {
+  const articleBody = `<nav>${'navigation noise '.repeat(40)}</nav><script>${'script noise '.repeat(40)}</script><p>${'x '.repeat(199)}</p>`;
+
+  assert.equal(blogExtraction.extractBlogArticle(jsonLdHtml({
+    '@type': 'Article',
+    headline: 'Short structured body',
+    articleBody,
+  }), 'https://example.com/blog/short-structured-body', genericSource), null);
 });
 
 test('rejects extracted content below 200 non-whitespace characters', () => {
