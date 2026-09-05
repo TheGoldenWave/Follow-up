@@ -2,7 +2,7 @@
 
 import { randomUUID as systemRandomUUID } from 'node:crypto';
 import * as systemFs from 'node:fs/promises';
-import { basename, isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
@@ -10,7 +10,6 @@ import { validateSelectionAgainstRequest } from './digest-selection.js';
 import {
   AtomicWriteCommittedError,
   writeJsonAtomic,
-  writeTextAtomic,
 } from './prepare-digest.js';
 import { sanitizeDiagnostic } from './source-status.js';
 import { INPUT_BYTE_LIMITS, readJsonLimited } from './validate-digest-selection.js';
@@ -130,20 +129,133 @@ export function finalizeDigest(request, selection) {
   };
 }
 
+async function closeQuietly(handle) {
+  try { await handle?.close(); } catch { /* Preserve the primary failure. */ }
+}
+
+async function rejectSymlink(path, fsImpl, allowMissing = false) {
+  try {
+    if ((await fsImpl.lstat(path)).isSymbolicLink()) throw new Error('unsafe symbolic link');
+  } catch (error) {
+    if (allowMissing && error?.code === 'ENOENT') return;
+    throw error;
+  }
+}
+
+async function writeDurableFile(path, contents, fsImpl) {
+  let handle;
+  try {
+    handle = await fsImpl.open(path, 'wx', 0o600);
+    await handle.writeFile(contents, 'utf8');
+    await handle.sync();
+  } finally {
+    await closeQuietly(handle);
+  }
+}
+
+async function fsyncDirectory(path, fsImpl) {
+  const handle = await fsImpl.open(path, 'r');
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+
+export async function activateDigestGeneration(outputDir, artifact, message, {
+  fsImpl = systemFs,
+  randomUUID = systemRandomUUID,
+} = {}) {
+  const root = resolve(outputDir);
+  const generations = join(root, 'generations');
+  let stagingDir;
+  let generationDir;
+  let generation;
+  let generationVisible = false;
+  try {
+    await rejectSymlink(root, fsImpl, true);
+    await fsImpl.mkdir(root, { recursive: true, mode: 0o700 });
+    await rejectSymlink(root, fsImpl);
+    await rejectSymlink(generations, fsImpl, true);
+    await fsImpl.mkdir(generations, { recursive: true, mode: 0o700 });
+    await rejectSymlink(generations, fsImpl);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = randomUUID();
+      if (typeof token !== 'string' || !/^[a-z0-9-]+$/iu.test(token)) {
+        throw new Error('invalid generation token');
+      }
+      generation = `${artifact.digestId}-${token}`;
+      stagingDir = join(generations, `.staging-${generation}`);
+      generationDir = join(generations, generation);
+      await rejectSymlink(stagingDir, fsImpl, true);
+      await rejectSymlink(generationDir, fsImpl, true);
+      try {
+        await fsImpl.mkdir(stagingDir, { mode: 0o700 });
+        break;
+      } catch (error) {
+        if (error?.code !== 'EEXIST' || attempt === 2) throw error;
+      }
+    }
+
+    await writeDurableFile(
+      join(stagingDir, 'artifact.json'), `${JSON.stringify(artifact, null, 2)}\n`, fsImpl,
+    );
+    await writeDurableFile(join(stagingDir, 'message.txt'), message, fsImpl);
+    const manifest = {
+      schemaVersion: '1.0',
+      generation,
+      digestId: artifact.digestId,
+      requestHash: artifact.requestHash,
+      artifact: 'artifact.json',
+      message: 'message.txt',
+    };
+    await writeDurableFile(
+      join(stagingDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, fsImpl,
+    );
+    await fsyncDirectory(stagingDir, fsImpl);
+    await fsImpl.rename(stagingDir, generationDir);
+    generationVisible = true;
+    await fsyncDirectory(generations, fsImpl);
+
+    const active = {
+      schemaVersion: '1.0', generation, digestId: artifact.digestId,
+      artifact: 'artifact.json', message: 'message.txt',
+    };
+    try {
+      await writeJsonAtomic(join(root, 'active.json'), active, {
+        fsImpl, randomUUID, label: 'digest activation',
+      });
+    } catch (error) {
+      if (error instanceof AtomicWriteCommittedError) throw error;
+      await fsImpl.rm(generationDir, { recursive: true, force: true }).catch(() => {});
+      generationVisible = false;
+      throw error;
+    }
+    return { active, generationDir };
+  } catch (error) {
+    if (error instanceof AtomicWriteCommittedError) throw error;
+    if (stagingDir) await fsImpl.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+    if (generationVisible && generationDir) {
+      await fsImpl.rm(generationDir, { recursive: true, force: true }).catch(() => {});
+    }
+    throw new Error('digest generation could not be activated', { cause: error });
+  }
+}
+
 function parseOptions(argv) {
   return parseCommandLine(argv, {
     options: {
-      request: { type: 'string' }, selection: { type: 'string' }, output: { type: 'string' },
+      request: { type: 'string' }, selection: { type: 'string' }, 'output-dir': { type: 'string' },
+      output: { type: 'string' },
       'message-out': { type: 'string' },
     },
     validate({ values, positionals }) {
       if (positionals.length) throw new CommandLineUsageError('unexpected positional arguments');
-      for (const name of ['request', 'selection', 'output']) {
+      for (const name of ['request', 'selection']) {
         if (!values[name]) throw new CommandLineUsageError(`--${name} is required`);
         if (!isAbsolute(values[name])) throw new CommandLineUsageError(`--${name} must be absolute`);
       }
-      if (values['message-out'] && !isAbsolute(values['message-out'])) {
-        throw new CommandLineUsageError('--message-out must be absolute');
+      if (!values['output-dir']) throw new CommandLineUsageError('--output-dir is required');
+      if (!isAbsolute(values['output-dir'])) throw new CommandLineUsageError('--output-dir must be absolute');
+      if (values.output || values['message-out']) {
+        throw new CommandLineUsageError('--output and --message-out are replaced by --output-dir');
       }
     },
   }).values;
@@ -167,13 +279,15 @@ export async function main({
     }
     const selection = await readJsonLimited(options.selection, 'selection', limits.selectionBytes, fsImpl);
     const artifact = finalizeDigest(request, selection);
-    if (options['message-out']) {
-      await writeTextAtomic(options['message-out'], renderDigestMessage(artifact), {
-        fsImpl, randomUUID, label: 'message output',
-      });
-    }
-    await writeJsonAtomic(options.output, artifact, { fsImpl, randomUUID, label: 'output' });
-    stdout.write(`${JSON.stringify({ status: artifact.status, digestId: artifact.digestId })}\n`);
+    const activated = await activateDigestGeneration(
+      options['output-dir'], artifact, renderDigestMessage(artifact), { fsImpl, randomUUID },
+    );
+    stdout.write(`${JSON.stringify({
+      status: artifact.status,
+      digestId: artifact.digestId,
+      activePath: join(options['output-dir'], 'active.json'),
+      generation: activated.active.generation,
+    })}\n`);
     return 0;
   } catch (error) {
     if (error instanceof AtomicWriteCommittedError) {
@@ -183,8 +297,8 @@ export async function main({
     const known = new Set([
       'request: invalid JSON', 'request: could not be read', 'request: input exceeds byte limit',
       'selection: invalid JSON', 'selection: could not be read', 'selection: input exceeds byte limit',
-      'selection manifest is invalid', 'output could not be written',
-      'message output could not be written', 'selection filename must match digestId',
+      'selection manifest is invalid', 'selection filename must match digestId',
+      'digest generation could not be activated',
     ]);
     stderr.write(`preparation-failed: ${known.has(error.message) ? error.message : 'digest finalization failed'}\n`);
     return 1;

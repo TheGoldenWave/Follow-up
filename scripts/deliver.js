@@ -22,8 +22,9 @@
 
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import { homedir } from 'os';
+import { pathToFileURL } from 'url';
 import { config as loadEnv } from 'dotenv';
 
 // -- Constants ---------------------------------------------------------------
@@ -35,8 +36,28 @@ const ENV_PATH = join(USER_DIR, '.env');
 // -- Read input --------------------------------------------------------------
 
 // The digest text can come from stdin, --message flag, or --file flag
-async function getDigestText() {
-  const args = process.argv.slice(2);
+export async function loadActiveDigestMessage(activePath, { readFileImpl = readFile } = {}) {
+  if (basename(activePath) !== 'active.json') throw new Error('Active digest path must name active.json');
+  let active;
+  try { active = JSON.parse(await readFileImpl(activePath, 'utf8')); }
+  catch { throw new Error('Active digest could not be read'); }
+  if (!active || active.schemaVersion !== '1.0'
+      || typeof active.generation !== 'string'
+      || !/^[A-Za-z0-9][A-Za-z0-9.-]{0,399}$/u.test(active.generation)
+      || active.artifact !== 'artifact.json' || active.message !== 'message.txt') {
+    throw new Error('Active digest is invalid');
+  }
+  return readFileImpl(
+    join(dirname(resolve(activePath)), 'generations', active.generation, active.message),
+    'utf8',
+  );
+}
+
+async function getDigestText(args = process.argv.slice(2)) {
+  const activeIdx = args.indexOf('--active');
+  if (activeIdx !== -1 && args[activeIdx + 1]) {
+    return loadActiveDigestMessage(args[activeIdx + 1]);
+  }
 
   // Check --message flag
   const msgIdx = args.indexOf('--message');
@@ -151,7 +172,7 @@ async function sendEmail(text, apiKey, toEmail) {
 
 // -- Main --------------------------------------------------------------------
 
-async function main() {
+export async function main() {
   // Load env and config
   loadEnv({ path: ENV_PATH });
 
@@ -214,4 +235,6 @@ async function main() {
   }
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  await main();
+}

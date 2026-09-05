@@ -328,10 +328,10 @@ cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js --request-out <absolute
 ### Step 5: Finalize
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node finalize-digest.js --request <absolute-request-path> --selection <absolute-selection-path> --output <absolute-artifact-path> --message-out <absolute-message-path> 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node finalize-digest.js --request <absolute-request-path> --selection <absolute-selection-path> --output-dir <absolute-output-directory> 2>/dev/null
 ```
 
-finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确定性选择，然后分别原子写最终 JSON artifact 与纯文本用户消息。JSON artifact 供 ledger/outbox 使用，不能直接作为用户消息发送。状态含义如下：
+finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确定性选择。它先在同一 staging generation 内完整写入并持久化 `artifact.json`、`message.txt` 与 manifest，再以一次目录 rename 发布 generation，最后原子更新 `<absolute-output-directory>/active.json`。只有 `active.json` 指向的 generation 可投递；JSON artifact 供 ledger/outbox 使用，不能直接作为用户消息发送。状态含义如下：
 
 - `ready`：完整检查且有 1-10 条合格更新。
 - `no-important-updates`：完整检查且没有合格项；daily 为“今日无重要更新”，weekly 为“本周无重要更新”。
@@ -347,12 +347,12 @@ Read `config.delivery.method` from the JSON:
 
 **If "telegram" or "email":**
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --file <absolute-message-path> 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json 2>/dev/null
 ```
 If delivery fails, show the digest in the terminal as fallback.
 
 **If "stdout" (default):**
-展示 `<absolute-message-path>` 中的纯文本消息。不要原样展示 JSON artifact，也不要展示 request 中未选择的候选。
+解析 `<absolute-output-directory>/active.json`，只展示它指向的同代 `message.txt`。不要直接读取未激活 generation，不要原样展示 JSON artifact，也不要展示 request 中未选择的候选。
 
 任一步失败都必须停止后续步骤。特别是 finalize 失败时，不得读取旧 output 并继续投递。若返回 `committed-but-uncertain`，文件内容已经完成 rename，但目录持久化无法确认；禁止自动重写或重试同一 digest，等待人工或后续恢复流程核对。
 
