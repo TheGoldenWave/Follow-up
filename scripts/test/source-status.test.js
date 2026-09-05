@@ -43,13 +43,24 @@ test('partial and error diagnostics name the source but redact secrets and perso
       'request failed\nCookie: sid=first-secret; csrf=second-secret\nretry stopped',
       'response failed\r\nSet-Cookie: sid=set-secret; HttpOnly\r\nretry stopped',
       'cookie=session-secret at (/Users/alice/private/feed.json)',
+      'AWS_SECRET_ACCESS_KEY="very secret aws value"',
+      "api key='quoted api secret value'",
+      'client-secret: client secret with spaces',
+      'password = unquoted password with spaces',
+      'OPENAI_API_KEY="openai secret with spaces"',
+      "GITHUB_TOKEN='github secret value'",
+      'service-secret_key=generic underscore secret',
+      'service secret-key: generic hyphen secret',
+      'request failed: OPENAI_API_KEY="embedded secret value"',
+      'details (GITHUB_TOKEN=parenthesized secret)',
+      'foo=public, OPENAI_API_KEY=comma secret value',
     ],
   });
   const serialized = JSON.stringify(status);
 
   assert.equal(status.status, 'error');
   assert.match(serialized, /Private Letter/);
-  assert.doesNotMatch(serialized, /abc123|person@example\.com|auth-secret|client-secret|refresh-secret|first-secret|second-secret|set-secret|session-secret|\/Users\/alice/);
+  assert.doesNotMatch(serialized, /abc123|person@example\.com|auth-secret|client-secret|refresh-secret|first-secret|second-secret|set-secret|session-secret|very secret aws value|quoted api secret value|client secret with spaces|unquoted password with spaces|openai secret with spaces|github secret value|generic underscore secret|generic hyphen secret|embedded secret value|parenthesized secret|comma secret value|\/Users\/alice/);
   assert.match(serialized, /\[REDACTED\]/);
 });
 

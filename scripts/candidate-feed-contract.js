@@ -9,8 +9,8 @@ import {
   createContentFingerprint,
 } from './candidate-identity.js';
 import {
-  DEFAULT_CONTENT_BYTE_LIMIT,
-  PODCAST_CONTENT_BYTE_LIMIT,
+  DEFAULT_CONTENT_CHARACTER_LIMIT,
+  PODCAST_CONTENT_CHARACTER_LIMIT,
 } from './candidate-normalization.js';
 
 export const CANDIDATE_FEED_SCHEMA_VERSION = '1.0';
@@ -123,11 +123,36 @@ function semanticErrors(feed) {
     }
     if (typeof candidate.summarizationContent === 'string') {
       const limit = candidate.channel === 'podcasts'
-        ? PODCAST_CONTENT_BYTE_LIMIT
-        : DEFAULT_CONTENT_BYTE_LIMIT;
-      if (Buffer.byteLength(candidate.summarizationContent, 'utf8') > limit) {
-        errors.push(`/candidates/${index}/summarizationContent exceeds the ${limit}-byte limit`);
+        ? PODCAST_CONTENT_CHARACTER_LIMIT
+        : DEFAULT_CONTENT_CHARACTER_LIMIT;
+      if (Array.from(candidate.summarizationContent).length > limit) {
+        errors.push(`/candidates/${index}/summarizationContent exceeds the ${limit}-character limit`);
       }
+    }
+  }
+  return errors;
+}
+
+function timestampErrors(feed) {
+  const errors = [];
+  const generatedAt = Date.parse(feed.generatedAt);
+  if (!Number.isFinite(generatedAt)) return errors;
+  for (const field of ['initializedAt', 'continuousHistorySince']) {
+    const timestamp = Date.parse(feed[field]);
+    if (Number.isFinite(timestamp) && timestamp > generatedAt) {
+      errors.push(`/${field} must not be later than /generatedAt`);
+    }
+  }
+  if (!Array.isArray(feed.candidates)) return errors;
+  for (const [index, candidate] of feed.candidates.entries()) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const firstSeenAt = Date.parse(candidate.firstSeenAt);
+    const lastSeenAt = Date.parse(candidate.lastSeenAt);
+    if (Number.isFinite(firstSeenAt) && Number.isFinite(lastSeenAt) && firstSeenAt > lastSeenAt) {
+      errors.push(`/candidates/${index}/firstSeenAt must not be later than lastSeenAt`);
+    }
+    if (Number.isFinite(lastSeenAt) && lastSeenAt > generatedAt) {
+      errors.push(`/candidates/${index}/lastSeenAt must not be later than /generatedAt`);
     }
   }
   return errors;
@@ -176,6 +201,7 @@ export function validateCandidateFeed(feed, { expectedRegistry } = {}) {
   if (feed && typeof feed === 'object' && !Array.isArray(feed)) {
     errors.push(...uniquenessErrors(feed));
     errors.push(...semanticErrors(feed));
+    errors.push(...timestampErrors(feed));
     errors.push(...registryCoverageErrors(feed, expectedRegistry));
   }
   return { valid: errors.length === 0, errors };

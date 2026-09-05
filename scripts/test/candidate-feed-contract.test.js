@@ -146,16 +146,57 @@ test('returns validation errors rather than throwing for malformed collection fi
   }
 });
 
-test('recomputes canonical identity and content hashes and enforces UTF-8 byte limits', () => {
+test('recomputes canonical identity and content hashes and enforces Unicode character limits', () => {
   for (const mutation of [
     (candidate) => { candidate.canonicalUrl = 'https://example.com/post/?utm_source=feed#top'; },
     (candidate) => { candidate.candidateId = 'a'.repeat(64); },
     (candidate) => { candidate.contentFingerprint = 'b'.repeat(64); },
-    (candidate) => { candidate.summarizationContent = `${'a'.repeat(23_999)}😀`; candidate.contentTruncated = false; },
   ]) {
     const fields = validFields();
     mutation(fields.candidates[0]);
     assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, false);
+  }
+});
+
+test('accepts exact character limits and rejects one extra astral code point', () => {
+  for (const { channel, sourceId, sourceName, limit } of [
+    { channel: 'blogs', sourceId: 'blog:lab', sourceName: 'Lab', limit: 24_000 },
+    { channel: 'podcasts', sourceId: 'podcast:show', sourceName: 'Show', limit: 80_000 },
+  ]) {
+    const registry = [{ id: sourceId, channel, name: sourceName }];
+    const fields = validFields();
+    fields.registry = [{ sourceId, channel, sourceName, status: 'ok', candidateCount: 1 }];
+    const candidate = fields.candidates[0];
+    candidate.channel = channel;
+    candidate.sourceId = sourceId;
+    candidate.summarizationContent = '😀'.repeat(limit);
+    candidate.candidateId = createCandidateId(candidate);
+    candidate.contentFingerprint = createContentFingerprint(candidate);
+    assert.equal(validate({ schemaVersion: '1.0', ...fields }, registry).valid, true);
+
+    candidate.summarizationContent += '😀';
+    candidate.contentFingerprint = createContentFingerprint(candidate);
+    const result = validate({ schemaVersion: '1.0', ...fields }, registry);
+    assert.equal(result.valid, false);
+    assert.ok(result.errors.some((error) => (
+      error.includes('/candidates/0/summarizationContent')
+        && (error.includes('characters') || error.includes('more than'))
+    )));
+  }
+});
+
+test('enforces feed and candidate timestamp ordering invariants', () => {
+  for (const [message, mutation] of [
+    ['initializedAt', (fields) => { fields.initializedAt = '2026-09-07T00:00:00.000Z'; }],
+    ['continuousHistorySince', (fields) => { fields.continuousHistorySince = '2026-09-07T00:00:00.000Z'; }],
+    ['firstSeenAt', (fields) => { fields.candidates[0].firstSeenAt = '2026-09-06T02:00:00.000Z'; }],
+    ['lastSeenAt', (fields) => { fields.candidates[0].lastSeenAt = '2026-09-06T02:00:00.000Z'; }],
+  ]) {
+    const fields = validFields();
+    mutation(fields);
+    const result = validate({ schemaVersion: '1.0', ...fields });
+    assert.equal(result.valid, false, message);
+    assert.ok(result.errors.some((error) => error.includes(message)), message);
   }
 });
 

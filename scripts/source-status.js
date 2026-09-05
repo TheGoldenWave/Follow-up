@@ -1,15 +1,21 @@
 import { ENABLED_CHANNELS } from './config-contract.js';
 
 const COMPLETE_STATUSES = new Set(['ok', 'no-results']);
+function redactSensitiveAssignments(value) {
+  return value.replace(
+    /\b(?:[A-Za-z0-9]+[\s_-]+)*(?:api[\s_-]*key|secret[\s_-]*(?:access[\s_-]*)?key|access[\s_-]*token|refresh[\s_-]*token|client[\s_-]*secret|authorization|password|cookie|session|token)\s*[:=]\s*[^\r\n]*/giu,
+    '[REDACTED]',
+  );
+}
 
 export function sanitizeDiagnostic(value) {
-  return String(value)
+  return redactSensitiveAssignments(String(value))
     .replace(/https?:\/\/[^\s"'<>]+/giu, '[URL]')
     .replace(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+/giu, '[REDACTED]')
     .replace(/\b(?:Set-Cookie|Cookie)\s*:\s*[^\r\n]*/giu, '[REDACTED]')
     .replace(/\bBearer\s+[^\s,;]+/giu, '[REDACTED]')
     .replace(/\bAuthorization\s*:\s*[^,;]+/giu, '[REDACTED]')
-    .replace(/\b(?:token|access_token|refresh_token|client_secret|api[_-]?key|authorization|cookie|session|password)\s*[:=]\s*[^\s,;]+/giu, '[REDACTED]')
+    .replace(/\b(?:aws[\s_-]*secret[\s_-]*access[\s_-]*key|access[\s_-]*token|refresh[\s_-]*token|client[\s_-]*secret|api[\s_-]*key|authorization|cookie|session|password|token)\s*[:=]\s*[^\r\n]*/giu, '[REDACTED]')
     .replace(/file:\/\/[^\s,;)]+/giu, '[REDACTED]')
     .replace(/\/(?:Users|home|tmp|private|var|opt|etc)\/[^\s,;)]+/gu, '[REDACTED]')
     .replace(/[A-Za-z]:\\[^\s,;)]+/gu, '[REDACTED]')

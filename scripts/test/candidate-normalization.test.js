@@ -3,10 +3,13 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import {
+  DEFAULT_CONTENT_CHARACTER_LIMIT,
   LEGACY_SOURCE_ID_MAP,
   normalizeLegacyFeeds,
-  truncateUtf8,
+  PODCAST_CONTENT_CHARACTER_LIMIT,
+  truncateUnicode,
 } from '../candidate-normalization.js';
+import { loadSourceRegistry } from '../source-registry.js';
 
 const seenAt = '2026-09-06T08:00:00.000Z';
 const registry = [
@@ -92,9 +95,9 @@ test('falls back to canonical URL identity when a legacy item has no native ID',
   assert.match(first.candidateId, /^[a-f0-9]{64}$/);
 });
 
-test('caps normal content at 24,000 UTF-8 bytes and podcast transcripts at 80,000', () => {
-  const normalContent = `${'a'.repeat(23_999)}😀tail`;
-  const podcastContent = `${'b'.repeat(79_999)}😀tail`;
+test('caps content by Unicode code points without splitting surrogate pairs', () => {
+  const normalContent = `${'中'.repeat(24_000)}😀tail`;
+  const podcastContent = `${'播'.repeat(80_000)}😀tail`;
   const feeds = legacyFeeds();
   feeds.blogs.blogs[0].content = normalContent;
   feeds.podcasts.podcasts[0].transcript = podcastContent;
@@ -103,12 +106,16 @@ test('caps normal content at 24,000 UTF-8 bytes and podcast transcripts at 80,00
   const blog = candidates.find(({ channel }) => channel === 'blogs');
   const podcast = candidates.find(({ channel }) => channel === 'podcasts');
 
-  assert.equal(Buffer.byteLength(blog.summarizationContent), 23_999);
-  assert.equal(Buffer.byteLength(podcast.summarizationContent), 79_999);
+  assert.equal(Array.from(blog.summarizationContent).length, DEFAULT_CONTENT_CHARACTER_LIMIT);
+  assert.equal(Array.from(podcast.summarizationContent).length, PODCAST_CONTENT_CHARACTER_LIMIT);
   assert.equal(blog.contentTruncated, true);
   assert.equal(podcast.contentTruncated, true);
   assert.doesNotMatch(blog.summarizationContent, /\uFFFD/);
-  assert.deepEqual(truncateUtf8('a😀b', 5), { content: 'a😀', truncated: true });
+  assert.deepEqual(truncateUnicode('a😀b', 2), { content: 'a😀', truncated: true });
+  assert.deepEqual(truncateUnicode('中'.repeat(24_000), 24_000), {
+    content: '中'.repeat(24_000), truncated: false,
+  });
+  assert.equal(Array.from(truncateUnicode('中'.repeat(24_001), 24_000).content).length, 24_000);
 });
 
 test('rejects legacy items whose source is absent or ambiguous in the registry', () => {
@@ -191,6 +198,10 @@ test('frozen legacy mapping matches the independently audited 70-source fixture'
     'utf8',
   ));
   assert.equal(expected.length, 70);
+  const fixtureIds = expected.map(({ sourceId }) => sourceId);
+  assert.equal(new Set(fixtureIds).size, fixtureIds.length);
+  const registryIds = (await loadSourceRegistry()).map(({ id }) => id);
+  assert.deepEqual([...fixtureIds].sort(), [...registryIds].sort());
   for (const { channel, legacyKey, sourceId } of expected) {
     assert.equal(LEGACY_SOURCE_ID_MAP[channel]?.[legacyKey], sourceId, `${channel}: ${legacyKey}`);
   }

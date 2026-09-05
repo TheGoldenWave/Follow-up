@@ -166,7 +166,22 @@
         "contentFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "summarizationContent": { "type": "string" },
         "contentTruncated": { "type": "boolean" }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "channel": { "const": "podcasts" } } },
+          "then": {
+            "properties": {
+              "summarizationContent": { "maxLength": 80000 }
+            }
+          },
+          "else": {
+            "properties": {
+              "summarizationContent": { "maxLength": 24000 }
+            }
+          }
+        }
+      ]
     }
   }
 }

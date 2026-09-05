@@ -4,8 +4,8 @@ import {
   createContentFingerprint,
 } from './candidate-identity.js';
 
-export const DEFAULT_CONTENT_BYTE_LIMIT = 24_000;
-export const PODCAST_CONTENT_BYTE_LIMIT = 80_000;
+export const DEFAULT_CONTENT_CHARACTER_LIMIT = 24_000;
+export const PODCAST_CONTENT_CHARACTER_LIMIT = 80_000;
 
 const CHANNEL_SPECS = [
   ['x', 'x'],
@@ -114,24 +114,16 @@ export const LEGACY_SOURCE_ID_MAP = Object.freeze({
   }),
 });
 
-export function truncateUtf8(value, maxBytes) {
+export function truncateUnicode(value, maxCharacters) {
   const text = typeof value === 'string' ? value : '';
-  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
-    throw new TypeError('maxBytes must be a non-negative safe integer');
+  if (!Number.isSafeInteger(maxCharacters) || maxCharacters < 0) {
+    throw new TypeError('maxCharacters must be a non-negative safe integer');
   }
-  if (Buffer.byteLength(text, 'utf8') <= maxBytes) {
+  const codePoints = Array.from(text);
+  if (codePoints.length <= maxCharacters) {
     return { content: text, truncated: false };
   }
-
-  const parts = [];
-  let length = 0;
-  for (const codePoint of text) {
-    const bytes = Buffer.byteLength(codePoint, 'utf8');
-    if (length + bytes > maxBytes) break;
-    parts.push(codePoint);
-    length += bytes;
-  }
-  return { content: parts.join(''), truncated: true };
+  return { content: codePoints.slice(0, maxCharacters).join(''), truncated: true };
 }
 
 function normalizeDate(value, fallback = null) {
@@ -196,9 +188,9 @@ function buildCandidate(item, context) {
   }
   const sourceNativeId = item.id || item.guid || undefined;
   const limit = context.channel === 'podcasts'
-    ? PODCAST_CONTENT_BYTE_LIMIT
-    : DEFAULT_CONTENT_BYTE_LIMIT;
-  const { content: summarizationContent, truncated: contentTruncated } = truncateUtf8(
+    ? PODCAST_CONTENT_CHARACTER_LIMIT
+    : DEFAULT_CONTENT_CHARACTER_LIMIT;
+  const { content: summarizationContent, truncated: contentTruncated } = truncateUnicode(
     chooseContent(item, context.channel),
     limit,
   );
