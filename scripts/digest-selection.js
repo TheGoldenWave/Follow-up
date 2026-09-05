@@ -106,6 +106,7 @@ export function validateSelectionAgainstRequest(request, manifest, { excludedCan
   if (!requestResult.valid || !selectionResult.valid) return { valid: false, errors };
 
   if (request.digestId !== manifest.digestId) errors.push('/digestId must match the curation request');
+  if (request.requestHash !== manifest.requestHash) errors.push('/requestHash must match the curation request');
   const candidateById = new Map(request.eligibleCandidates.map((candidate) => [candidate.candidateId, candidate]));
   const excluded = new Set(excludedCandidateIds);
   const assigned = new Map();

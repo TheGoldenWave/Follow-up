@@ -72,12 +72,25 @@ function semanticErrors(feed) {
   const errors = [];
   const registry = Array.isArray(feed.registry) ? feed.registry : [];
   const candidates = Array.isArray(feed.candidates) ? feed.candidates : [];
+  const actualCandidateCounts = new Map();
+  for (const candidate of candidates) {
+    if (typeof candidate?.sourceId !== 'string') continue;
+    actualCandidateCounts.set(
+      candidate.sourceId,
+      (actualCandidateCounts.get(candidate.sourceId) ?? 0) + 1,
+    );
+  }
   for (const [index, source] of registry.entries()) {
     if (typeof source?.sourceId === 'string' && typeof source?.channel === 'string'
       && !source.sourceId.startsWith(`${expectedNamespace(source.channel)}:`)) {
       errors.push(`/registry/${index}/sourceId must use the namespace for its channel`);
     }
-    if (source?.status === 'ok' && source.candidateCount < 1) {
+    const actualCandidateCount = actualCandidateCounts.get(source?.sourceId) ?? 0;
+    if (Number.isSafeInteger(source?.candidateCount)
+        && source.candidateCount !== actualCandidateCount) {
+      errors.push(`/registry/${index}/candidateCount must match actual candidates for its source`);
+    }
+    if (source?.status === 'ok' && actualCandidateCount < 1) {
       errors.push(`/registry/${index}/candidateCount must be positive for ok status`);
     }
     if ((source?.status === 'ok' || source?.status === 'no-results')
@@ -88,12 +101,8 @@ function semanticErrors(feed) {
       && source.errorSummary !== undefined) {
       errors.push(`/registry/${index}/errorSummary is incompatible with ${source.status} status`);
     }
-    if ((source?.status === 'no-results' || source?.status === 'error')
-      && source.candidateCount !== 0) {
-      errors.push(`/registry/${index}/candidateCount must be zero for ${source.status} status`);
-    }
-    if (source?.status === 'partial' && source.candidateCount < 1) {
-      errors.push(`/registry/${index}/candidateCount must be positive for partial status`);
+    if (source?.status === 'no-results' && actualCandidateCount !== 0) {
+      errors.push(`/registry/${index}/candidateCount must be zero for no-results status`);
     }
   }
 

@@ -65,7 +65,10 @@ function prior(candidates = [], overrides = {}) {
     retention: { defaultDays: 15, podcastDays: 30, minimumPerSource: 50, maxCandidates: 1000 },
     historyTruncated: false,
     truncation: { affectedSourceIds: [], oldestRetainedAt: null, removedCount: 0 },
-    registry: registry.map((source) => status(source)),
+    registry: registry.map((source) => status(
+      source,
+      candidates.filter(({ sourceId }) => sourceId === source.id).length,
+    )),
     candidates,
     ...overrides,
   };
@@ -145,6 +148,16 @@ test('merge preserves firstSeenAt, lets current content win, and collapses ident
   assert.equal(updated.title, 'New');
   assert.equal(updated.summarizationContent, 'New');
   assert.equal(merged.candidates.find(({ sourceId }) => sourceId === 'x:b').contentFingerprint, updated.contentFingerprint);
+  assert.deepEqual(
+    merged.registry.filter(({ sourceId }) => sourceId === 'x:a' || sourceId === 'x:b')
+      .map(({ sourceId, status: sourceStatus, candidateCount }) => ({
+        sourceId, status: sourceStatus, candidateCount,
+      })),
+    [
+      { sourceId: 'x:a', status: 'ok', candidateCount: 1 },
+      { sourceId: 'x:b', status: 'ok', candidateCount: 1 },
+    ],
+  );
 });
 
 test('retains 15 complete days, 30 podcast days, and the newest 50 per source after retention', () => {

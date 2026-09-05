@@ -268,3 +268,24 @@ test('structural validation permits missing expected statuses but rejects unknow
   mismatched.registry[0].channel = 'x';
   assert.equal(validateCandidateFeedStructure(mismatched, { expectedRegistry: configured }).valid, false);
 });
+
+test('structural validation recomputes exact candidate counts for every source status', () => {
+  for (const [status, candidateCount] of [
+    ['ok', 0],
+    ['no-results', 1],
+  ]) {
+    const fields = validFields();
+    fields.registry[0] = { ...fields.registry[0], status, candidateCount };
+    assert.equal(validateCandidateFeedStructure(
+      { schemaVersion: '1.0', ...fields }, { expectedRegistry },
+    ).valid, false, status);
+  }
+  const partialMismatch = validFields();
+  partialMismatch.registry[0] = {
+    ...partialMismatch.registry[0], status: 'partial', candidateCount: 0,
+    errorSummary: 'One candidate may be incomplete.',
+  };
+  assert.equal(validateCandidateFeedStructure(
+    { schemaVersion: '1.0', ...partialMismatch }, { expectedRegistry },
+  ).valid, false);
+});

@@ -4,10 +4,11 @@
   "title": "Follow-up Digest Selection Manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "digestId", "generatedAt", "clusters", "selectedEventClusterIds"],
+  "required": ["schemaVersion", "digestId", "requestHash", "generatedAt", "clusters", "selectedEventClusterIds"],
   "properties": {
     "schemaVersion": { "const": "1.0" },
     "digestId": { "$ref": "#/$defs/stableId" },
+    "requestHash": { "$ref": "#/$defs/hashId" },
     "generatedAt": { "type": "string", "format": "date-time", "maxLength": 35 },
     "clusters": {
       "type": "array",

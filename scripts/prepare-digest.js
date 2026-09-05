@@ -17,6 +17,8 @@ import { resolveDigestCandidates } from './digest-candidates.js';
 import {
   CURATION_SUMMARY_CHARACTER_LIMIT,
   DIGEST_CURATION_REQUEST_SCHEMA_VERSION,
+  MISSING_SOURCE_STATUS_SUMMARY,
+  createRequestHash,
   validateCurationRequest,
 } from './digest-selection-contract.js';
 import { resolveRuntimePaths } from './lib/paths.js';
@@ -29,6 +31,8 @@ const USER_DIR = join(homedir(), '.follow-builders');
 const CENTRAL_FEED_BASE = 'https://raw.githubusercontent.com/TheGoldenWave/Follow-up/main';
 export const CENTRAL_CANDIDATE_FEED_URL = `${CENTRAL_FEED_BASE}/feed-candidates.json`;
 export const CANDIDATE_FEED_STALE_AFTER_MS = 48 * 60 * 60 * 1000;
+export const CANDIDATE_FEED_FUTURE_SKEW_MS = 5 * 60 * 1000;
+export const CANDIDATE_FEED_MAX_BYTES = 128 * 1024 * 1024;
 export const PREPARE_INPUT_LIMITS = Object.freeze({ configBytes: 256 * 1024 });
 export const SELECTION_RULES = Object.freeze({
   qualificationThreshold: 60,
@@ -48,10 +52,106 @@ const PROMPT_FILES = [
 
 class SafeOutputError extends Error {}
 
-export async function fetchJSON(url, { fetchImpl = fetch, timeoutMs = 15000 } = {}) {
-  const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
-  if (!response.ok) return null;
-  return response.json();
+export class AtomicWriteCommittedError extends Error {
+  constructor(label, options) {
+    super(`${label} committed but durability could not be confirmed`, options);
+    this.name = 'AtomicWriteCommittedError';
+    this.committed = true;
+  }
+}
+
+function raceAbort(promise, signal) {
+  return new Promise((resolvePromise, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal.addEventListener('abort', abort, { once: true });
+    promise.then(resolvePromise, reject).finally(() => {
+      signal.removeEventListener('abort', abort);
+    });
+  });
+}
+
+async function readResponseBody(response, maxBytes, signal) {
+  const declaredLength = Number(response.headers?.get?.('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error('candidate Feed exceeds byte limit');
+  }
+  if (!response.body?.getReader) {
+    const bytes = new Uint8Array(await raceAbort(response.arrayBuffer(), signal));
+    if (bytes.byteLength > maxBytes) throw new Error('candidate Feed exceeds byte limit');
+    return Buffer.from(bytes);
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await raceAbort(reader.read(), signal);
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        throw new Error('candidate Feed exceeds byte limit');
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, total);
+}
+
+export async function fetchJSON(url, {
+  fetchImpl = fetch,
+  timeoutMs = 15000,
+  maxBytes = CANDIDATE_FEED_MAX_BYTES,
+  maxRedirects = 5,
+  allowedOrigins,
+} = {}) {
+  let current;
+  try { current = new URL(url); } catch { throw new Error('candidate Feed requires a secure source'); }
+  const origins = new Set(allowedOrigins ?? [current.origin]);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort(new DOMException('The operation timed out', 'TimeoutError'));
+  }, timeoutMs);
+  try {
+    for (let redirects = 0; ; redirects += 1) {
+      if (current.protocol !== 'https:' || !origins.has(current.origin)) {
+        throw new Error(redirects === 0
+          ? 'candidate Feed requires a secure source'
+          : 'candidate Feed redirect origin is not allowed');
+      }
+      const response = await fetchImpl(current.href, {
+        signal: controller.signal, redirect: 'manual',
+      });
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        if (redirects >= maxRedirects) throw new Error('candidate Feed redirect limit exceeded');
+        const location = response.headers?.get?.('location');
+        if (!location) throw new Error('candidate Feed redirect is invalid');
+        const next = new URL(location, current);
+        if (next.protocol !== 'https:' || !origins.has(next.origin)) {
+          throw new Error('candidate Feed redirect origin is not allowed');
+        }
+        current = next;
+        continue;
+      }
+      if (!response.ok) return null;
+      const body = await readResponseBody(response, maxBytes, controller.signal);
+      try { return JSON.parse(body.toString('utf8')); }
+      catch { throw new Error('candidate Feed contains invalid JSON'); }
+    }
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.message?.startsWith('candidate Feed ')) {
+      throw error;
+    }
+    throw new Error('candidate Feed could not be fetched', { cause: error });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // Kept for v0.1 callers. The v0.2 prepare workflow never calls this helper.
@@ -166,18 +266,30 @@ function boundedCandidates(candidates) {
   });
 }
 
-function sourceCompleteness(sourceStatuses, expectedCount, feed, now) {
+function sourceCompleteness({ sourceStatuses, reportedStatuses, expectedCount, missingCount, feed, now }) {
   const generatedAt = Date.parse(feed.generatedAt);
-  const stale = !Number.isFinite(generatedAt)
-    || Date.parse(now) - generatedAt > CANDIDATE_FEED_STALE_AFTER_MS;
-  const sourcesComplete = sourceStatuses.length === expectedCount
-    && sourceStatuses.every(({ status }) => status === 'ok' || status === 'no-results');
-  const complete = !stale && sourcesComplete;
+  const feedFresh = Number.isFinite(generatedAt)
+    && Date.parse(now) - generatedAt <= CANDIDATE_FEED_STALE_AFTER_MS;
+  const count = (status) => reportedStatuses.filter((source) => source.status === status).length;
+  const okSourceCount = count('ok');
+  const noResultsSourceCount = count('no-results');
+  const partialSourceCount = count('partial');
+  const errorSourceCount = count('error');
+  const complete = feedFresh && missingCount === 0
+    && partialSourceCount === 0 && errorSourceCount === 0
+    && reportedStatuses.length === expectedCount;
   return {
     status: complete ? 'complete' : 'incomplete',
     complete,
+    feedFresh,
     expectedSourceCount: expectedCount,
-    reportedSourceCount: sourceStatuses.length,
+    reportedSourceCount: reportedStatuses.length,
+    totalSourceCount: sourceStatuses.length,
+    okSourceCount,
+    noResultsSourceCount,
+    partialSourceCount,
+    errorSourceCount,
+    missingSourceCount: missingCount,
   };
 }
 
@@ -195,38 +307,48 @@ async function closeQuietly(handle) {
   try { await handle?.close(); } catch { /* Preserve the primary failure. */ }
 }
 
-export async function writeJsonAtomic(path, document, {
+async function writeAtomic(path, serialized, {
   fsImpl = systemFs,
   randomUUID = systemRandomUUID,
   label = 'output',
 } = {}) {
   const requestedTarget = resolve(path);
   const parent = dirname(requestedTarget);
-  const token = randomUUID();
-  if (typeof token !== 'string' || !/^[a-z0-9-]+$/iu.test(token)) {
-    throw new Error(`${label} could not be written`);
-  }
   let temporary;
   let handle;
   let parentHandle;
   let temporaryOwned = false;
+  let committed = false;
   try {
     await rejectSymlink(parent, fsImpl, true);
     await fsImpl.mkdir(parent, { recursive: true, mode: 0o700 });
     await rejectSymlink(parent, fsImpl, false);
     const canonicalParent = await fsImpl.realpath(parent);
     const target = join(canonicalParent, basename(requestedTarget));
-    temporary = `${target}.tmp-${token}`;
     await rejectSymlink(target, fsImpl, true);
-    handle = await fsImpl.open(temporary, 'wx', 0o600);
-    temporaryOwned = true;
-    await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`, 'utf8');
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = randomUUID();
+      if (typeof token !== 'string' || !/^[a-z0-9-]+$/iu.test(token)) {
+        throw new SafeOutputError();
+      }
+      temporary = `${target}.tmp-${token}`;
+      try {
+        handle = await fsImpl.open(temporary, 'wx', 0o600);
+        temporaryOwned = true;
+        break;
+      } catch (error) {
+        if (error?.code !== 'EEXIST' || attempt === 2) throw error;
+      }
+    }
+    await handle.writeFile(serialized, 'utf8');
     await handle.sync();
     await handle.close();
     handle = undefined;
     await rejectSymlink(parent, fsImpl, false);
     await rejectSymlink(target, fsImpl, true);
     await fsImpl.rename(temporary, target);
+    committed = true;
+    temporaryOwned = false;
     parentHandle = await fsImpl.open(parent, 'r');
     await parentHandle.sync();
     await parentHandle.close();
@@ -235,15 +357,24 @@ export async function writeJsonAtomic(path, document, {
     await closeQuietly(handle);
     await closeQuietly(parentHandle);
     if (temporaryOwned) await fsImpl.rm(temporary, { force: true }).catch(() => {});
+    if (committed) throw new AtomicWriteCommittedError(label, { cause: error });
     throw new Error(`${label} could not be written`, { cause: error });
   }
+}
+
+export async function writeJsonAtomic(path, document, options = {}) {
+  return writeAtomic(path, `${JSON.stringify(document, null, 2)}\n`, options);
+}
+
+export async function writeTextAtomic(path, value, options = {}) {
+  return writeAtomic(path, value, options);
 }
 
 export async function prepareDigest({
   config,
   frequency = config?.frequency ?? 'daily',
   scheduled = false,
-  authorizeScheduled = async () => true,
+  authorizeScheduled,
   now = new Date().toISOString(),
   registry,
   deliveryEvents = [],
@@ -252,8 +383,9 @@ export async function prepareDigest({
   randomUUID = systemRandomUUID,
 } = {}) {
   const normalizedConfig = normalizeConfig(config ?? {});
-  if (scheduled && !await authorizeScheduled({ config: normalizedConfig, frequency })) {
-    throw new Error('scheduled run is not authorized');
+  if (scheduled && (typeof authorizeScheduled !== 'function'
+      || await authorizeScheduled({ config: normalizedConfig, frequency }) !== true)) {
+    throw new Error('schedule-not-authorized');
   }
   if (normalizedConfig.enabledChannels.length === 0) {
     return {
@@ -272,6 +404,9 @@ export async function prepareDigest({
   const expected = expectedRegistry(registry);
   const feedValidation = validateCandidateFeedStructure(feed, { expectedRegistry: expected });
   if (!feedValidation.valid) throw new Error('candidate Feed is invalid');
+  if (Date.parse(feed.generatedAt) - Date.parse(now) > CANDIDATE_FEED_FUTURE_SKEW_MS) {
+    throw new Error('candidate Feed generatedAt is in the future');
+  }
   const completeness = validateCandidateFeedCompleteness(feed, { expectedRegistry: expected });
   const resolved = await resolveDigestCandidates({
     config: normalizedConfig, frequency, now, deliveryEvents, loadCandidateFeed: async () => feed,
@@ -280,15 +415,16 @@ export async function prepareDigest({
   const enabledMissingSources = completeness.missingSources.filter(({ channel }) => (
     normalizedConfig.enabledChannels.includes(channel)
   ));
+  const reportedStatuses = resolved.sourceStatuses.map((status) => ({ ...status }));
   const sourceStatuses = [
-    ...resolved.sourceStatuses.map((status) => ({ ...status })),
+    ...reportedStatuses,
     ...enabledMissingSources.map(({ sourceId, channel, sourceName }) => ({
       sourceId,
       channel,
       sourceName: safeSourceName(sourceName, sourceId),
       status: 'error',
       candidateCount: 0,
-      errorSummary: 'Source status was not reported.',
+      errorSummary: MISSING_SOURCE_STATUS_SUMMARY,
     })),
   ];
   const disabledExclusions = resolved.excluded.counts['channel-disabled'] ?? 0;
@@ -309,13 +445,19 @@ export async function prepareDigest({
     ...(Array.isArray(normalizedConfig.interests) && normalizedConfig.interests.length > 0
       ? { interests: [...normalizedConfig.interests] } : {}),
     sourceStatuses,
-    sourceCompleteness: sourceCompleteness(
-      sourceStatuses, enabledRegistry.length, feed, now,
-    ),
+    sourceCompleteness: sourceCompleteness({
+      sourceStatuses,
+      reportedStatuses,
+      expectedCount: enabledRegistry.length,
+      missingCount: enabledMissingSources.length,
+      feed,
+      now,
+    }),
     contentStats,
     selectionRules: { ...SELECTION_RULES },
     generatedAt: now,
   };
+  request.requestHash = createRequestHash(request);
   const validation = validateCurationRequest(request);
   if (!validation.valid) throw new Error('curation request is invalid');
   const prompt = await loadPrompt();
@@ -425,7 +567,12 @@ export async function main({
     })}\n`);
     return 0;
   } catch (error) {
+    if (error instanceof AtomicWriteCommittedError) {
+      stderr.write(`committed-but-uncertain: ${error.message}\n`);
+      return 1;
+    }
     const message = error.message === 'request output could not be written'
+      || error.message === 'schedule-not-authorized'
       ? error.message : 'digest preparation failed';
     stderr.write(`preparation-failed: ${message}\n`);
     return 1;

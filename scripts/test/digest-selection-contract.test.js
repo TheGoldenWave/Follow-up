@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   CURATION_CANDIDATE_LIMIT,
   CURATION_SUMMARY_CHARACTER_LIMIT,
+  createRequestHash,
   validateCurationRequest,
   validateDigestSelection,
 } from '../digest-selection-contract.js';
@@ -47,6 +48,49 @@ test('curation request source completeness and candidate source coverage are int
   const unexplainedCompleteCoverage = structuredClone(request);
   unexplainedCompleteCoverage.coverage.reasons = ['history-truncated'];
   assert.equal(validateCurationRequest(unexplainedCompleteCoverage).valid, false);
+});
+
+test('request requires bound content stats, exact source aggregates, and consistent coverage', async () => {
+  const request = await fixture('curation/valid-request.json');
+  const missingStats = structuredClone(request);
+  delete missingStats.contentStats;
+  assert.equal(validateCurationRequest(missingStats).valid, false);
+
+  const wrongAggregate = structuredClone(request);
+  wrongAggregate.sourceCompleteness.okSourceCount -= 1;
+  assert.equal(validateCurationRequest(wrongAggregate).valid, false);
+
+  const shiftedMissing = structuredClone(request);
+  shiftedMissing.sourceCompleteness.complete = false;
+  shiftedMissing.sourceCompleteness.status = 'incomplete';
+  shiftedMissing.sourceCompleteness.reportedSourceCount = 1;
+  shiftedMissing.sourceCompleteness.errorSourceCount = 0;
+  shiftedMissing.sourceCompleteness.missingSourceCount = 1;
+  shiftedMissing.sourceStatuses[0] = {
+    ...shiftedMissing.sourceStatuses[0], status: 'error', candidateCount: 0,
+    errorSummary: 'A real collection error.',
+  };
+  shiftedMissing.sourceCompleteness.okSourceCount = 1;
+  shiftedMissing.requestHash = createRequestHash(shiftedMissing);
+  assert.equal(validateCurationRequest(shiftedMissing).valid, false);
+
+  const wrongCoverage = structuredClone(request);
+  wrongCoverage.coverage.actualInterval.start = '2026-09-02T00:00:00.000Z';
+  assert.equal(validateCurationRequest(wrongCoverage).valid, false);
+
+  const wrongHash = structuredClone(request);
+  wrongHash.requestHash = 'f'.repeat(64);
+  assert.notEqual(wrongHash.requestHash, createRequestHash(wrongHash));
+  assert.equal(validateCurationRequest(wrongHash).valid, false);
+});
+
+test('selection manifest is cryptographically bound to its exact request', async () => {
+  const request = await fixture('curation/valid-request.json');
+  const selection = await fixture('selections/valid-selection.json');
+  assert.equal(selection.requestHash, request.requestHash);
+  const rebound = structuredClone(selection);
+  rebound.requestHash = 'f'.repeat(64);
+  assert.equal(validateDigestSelection(rebound).valid, true);
 });
 
 test('selection manifest v1.0 is closed and bounds every integer score and selection reason', async () => {
@@ -99,9 +143,16 @@ test('maximum candidate-count request with maximum curation summaries fits the t
     eligibleCandidates: candidates,
     sourceStatuses: [{ ...base.sourceStatuses[0], candidateCount: 1000 }],
     sourceCompleteness: {
-      status: 'complete', complete: true, expectedSourceCount: 1, reportedSourceCount: 1,
+      status: 'complete', complete: true, feedFresh: true,
+      expectedSourceCount: 1, reportedSourceCount: 1, totalSourceCount: 1,
+      okSourceCount: 1, noResultsSourceCount: 0, partialSourceCount: 0,
+      errorSourceCount: 0, missingSourceCount: 0,
+    },
+    contentStats: {
+      candidateCount: 1000, eligibleCount: 1000, excludedCount: 0, selectedCount: 0,
     },
   };
+  request.requestHash = createRequestHash(request);
   const serialized = `${JSON.stringify(request)}\n`;
   assert.deepEqual(validateCurationRequest(request), { valid: true, errors: [] });
   assert.ok(Buffer.byteLength(serialized) <= INPUT_BYTE_LIMITS.requestBytes);

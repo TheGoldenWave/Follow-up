@@ -1,6 +1,7 @@
 {
   "schemaVersion": "1.0",
   "digestId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "requestHash": "8cfa82e881b2ca8e8d86e5f2ff073d378e168ef4d6fdfb82364ea678f9c1d966",
   "frequency": "daily",
   "coverage": {
     "frequency": "daily",
@@ -67,8 +68,21 @@
   "sourceCompleteness": {
     "status": "complete",
     "complete": true,
+    "feedFresh": true,
     "expectedSourceCount": 2,
-    "reportedSourceCount": 2
+    "reportedSourceCount": 2,
+    "totalSourceCount": 2,
+    "okSourceCount": 2,
+    "noResultsSourceCount": 0,
+    "partialSourceCount": 0,
+    "errorSourceCount": 0,
+    "missingSourceCount": 0
+  },
+  "contentStats": {
+    "candidateCount": 2,
+    "eligibleCount": 2,
+    "excludedCount": 0,
+    "selectedCount": 0
   },
   "selectionRules": {
     "qualificationThreshold": 60,

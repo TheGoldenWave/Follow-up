@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import test from 'node:test';
 
-import { finalizeDigest, main } from '../finalize-digest.js';
+import { createRequestHash } from '../digest-selection-contract.js';
+import { finalizeDigest, main, renderDigestMessage } from '../finalize-digest.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url);
 
@@ -14,7 +15,7 @@ async function fixture(path) {
 }
 
 function emptyRequest(base, overrides = {}) {
-  return {
+  const value = {
     ...structuredClone(base), eligibleCandidates: [],
     sourceStatuses: base.sourceStatuses.map((source) => ({
       sourceId: source.sourceId, channel: source.channel, sourceName: source.sourceName,
@@ -22,11 +23,21 @@ function emptyRequest(base, overrides = {}) {
     })),
     ...overrides,
   };
+  value.contentStats = {
+    candidateCount: 0, eligibleCount: 0, excludedCount: 0, selectedCount: 0,
+  };
+  value.sourceCompleteness = {
+    ...value.sourceCompleteness,
+    okSourceCount: 0,
+    noResultsSourceCount: value.sourceStatuses.length,
+  };
+  value.requestHash = createRequestHash(value);
+  return value;
 }
 
 function emptySelection(request) {
   return {
-    schemaVersion: '1.0', digestId: request.digestId,
+    schemaVersion: '1.0', digestId: request.digestId, requestHash: request.requestHash,
     generatedAt: '2026-09-06T08:01:00.000Z', clusters: [], selectedEventClusterIds: [],
   };
 }
@@ -52,6 +63,7 @@ test('complete empty daily and weekly runs use localized no-update wording', asy
   for (const [frequency, message] of [['daily', '今日无重要更新'], ['weekly', '本周无重要更新']]) {
     const request = emptyRequest(base, { frequency });
     request.coverage.frequency = frequency;
+    request.requestHash = createRequestHash(request);
     const result = finalizeDigest(request, emptySelection(request));
     assert.equal(result.status, 'no-important-updates');
     assert.equal(result.message, message);
@@ -62,6 +74,8 @@ test('source incompleteness is partial and history incompleteness has priority',
   const base = await fixture('curation/valid-request.json');
   const partialRequest = emptyRequest(base);
   partialRequest.sourceCompleteness = { ...partialRequest.sourceCompleteness, status: 'incomplete', complete: false };
+  partialRequest.sourceCompleteness.feedFresh = false;
+  partialRequest.requestHash = createRequestHash(partialRequest);
   const partial = finalizeDigest(partialRequest, emptySelection(partialRequest));
   assert.equal(partial.status, 'partial');
   assert.match(partial.message, /检查不完整/);
@@ -73,6 +87,7 @@ test('source incompleteness is partial and history incompleteness has priority',
     actualInterval: { ...incompleteRequest.coverage.actualInterval, start: '2026-09-05T00:00:00.000Z' },
     reasons: ['history-starts-after-requested-start'],
   };
+  incompleteRequest.requestHash = createRequestHash(incompleteRequest);
   const incomplete = finalizeDigest(incompleteRequest, emptySelection(incompleteRequest));
   assert.equal(incomplete.status, 'incomplete-history');
   assert.match(incomplete.message, /历史覆盖不完整/);
@@ -82,6 +97,9 @@ test('a partial source can deliver available selected items without claiming com
   const request = await fixture('curation/valid-request.json');
   const selection = await fixture('selections/valid-selection.json');
   request.sourceCompleteness = { ...request.sourceCompleteness, status: 'incomplete', complete: false };
+  request.sourceCompleteness.feedFresh = false;
+  request.requestHash = createRequestHash(request);
+  selection.requestHash = request.requestHash;
   const result = finalizeDigest(request, selection);
   assert.equal(result.status, 'partial');
   assert.equal(result.items.length, 1);
@@ -95,6 +113,10 @@ test('partial artifact names bounded incomplete sources without leaking diagnost
     errorSummary: 'Official Lab: token=super-secret https://private.example/path',
   };
   request.sourceCompleteness = { ...request.sourceCompleteness, status: 'incomplete', complete: false };
+  request.sourceCompleteness.partialSourceCount = 1;
+  request.sourceCompleteness.okSourceCount = 1;
+  request.requestHash = createRequestHash(request);
+  selection.requestHash = request.requestHash;
   const result = finalizeDigest(request, selection);
   assert.deepEqual(result.incompleteSources, [{
     sourceId: 'blog:official', channel: 'blogs', sourceName: 'Official Lab', status: 'partial',
@@ -109,13 +131,13 @@ test('finalize CLI failures report preparation-failed and never create or overwr
   const validRequest = await fixture('curation/valid-request.json');
   const validSelection = await fixture('selections/valid-selection.json');
   const requestPath = join(root, 'request.json');
-  const selectionPath = join(root, 'selection.json');
+  const selectionPath = join(root, `${validRequest.digestId}.json`);
   const output = join(root, 'digest.json');
   await writeFile(requestPath, JSON.stringify(validRequest));
   await writeFile(output, 'old-output');
 
   const cases = [
-    ['missing', join(root, 'missing.json')],
+    ['missing', selectionPath],
     ['invalid-json', selectionPath],
     ['digest-mismatch', selectionPath],
     ['invalid-manifest', selectionPath],
@@ -138,7 +160,8 @@ test('finalize output write failure removes its temp file and preserves old outp
   const root = await mkdtemp(join(tmpdir(), 'finalize-digest-write-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const request = join(root, 'request.json');
-  const selection = join(root, 'selection.json');
+  const requestDocument = await fixture('curation/valid-request.json');
+  const selection = join(root, `${requestDocument.digestId}.json`);
   const output = join(root, 'digest.json');
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
@@ -171,4 +194,54 @@ test('finalize CLI requires absolute paths', async () => {
   const stderr = { value: '', write(chunk) { this.value += chunk; } };
   assert.equal(await main({ argv: ['--request', 'r', '--selection', 's', '--output', 'o'], stderr }), 64);
   assert.match(stderr.value, /^usage:/);
+});
+
+test('finalize rejects a selection filename that is not the digest ID', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'finalize-selection-name-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const request = join(root, 'request.json');
+  const selection = join(root, 'wrong.json');
+  const output = join(root, 'digest.json');
+  await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
+  await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+  assert.equal(await main({
+    argv: ['--request', request, '--selection', selection, '--output', output], stderr,
+  }), 1);
+  assert.equal(stderr.value, 'preparation-failed: selection filename must match digestId\n');
+  await assert.rejects(readFile(output), /ENOENT/);
+});
+
+test('finalize writes a plain-text user message rather than delivering artifact JSON', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'finalize-message-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const requestDocument = await fixture('curation/valid-request.json');
+  const request = join(root, 'request.json');
+  const selection = join(root, `${requestDocument.digestId}.json`);
+  const output = join(root, 'digest.json');
+  const message = join(root, 'digest.txt');
+  await writeFile(request, JSON.stringify(requestDocument));
+  await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+  assert.equal(await main({
+    argv: ['--request', request, '--selection', selection, '--output', output,
+      '--message-out', message], stderr, stdout: { write() {} },
+  }), 0, stderr.value);
+  const text = await readFile(message, 'utf8');
+  assert.equal(text.trimStart().startsWith('{'), false);
+  assert.match(text, /Model launch/);
+  assert.match(text, /https:\/\/official\.example\/model-launch/);
+  assert.equal(basename(selection), `${requestDocument.digestId}.json`);
+});
+
+test('plain-text renderer neutralizes Markdown links, mentions, and control characters', () => {
+  const text = renderDigestMessage({
+    status: 'ready', message: 'Digest', items: [{
+      title: '[@all](https://evil.example)\u0007', sourceId: 'blog:test',
+      reason: '*important* @channel', link: 'https://safe.example/item',
+      scores: { totalScore: 80 },
+    }],
+  });
+  assert.doesNotMatch(text, /\[@all\]\(https:\/\/evil\.example\)|@channel|\u0007/);
+  assert.match(text, /https:\/\/safe\.example\/item/);
 });

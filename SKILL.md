@@ -317,21 +317,21 @@ cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js --request-out <absolute
 
 读取 prepare 输出的 request，并严格按本地 `prompts/curate-digest.md` 执行。只处理 `eligibleCandidates`；不得访问网页、补充外部候选、恢复已排除候选或把全量 Feed 当作 fallback。
 
-只输出符合 `digest-selection` v1.0 的 JSON object，并写入：
+只输出符合 `digest-selection` v1.0 的 JSON object，将 request 的 `requestHash` 原样复制到 manifest，并写入：
 
 ```text
 ~/.follow-builders/state/selections/<digest-id>.json
 ```
 
-manifest 必须覆盖全部 eligible candidates 的 clustering，并让 `selectedEventClusterIds` 严格遵循 60 分门槛、最多 10 条以及确定性 source/channel portfolio 规则。Agent 没有输出、输出非法 JSON 或评分阶段失败时立即停止。
+文件 basename 必须严格等于 `<digest-id>.json`。`requestHash` 是对排除自身字段后的完整 request 做 canonical key ordering，再将 `digest-request-v1` 与 canonical JSON 使用 length-prefixed framing 编码后计算的 SHA-256；Agent 只复制该值。manifest 必须覆盖全部 eligible candidates 的 clustering，并让 `selectedEventClusterIds` 严格遵循 60 分门槛、最多 10 条以及确定性 source/channel portfolio 规则。Agent 没有输出、输出非法 JSON、`requestHash` 不匹配或评分阶段失败时立即停止。
 
 ### Step 5: Finalize
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node finalize-digest.js --request <absolute-request-path> --selection <absolute-selection-path> --output <absolute-output-path> 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node finalize-digest.js --request <absolute-request-path> --selection <absolute-selection-path> --output <absolute-artifact-path> --message-out <absolute-message-path> 2>/dev/null
 ```
 
-finalize 会再次校验 request、manifest、`digestId` 和确定性选择，然后原子写最终 JSON artifact。状态含义如下：
+finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确定性选择，然后分别原子写最终 JSON artifact 与纯文本用户消息。JSON artifact 供 ledger/outbox 使用，不能直接作为用户消息发送。状态含义如下：
 
 - `ready`：完整检查且有 1-10 条合格更新。
 - `no-important-updates`：完整检查且没有合格项；daily 为“今日无重要更新”，weekly 为“本周无重要更新”。
@@ -347,14 +347,14 @@ Read `config.delivery.method` from the JSON:
 
 **If "telegram" or "email":**
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --file <absolute-output-path> 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --file <absolute-message-path> 2>/dev/null
 ```
 If delivery fails, show the digest in the terminal as fallback.
 
 **If "stdout" (default):**
-展示最终 artifact 中的 `message` 与 `items`。不要展示 request 中未选择的候选。
+展示 `<absolute-message-path>` 中的纯文本消息。不要原样展示 JSON artifact，也不要展示 request 中未选择的候选。
 
-任一步失败都必须停止后续步骤。特别是 finalize 失败时，不得读取旧 output 并继续投递。
+任一步失败都必须停止后续步骤。特别是 finalize 失败时，不得读取旧 output 并继续投递。若返回 `committed-but-uncertain`，文件内容已经完成 rename，但目录持久化无法确认；禁止自动重写或重试同一 digest，等待人工或后续恢复流程核对。
 
 ---
 

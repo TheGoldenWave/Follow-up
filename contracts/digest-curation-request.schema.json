@@ -7,17 +7,20 @@
   "required": [
     "schemaVersion",
     "digestId",
+    "requestHash",
     "frequency",
     "coverage",
     "eligibleCandidates",
     "sourceStatuses",
     "sourceCompleteness",
+    "contentStats",
     "selectionRules",
     "generatedAt"
   ],
   "properties": {
     "schemaVersion": { "const": "1.0" },
     "digestId": { "$ref": "#/$defs/stableId" },
+    "requestHash": { "$ref": "#/$defs/hashId" },
     "frequency": { "$ref": "#/$defs/frequency" },
     "coverage": { "$ref": "#/$defs/coverage" },
     "eligibleCandidates": {
@@ -43,6 +46,7 @@
   },
   "$defs": {
     "dateTime": { "type": "string", "format": "date-time", "maxLength": 35 },
+    "hashId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "channel": {
       "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
     },
@@ -101,12 +105,23 @@
     "sourceCompleteness": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "complete", "expectedSourceCount", "reportedSourceCount"],
+      "required": [
+        "status", "complete", "feedFresh", "expectedSourceCount", "reportedSourceCount",
+        "totalSourceCount", "okSourceCount", "noResultsSourceCount",
+        "partialSourceCount", "errorSourceCount", "missingSourceCount"
+      ],
       "properties": {
         "status": { "enum": ["complete", "incomplete"] },
         "complete": { "type": "boolean" },
+        "feedFresh": { "type": "boolean" },
         "expectedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
-        "reportedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 }
+        "reportedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "totalSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "okSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "noResultsSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "partialSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "errorSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "missingSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 }
       }
     },
     "contentStats": {

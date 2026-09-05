@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import { frameFields } from '../candidate-identity.js';
+import { createRequestHash } from '../digest-selection-contract.js';
 import {
   createEventClusterId,
   selectEventClusters,
@@ -27,7 +28,7 @@ function request(candidates) {
     sourceId, channel, sourceName: sourceId, status: 'ok',
     candidateCount: candidates.filter((candidateItem) => candidateItem.sourceId === sourceId).length,
   }])).values()];
-  return {
+  const value = {
     schemaVersion: '1.0', digestId, frequency: 'daily', generatedAt: '2026-09-06T08:00:00.000Z',
     coverage: {
       frequency: 'daily', status: 'complete', complete: true,
@@ -38,8 +39,15 @@ function request(candidates) {
     eligibleCandidates: candidates,
     sourceStatuses,
     sourceCompleteness: {
-      status: 'complete', complete: true,
+      status: 'complete', complete: true, feedFresh: true,
       expectedSourceCount: sourceStatuses.length, reportedSourceCount: sourceStatuses.length,
+      totalSourceCount: sourceStatuses.length,
+      okSourceCount: sourceStatuses.length, noResultsSourceCount: 0,
+      partialSourceCount: 0, errorSourceCount: 0, missingSourceCount: 0,
+    },
+    contentStats: {
+      candidateCount: candidates.length, eligibleCount: candidates.length,
+      excludedCount: 0, selectedCount: 0,
     },
     selectionRules: {
       qualificationThreshold: 60, maxSelected: 10, maxLeadsPerSource: 2,
@@ -48,6 +56,8 @@ function request(candidates) {
       sourceDiversityFirst: true,
     },
   };
+  value.requestHash = createRequestHash(value);
+  return value;
 }
 
 function cluster(candidate, totalScore, evidence = 15, corroboratingCandidateIds = []) {
@@ -137,9 +147,15 @@ test('validator enforces membership, arithmetic, threshold order, exclusions, an
     candidate('c', 'blogs', 'blog:a', '2026-09-06T07:02:00.000Z'),
   ];
   const clusters = [cluster(candidates[0], 80, 18, [candidates[1].candidateId]), cluster(candidates[2], 59, 15)];
-  const manifest = { schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z',
+  const manifest = { schemaVersion: '1.0', digestId, requestHash: request(candidates).requestHash, generatedAt: '2026-09-06T08:01:00.000Z',
     clusters, selectedEventClusterIds: [clusters[0].eventClusterId] };
   assert.deepEqual(validateSelectionAgainstRequest(request(candidates), manifest), { valid: true, errors: [] });
+
+  const wrongRequestHash = { ...manifest, requestHash: 'f'.repeat(64) };
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), wrongRequestHash).errors.join('; '),
+    /requestHash must match/i,
+  );
 
   const wrongTotal = structuredClone(manifest);
   wrongTotal.clusters[0].scores.totalScore = 79;
@@ -172,7 +188,7 @@ test('validator requires every eligible candidate to appear in exactly one clust
   ];
   const clusters = candidates.map((item, index) => cluster(item, 90 - index, 20));
   const validManifest = {
-    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z', clusters,
+    schemaVersion: '1.0', digestId, requestHash: request(candidates).requestHash, generatedAt: '2026-09-06T08:01:00.000Z', clusters,
     selectedEventClusterIds: selectEventClusters(request(candidates), clusters),
   };
   assert.deepEqual(validateSelectionAgainstRequest(request(candidates), validManifest), {
@@ -219,7 +235,7 @@ test('validator requires every eligible candidate to appear in exactly one clust
 
 test('validator permits empty clusters only when no candidates are eligible', () => {
   const emptyManifest = {
-    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z',
+    schemaVersion: '1.0', digestId, requestHash: request([]).requestHash, generatedAt: '2026-09-06T08:01:00.000Z',
     clusters: [], selectedEventClusterIds: [],
   };
   assert.deepEqual(validateSelectionAgainstRequest(request([]), emptyManifest), {
@@ -231,7 +247,7 @@ test('validator rejects wrong cluster identity and duplicate or unknown selected
   const candidates = [candidate('a', 'blogs', 'blog:a', '2026-09-06T07:00:00.000Z')];
   const clusters = [cluster(candidates[0], 80, 18)];
   const manifest = {
-    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z', clusters,
+    schemaVersion: '1.0', digestId, requestHash: request(candidates).requestHash, generatedAt: '2026-09-06T08:01:00.000Z', clusters,
     selectedEventClusterIds: [clusters[0].eventClusterId],
   };
 
@@ -263,7 +279,7 @@ test('validator rejects manifests whose total candidate references exceed the re
   const first = cluster(candidates[0], 80, 18, [candidates[1].candidateId]);
   const second = cluster(candidates[1], 70, 18);
   const manifest = {
-    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z',
+    schemaVersion: '1.0', digestId, requestHash: request(candidates).requestHash, generatedAt: '2026-09-06T08:01:00.000Z',
     clusters: [first, second], selectedEventClusterIds: [first.eventClusterId, second.eventClusterId],
   };
   assert.match(

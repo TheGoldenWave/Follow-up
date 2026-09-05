@@ -7,10 +7,13 @@ import test from 'node:test';
 
 import { createCandidateId, createContentFingerprint } from '../candidate-identity.js';
 import {
+  AtomicWriteCommittedError,
+  fetchJSON,
   loadPrompts,
   main,
   prepareDigest,
   resolveInstalledPromptsDir,
+  writeJsonAtomic,
 } from '../prepare-digest.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url);
@@ -239,6 +242,12 @@ test('missing expected source status becomes a synthetic error while valid candi
     sourceId: 'x:builder', channel: 'x', sourceName: 'Builder', status: 'error',
     candidateCount: 0, errorSummary: 'Source status was not reported.',
   });
+  assert.deepEqual(result.request.sourceCompleteness, {
+    status: 'incomplete', complete: false, feedFresh: true,
+    expectedSourceCount: 2, reportedSourceCount: 1, totalSourceCount: 2,
+    okSourceCount: 1, noResultsSourceCount: 0, partialSourceCount: 0,
+    errorSourceCount: 0, missingSourceCount: 1,
+  });
   assert.deepEqual(result.contentStats, {
     candidateCount: 1, eligibleCount: 1, excludedCount: 0, selectedCount: 0,
   });
@@ -332,4 +341,137 @@ test('prepare CLI requires an absolute request output path', async () => {
   const stderr = { value: '', write(chunk) { this.value += chunk; } };
   assert.equal(await main({ argv: ['--request-out', 'relative.json'], stderr }), 64);
   assert.match(stderr.value, /^usage:/);
+});
+
+test('scheduled preparation defaults to deny unless authorization explicitly returns true', async () => {
+  let fetched = false;
+  await assert.rejects(prepareDigest({
+    config: { enabledChannels: ['blogs'] }, scheduled: true, registry,
+    loadCandidateFeed: async () => { fetched = true; return feed([]); },
+  }), /schedule-not-authorized/);
+  assert.equal(fetched, false);
+});
+
+test('scheduled CLI denial is explicit, nonzero, and creates no request', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'prepare-scheduled-denied-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = join(root, 'request.json');
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+  const code = await main({
+    argv: ['--request-out', output, '--scheduled'],
+    config: { enabledChannels: ['blogs'] }, registry, deliveryEvents: [],
+    loadCandidateFeed: async () => assert.fail('denied run must not fetch'),
+    stderr, stdout: { write() {} },
+  });
+  assert.equal(code, 1);
+  assert.equal(stderr.value, 'preparation-failed: schedule-not-authorized\n');
+  await assert.rejects(readFile(output), /ENOENT/);
+});
+
+test('remote candidate Feed fetch rejects insecure redirects, loops, and oversized bodies', async () => {
+  await assert.rejects(fetchJSON('http://example.com/feed.json', {
+    fetchImpl: async () => assert.fail('must not fetch HTTP'),
+  }), /secure source/);
+
+  await assert.rejects(fetchJSON('https://raw.githubusercontent.com/a/feed.json', {
+    fetchImpl: async () => new Response(null, {
+      status: 302, headers: { location: 'https://evil.example/feed.json' },
+    }),
+  }), /redirect origin/);
+
+  await assert.rejects(fetchJSON('https://raw.githubusercontent.com/a/feed.json', {
+    maxRedirects: 1,
+    fetchImpl: async (url) => new Response(null, {
+      status: 302, headers: { location: url },
+    }),
+  }), /redirect limit/);
+
+  await assert.rejects(fetchJSON('https://raw.githubusercontent.com/a/feed.json', {
+    maxBytes: 4,
+    fetchImpl: async () => new Response('12345', { status: 200 }),
+  }), /byte limit/);
+});
+
+test('remote candidate Feed timeout remains active while streaming the body', async () => {
+  const stalled = new ReadableStream({ start() {} });
+  await assert.rejects(fetchJSON('https://raw.githubusercontent.com/a/feed.json', {
+    timeoutMs: 10,
+    fetchImpl: async () => new Response(stalled, { status: 200 }),
+  }), (error) => error?.name === 'TimeoutError');
+});
+
+test('future candidate Feed timestamps beyond clock skew stop preparation', async () => {
+  await assert.rejects(prepareDigest({
+    config: { enabledChannels: ['blogs'] }, frequency: 'daily',
+    now: '2026-09-06T08:00:00.000Z', registry, deliveryEvents: [],
+    loadCandidateFeed: async () => feed([], { generatedAt: '2026-09-06T08:05:00.001Z' }),
+  }), /future/i);
+});
+
+test('atomic output retries temp collisions and reports post-rename durability uncertainty', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'prepare-atomic-boundary-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = join(root, 'out.json');
+  await writeFile(`${output}.tmp-first`, 'occupied');
+  const tokens = ['first', 'second'];
+  await writeJsonAtomic(output, { value: 'new' }, { randomUUID: () => tokens.shift() });
+  assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { value: 'new' });
+
+  let renamed = false;
+  const fsImpl = {
+    ...(await import('node:fs/promises')),
+    async rename(...args) { renamed = true; return (await import('node:fs/promises')).rename(...args); },
+    async open(path, flags, mode) {
+      const realFs = await import('node:fs/promises');
+      const handle = await realFs.open(path, flags, mode);
+      if (renamed && path === root && flags === 'r') {
+        return {
+          async sync() { throw new Error('disk detail'); },
+          async close() { return handle.close(); },
+        };
+      }
+      return handle;
+    },
+  };
+  await assert.rejects(
+    writeJsonAtomic(output, { value: 'committed' }, {
+      fsImpl, randomUUID: () => 'third', label: 'output',
+    }),
+    (error) => error instanceof AtomicWriteCommittedError && error.committed === true,
+  );
+  assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), { value: 'committed' });
+});
+
+test('prepare CLI reports committed-but-uncertain after post-rename fsync failure', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'prepare-commit-uncertain-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = join(root, 'request.json');
+  const realFs = await import('node:fs/promises');
+  let renamed = false;
+  const fsImpl = {
+    ...realFs,
+    async rename(...args) { renamed = true; return realFs.rename(...args); },
+    async open(path, flags, mode) {
+      const handle = await realFs.open(path, flags, mode);
+      if (renamed && path === root && flags === 'r') {
+        return {
+          async sync() { throw new Error('sensitive disk path'); },
+          async close() { return handle.close(); },
+        };
+      }
+      return handle;
+    },
+  };
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+  const values = ['88888888-8888-4888-8888-888888888888', 'write-token'];
+  const code = await main({
+    argv: ['--request-out', output], config: { enabledChannels: ['blogs'] }, registry,
+    now: '2026-09-06T08:00:00.000Z', deliveryEvents: [],
+    loadCandidateFeed: async () => feed([candidate('blog-item')]),
+    loadCurationPrompt: async () => 'curate', randomUUID: () => values.shift(),
+    fsImpl, stderr, stdout: { write() {} },
+  });
+  assert.equal(code, 1);
+  assert.equal(stderr.value, 'committed-but-uncertain: request output committed but durability could not be confirmed\n');
+  assert.equal(JSON.parse(await readFile(output, 'utf8')).digestId, '88888888-8888-4888-8888-888888888888');
 });

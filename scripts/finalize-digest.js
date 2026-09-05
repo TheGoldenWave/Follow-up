@@ -2,12 +2,16 @@
 
 import { randomUUID as systemRandomUUID } from 'node:crypto';
 import * as systemFs from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { basename, isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
 import { validateSelectionAgainstRequest } from './digest-selection.js';
-import { writeJsonAtomic } from './prepare-digest.js';
+import {
+  AtomicWriteCommittedError,
+  writeJsonAtomic,
+  writeTextAtomic,
+} from './prepare-digest.js';
 import { sanitizeDiagnostic } from './source-status.js';
 import { INPUT_BYTE_LIMITS, readJsonLimited } from './validate-digest-selection.js';
 
@@ -21,6 +25,26 @@ function safeSourceName(value, fallback) {
     .replace(/\s+/gu, ' ')
     .trim();
   return Array.from(sanitized || fallback).slice(0, 80).join('');
+}
+
+function safePlainText(value) {
+  return sanitizeDiagnostic(value ?? '')
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .replace(/@/gu, '＠')
+    .replace(/([\\_*[\]()`])/gu, '\\$1');
+}
+
+export function renderDigestMessage(artifact) {
+  const lines = [safePlainText(artifact.message)];
+  for (const [index, item] of artifact.items.entries()) {
+    lines.push('', `${index + 1}. ${safePlainText(item.title)}`);
+    lines.push(`来源: ${safePlainText(item.sourceId)} | 评分: ${item.scores.totalScore}`);
+    lines.push(`理由: ${safePlainText(item.reason)}`);
+    lines.push(item.link);
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 function messageFor(status, frequency, itemCount, incompleteSources) {
@@ -97,7 +121,7 @@ export function finalizeDigest(request, selection) {
   };
   const contentStats = { ...baseStats, selectedCount: items.length };
   return {
-    schemaVersion: '1.0', status, digestId: request.digestId,
+    schemaVersion: '1.0', status, digestId: request.digestId, requestHash: request.requestHash,
     frequency: request.frequency, generatedAt: selection.generatedAt,
     coverage: request.coverage, sourceCompleteness: request.sourceCompleteness,
     incompleteSources,
@@ -110,12 +134,16 @@ function parseOptions(argv) {
   return parseCommandLine(argv, {
     options: {
       request: { type: 'string' }, selection: { type: 'string' }, output: { type: 'string' },
+      'message-out': { type: 'string' },
     },
     validate({ values, positionals }) {
       if (positionals.length) throw new CommandLineUsageError('unexpected positional arguments');
       for (const name of ['request', 'selection', 'output']) {
         if (!values[name]) throw new CommandLineUsageError(`--${name} is required`);
         if (!isAbsolute(values[name])) throw new CommandLineUsageError(`--${name} must be absolute`);
+      }
+      if (values['message-out'] && !isAbsolute(values['message-out'])) {
+        throw new CommandLineUsageError('--message-out must be absolute');
       }
     },
   }).values;
@@ -134,16 +162,29 @@ export async function main({
   }
   try {
     const request = await readJsonLimited(options.request, 'request', limits.requestBytes, fsImpl);
+    if (basename(options.selection) !== `${request.digestId}.json`) {
+      throw new Error('selection filename must match digestId');
+    }
     const selection = await readJsonLimited(options.selection, 'selection', limits.selectionBytes, fsImpl);
     const artifact = finalizeDigest(request, selection);
+    if (options['message-out']) {
+      await writeTextAtomic(options['message-out'], renderDigestMessage(artifact), {
+        fsImpl, randomUUID, label: 'message output',
+      });
+    }
     await writeJsonAtomic(options.output, artifact, { fsImpl, randomUUID, label: 'output' });
     stdout.write(`${JSON.stringify({ status: artifact.status, digestId: artifact.digestId })}\n`);
     return 0;
   } catch (error) {
+    if (error instanceof AtomicWriteCommittedError) {
+      stderr.write(`committed-but-uncertain: ${error.message}\n`);
+      return 1;
+    }
     const known = new Set([
       'request: invalid JSON', 'request: could not be read', 'request: input exceeds byte limit',
       'selection: invalid JSON', 'selection: could not be read', 'selection: input exceeds byte limit',
       'selection manifest is invalid', 'output could not be written',
+      'message output could not be written', 'selection filename must match digestId',
     ]);
     stderr.write(`preparation-failed: ${known.has(error.message) ? error.message : 'digest finalization failed'}\n`);
     return 1;

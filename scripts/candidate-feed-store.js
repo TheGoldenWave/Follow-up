@@ -209,6 +209,18 @@ function createMergedFeed({
 }) {
   const merged = mergeCandidates(previousCandidates, currentCandidates);
   const { retained, removedByCap } = applyRetention(merged, collectionStart, CANDIDATE_RETENTION);
+  const retainedCounts = new Map();
+  for (const candidate of retained) {
+    retainedCounts.set(candidate.sourceId, (retainedCounts.get(candidate.sourceId) ?? 0) + 1);
+  }
+  const reconciledStatuses = statuses.map((source) => {
+    const candidateCount = retainedCounts.get(source.sourceId) ?? 0;
+    let status = source.status;
+    if (status === 'ok' || status === 'no-results') {
+      status = candidateCount > 0 ? 'ok' : 'no-results';
+    }
+    return { ...source, status, candidateCount };
+  });
   return createCandidateFeed({
     generatedAt: collectionStart,
     initializedAt,
@@ -219,7 +231,7 @@ function createMergedFeed({
       removedByCap,
       activePriorTruncation(previous, registry, collectionStart),
     ),
-    registry: statuses,
+    registry: reconciledStatuses,
     candidates: retained,
   }, { expectedRegistry: expectedRegistry(registry) });
 }
