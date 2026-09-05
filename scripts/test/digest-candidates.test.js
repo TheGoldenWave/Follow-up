@@ -26,13 +26,18 @@ function pending(attemptId, candidateIds, overrides = {}) {
   return {
     schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-08T00:00:00.000Z',
     attemptId, digestId: `digest-${attemptId}`, frequency: 'daily', candidateIds,
+    eventClusterIds: [], destinationType: 'stdout', messageHash: 'a'.repeat(64),
     ...overrides,
   };
 }
 
 function resolution(type, attemptId) {
+  const details = type === 'delivered'
+    ? { providerReceipt: 'receipt-1' }
+    : type === 'failed' ? { reasonCode: 'provider-rejected' } : {};
   return {
     schemaVersion: '1.0', type, occurredAt: '2026-09-08T00:01:00.000Z', attemptId,
+    ...details,
   };
 }
 
@@ -122,4 +127,64 @@ test('candidates outside the actual interval are excluded and incomplete history
     ['inside'],
   );
   assert.equal(result.excluded.counts['outside-coverage'], 1);
+});
+
+test('daily keeps older retained unpushed and failed candidates eligible after a later success', async () => {
+  const candidates = [
+    candidate('older-unpushed', 'x', 'x:a', '2026-09-02T00:00:00.000Z'),
+    candidate('older-failed', 'x', 'x:a', '2026-09-02T01:00:00.000Z'),
+    candidate('sent', 'x', 'x:a', '2026-09-08T00:00:00.000Z'),
+  ];
+  const deliveryEvents = [
+    pending('failed-old', ['older-failed'], { occurredAt: '2026-09-03T00:00:00.000Z' }),
+    { ...resolution('failed', 'failed-old'), occurredAt: '2026-09-03T00:01:00.000Z' },
+    pending('sent-later', ['sent']), resolution('delivered', 'sent-later'),
+  ];
+  const result = await resolveDigestCandidates({
+    config: { enabledChannels: ['x'] }, frequency: 'daily',
+    now: '2026-09-10T08:00:00.000Z', deliveryEvents,
+    loadCandidateFeed: async () => feed(candidates),
+  });
+  assert.deepEqual(
+    result.eligibleCandidates.map(({ candidateId }) => candidateId),
+    ['older-unpushed', 'older-failed'],
+  );
+});
+
+test('weekly eligibility uses firstSeenAt and bootstrap has a half-open UTC end', async () => {
+  const candidateFeed = feed([
+    {
+      ...candidate('old-publication-newly-seen', 'x', 'x:a', '2025-01-01T00:00:00.000Z'),
+      firstSeenAt: '2026-09-08T00:00:00.000Z',
+    },
+    candidate('at-exclusive-end', 'x', 'x:a', '2026-09-10T00:00:00.000Z'),
+  ]);
+  candidateFeed.continuousHistorySince = '2026-09-01T00:00:00.000Z';
+  const result = await resolveDigestCandidates({
+    config: { enabledChannels: ['x'] }, frequency: 'weekly',
+    now: '2026-09-10T08:00:00.000Z', deliveryEvents: [],
+    loadCandidateFeed: async () => candidateFeed,
+  });
+  assert.deepEqual(
+    result.eligibleCandidates.map(({ candidateId }) => candidateId),
+    ['old-publication-newly-seen'],
+  );
+  assert.deepEqual(result.excluded.counts, { 'outside-coverage': 1 });
+});
+
+test('weekly eligibility after a delivered digest includes a candidate first seen exactly at now', async () => {
+  const now = '2026-09-10T08:00:00.000Z';
+  const deliveryEvents = [
+    pending('weekly-success', [], {
+      frequency: 'weekly', occurredAt: '2026-09-03T08:00:00.000Z',
+    }),
+    { ...resolution('delivered', 'weekly-success'), occurredAt: '2026-09-03T08:01:00.000Z' },
+  ];
+  const result = await resolveDigestCandidates({
+    config: { enabledChannels: ['x'] }, frequency: 'weekly', now, deliveryEvents,
+    loadCandidateFeed: async () => feed([
+      candidate('seen-at-now', 'x', 'x:a', now),
+    ]),
+  });
+  assert.deepEqual(result.eligibleCandidates.map(({ candidateId }) => candidateId), ['seen-at-now']);
 });

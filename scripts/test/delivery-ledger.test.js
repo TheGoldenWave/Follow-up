@@ -23,16 +23,26 @@ function pending(overrides = {}) {
     digestId: 'digest-1',
     frequency: 'daily',
     candidateIds: ['candidate-a'],
+    eventClusterIds: ['cluster-a'],
+    destinationType: 'stdout',
+    messageHash: 'a'.repeat(64),
     ...overrides,
   };
 }
 
 function resolution(type, overrides = {}) {
+  const details = {
+    delivered: { providerReceipt: 'receipt-1' },
+    failed: { reasonCode: 'provider-rejected' },
+    superseded: { replacementAttemptId: 'replacement-attempt' },
+    'assumed-delivered': {},
+  }[type];
   return {
     schemaVersion: '1.0',
     type,
     occurredAt: '2026-09-01T08:01:00.000Z',
     attemptId: 'attempt-1',
+    ...details,
     ...overrides,
   };
 }
@@ -96,6 +106,45 @@ test('deriveDeliveryState rejects illegal attempt transitions', () => {
   assert.throws(
     () => deriveDeliveryState([pending(), resolution('failed'), resolution('delivered')]),
     /already resolved|illegal transition/i,
+  );
+});
+
+test('each delivery event type uses a closed non-secret field contract', () => {
+  assert.throws(
+    () => deriveDeliveryState([{ ...pending(), token: 'secret' }]),
+    /unsupported field.*token/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([{ ...pending(), messageHash: undefined }]),
+    /messageHash/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([{ ...pending(), candidateIds: [123] }]),
+    /candidateIds/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([{ ...pending(), eventClusterIds: [null] }]),
+    /eventClusterIds/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([pending(), { ...resolution('delivered'), candidateIds: [] }]),
+    /unsupported field.*candidateIds/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([pending(), resolution('failed', { reasonCode: undefined })]),
+    /reasonCode/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([pending(), resolution('superseded', { replacementAttemptId: undefined })]),
+    /replacementAttemptId/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([pending(), { ...resolution('assumed-delivered'), providerReceipt: 'receipt' }]),
+    /unsupported field.*providerReceipt/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([{ ...pending(), occurredAt: 'September 1, 2026' }]),
+    /occurredAt/i,
   );
 });
 

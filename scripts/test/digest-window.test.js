@@ -9,15 +9,17 @@ function delivered({ frequency = 'weekly', pendingAt, deliveredAt, attemptId = '
   return [
     {
       schemaVersion: '1.0', type: 'pending', occurredAt: pendingAt, attemptId,
-      digestId: `digest-${attemptId}`, frequency, candidateIds: [],
+      digestId: `digest-${attemptId}`, frequency, candidateIds: [], eventClusterIds: [],
+      destinationType: 'stdout', messageHash: 'a'.repeat(64),
     },
     {
       schemaVersion: '1.0', type: 'delivered', occurredAt: deliveredAt, attemptId,
+      providerReceipt: 'receipt-1',
     },
   ];
 }
 
-test('daily coverage starts at the previous successful daily delivery', () => {
+test('daily coverage always describes the complete retained pool instead of cutting off at prior delivery', () => {
   const now = '2026-09-10T08:00:00.000Z';
   const previous = '2026-09-09T08:03:00.000Z';
   const coverage = deriveDigestWindow({
@@ -26,7 +28,9 @@ test('daily coverage starts at the previous successful daily delivery', () => {
   });
 
   assert.equal(coverage.status, 'complete');
-  assert.deepEqual(coverage.requestedInterval, { start: previous, end: now });
+  assert.deepEqual(coverage.requestedInterval, {
+    start: '2026-09-01T00:00:00.000Z', end: now,
+  });
   assert.deepEqual(coverage.actualInterval, coverage.requestedInterval);
 });
 
@@ -58,6 +62,7 @@ test('first weekly delivery is incomplete at 6d23h and complete after seven full
     deliveryEvents: [],
   });
   assert.equal(complete.status, 'complete');
+  assert.deepEqual(complete.bounds, { startInclusive: true, endInclusive: false });
   assert.deepEqual(complete.actualInterval, {
     start: '2026-09-01T00:00:00.000Z', end: now,
   });
@@ -85,7 +90,26 @@ test('weekly coverage after a prior success extends through the current run time
     deliveryEvents: delivered({ pendingAt: previous, deliveredAt: previous }),
   });
   assert.equal(coverage.status, 'complete');
+  assert.deepEqual(coverage.bounds, { startInclusive: true, endInclusive: true });
   assert.deepEqual(coverage.actualInterval, { start: previous, end: now });
+});
+
+test('assumed-delivered does not advance the weekly successful-delivery anchor', () => {
+  const now = '2026-09-10T00:00:00.000Z';
+  const events = delivered({
+    pendingAt: '2026-09-08T00:00:00.000Z', deliveredAt: '2026-09-08T00:01:00.000Z',
+  });
+  events[1] = {
+    schemaVersion: '1.0', type: 'assumed-delivered',
+    occurredAt: '2026-09-08T00:01:00.000Z', attemptId: 'attempt-1',
+  };
+  const coverage = deriveDigestWindow({
+    frequency: 'weekly', now, continuousHistorySince: '2026-09-01T00:00:00.000Z',
+    deliveryEvents: events,
+  });
+  assert.deepEqual(coverage.requestedInterval, {
+    start: '2026-09-03T00:00:00.000Z', end: now,
+  });
 });
 
 test('truncation only makes coverage incomplete for affected requested sources and intervals', () => {
@@ -103,11 +127,23 @@ test('truncation only makes coverage incomplete for affected requested sources a
 
   const outside = deriveDigestWindow({
     ...base,
+    frequency: 'weekly',
     deliveryEvents: delivered({
-      frequency: 'daily', pendingAt: '2026-09-06T00:00:00.000Z',
+      frequency: 'weekly', pendingAt: '2026-09-06T00:00:00.000Z',
       deliveredAt: '2026-09-06T00:00:00.000Z',
     }),
     enabledSourceIds: ['blog:a'],
   });
   assert.equal(outside.status, 'complete');
+
+  const equalBoundary = deriveDigestWindow({
+    ...base,
+    frequency: 'weekly',
+    deliveryEvents: delivered({
+      frequency: 'weekly', pendingAt: '2026-09-05T00:00:00.000Z',
+      deliveredAt: '2026-09-05T00:00:00.000Z',
+    }),
+    enabledSourceIds: ['blog:a'],
+  });
+  assert.equal(equalBoundary.status, 'incomplete-history');
 });

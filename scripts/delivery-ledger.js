@@ -16,6 +16,26 @@ const EVENT_TYPES = new Set([
   'superseded',
 ]);
 const SUCCESS_TYPES = new Set(['delivered', 'assumed-delivered']);
+const COMMON_FIELDS = Object.freeze(['schemaVersion', 'type', 'occurredAt', 'attemptId']);
+const EVENT_FIELDS = Object.freeze({
+  pending: Object.freeze([
+    ...COMMON_FIELDS,
+    'digestId',
+    'frequency',
+    'candidateIds',
+    'eventClusterIds',
+    'destinationType',
+    'messageHash',
+  ]),
+  delivered: Object.freeze([...COMMON_FIELDS, 'providerReceipt']),
+  failed: Object.freeze([...COMMON_FIELDS, 'reasonCode']),
+  'assumed-delivered': COMMON_FIELDS,
+  superseded: Object.freeze([...COMMON_FIELDS, 'replacementAttemptId']),
+});
+const STRICT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
+const REASON_CODE = /^[a-z][a-z0-9-]{0,63}$/u;
+const SHA256 = /^[a-f0-9]{64}$/u;
 
 export function resolveDeliveryLedgerPath(options = {}) {
   return options.ledgerPath
@@ -28,10 +48,27 @@ function requireString(value, field) {
   }
 }
 
+function requireId(value, field) {
+  requireString(value, field);
+  if (!SAFE_ID.test(value)) {
+    throw new TypeError(`Delivery event ${field} must be a safe identifier`);
+  }
+}
+
 function validateTimestamp(value) {
   requireString(value, 'occurredAt');
-  if (!Number.isFinite(Date.parse(value))) {
-    throw new TypeError('Delivery event occurredAt must be a valid timestamp');
+  const parsed = Date.parse(value);
+  if (!STRICT_TIMESTAMP.test(value) || !Number.isFinite(parsed)
+    || new Date(parsed).toISOString() !== value) {
+    throw new TypeError('Delivery event occurredAt must be a strict UTC timestamp');
+  }
+}
+
+function validateIdArray(value, field) {
+  if (!Array.isArray(value)
+    || value.some((entry) => typeof entry !== 'string' || !SAFE_ID.test(entry))
+    || new Set(value).size !== value.length) {
+    throw new TypeError(`Delivery event ${field} must be an array of unique safe identifiers`);
   }
 }
 
@@ -45,18 +82,42 @@ export function validateDeliveryEvent(event) {
   if (!EVENT_TYPES.has(event.type)) {
     throw new TypeError(`Unknown delivery event type: ${event.type}`);
   }
-  requireString(event.attemptId, 'attemptId');
+  const allowedFields = new Set(EVENT_FIELDS[event.type]);
+  for (const field of Object.keys(event)) {
+    if (!allowedFields.has(field)) {
+      throw new TypeError(`Delivery event ${event.type} contains unsupported field ${field}`);
+    }
+  }
+  for (const field of allowedFields) {
+    if (!Object.hasOwn(event, field) || event[field] === undefined) {
+      throw new TypeError(`Delivery event ${event.type} requires field ${field}`);
+    }
+  }
+  requireId(event.attemptId, 'attemptId');
   validateTimestamp(event.occurredAt);
 
   if (event.type === 'pending') {
-    requireString(event.digestId, 'digestId');
+    requireId(event.digestId, 'digestId');
     if (!['daily', 'weekly'].includes(event.frequency)) {
       throw new TypeError('Pending delivery event frequency must be daily or weekly');
     }
-    if (!Array.isArray(event.candidateIds)
-      || event.candidateIds.some((candidateId) => typeof candidateId !== 'string' || candidateId.length === 0)
-      || new Set(event.candidateIds).size !== event.candidateIds.length) {
-      throw new TypeError('Pending delivery event candidateIds must be unique non-empty strings');
+    validateIdArray(event.candidateIds, 'candidateIds');
+    validateIdArray(event.eventClusterIds, 'eventClusterIds');
+    if (!['stdout', 'telegram', 'email'].includes(event.destinationType)) {
+      throw new TypeError('Pending delivery event destinationType must be stdout, telegram, or email');
+    }
+    if (typeof event.messageHash !== 'string' || !SHA256.test(event.messageHash)) {
+      throw new TypeError('Pending delivery event messageHash must be a lowercase SHA-256 digest');
+    }
+  }
+  if (event.type === 'delivered') requireId(event.providerReceipt, 'providerReceipt');
+  if (event.type === 'failed' && !REASON_CODE.test(event.reasonCode)) {
+    throw new TypeError('Failed delivery event reasonCode must be a safe machine-readable code');
+  }
+  if (event.type === 'superseded') {
+    requireId(event.replacementAttemptId, 'replacementAttemptId');
+    if (event.replacementAttemptId === event.attemptId) {
+      throw new TypeError('Superseded delivery event replacementAttemptId must be different');
     }
   }
   return event;

@@ -21,7 +21,8 @@ function startOfUtcDay(value) {
 
 function previousSuccess(deliveryEvents, frequency, endMs) {
   return deriveDeliveryState(deliveryEvents).successfulDeliveries
-    .filter((delivery) => delivery.frequency === frequency
+    .filter((delivery) => delivery.type === 'delivered'
+      && delivery.frequency === frequency
       && Date.parse(delivery.deliveredAt) <= endMs)
     .at(-1);
 }
@@ -39,7 +40,9 @@ export function deriveDigestWindow({
   }
   const nowMs = timestamp(now, 'now');
   const historyStartMs = timestamp(continuousHistorySince, 'continuousHistorySince');
-  const prior = previousSuccess(deliveryEvents, frequency, nowMs);
+  const prior = frequency === 'weekly'
+    ? previousSuccess(deliveryEvents, frequency, nowMs)
+    : null;
   const endMs = frequency === 'weekly' && !prior ? startOfUtcDay(nowMs) : nowMs;
   if (historyStartMs > endMs) {
     throw new RangeError('continuousHistorySince must not be later than the coverage end');
@@ -47,12 +50,12 @@ export function deriveDigestWindow({
   let requestedStartMs;
   const reasons = [];
 
-  if (prior) {
-    requestedStartMs = timestamp(prior.deliveredAt, 'previous delivery');
-  } else if (frequency === 'weekly') {
-    requestedStartMs = endMs - WEEKLY_BOOTSTRAP_DAYS * DAY;
-  } else {
+  if (frequency === 'daily') {
     requestedStartMs = historyStartMs;
+  } else if (prior) {
+    requestedStartMs = timestamp(prior.deliveredAt, 'previous delivery');
+  } else {
+    requestedStartMs = endMs - WEEKLY_BOOTSTRAP_DAYS * DAY;
   }
 
   let actualStartMs = Math.max(requestedStartMs, historyStartMs);
@@ -67,7 +70,7 @@ export function deriveDigestWindow({
   if (truncation?.oldestRetainedAt && Array.isArray(truncation.affectedSourceIds)) {
     const affected = truncation.affectedSourceIds.some((sourceId) => enabledSourceIds.includes(sourceId));
     const oldestRetainedMs = timestamp(truncation.oldestRetainedAt, 'truncation.oldestRetainedAt');
-    if (affected && requestedStartMs < oldestRetainedMs && oldestRetainedMs <= endMs) {
+    if (affected && requestedStartMs <= oldestRetainedMs && oldestRetainedMs <= endMs) {
       reasons.push('history-truncated');
       actualStartMs = Math.max(actualStartMs, oldestRetainedMs);
     }
@@ -79,6 +82,7 @@ export function deriveDigestWindow({
     complete: reasons.length === 0,
     requestedInterval: { start: iso(requestedStartMs), end: iso(endMs) },
     actualInterval: { start: iso(actualStartMs), end: iso(endMs) },
+    bounds: { startInclusive: true, endInclusive: frequency !== 'weekly' || Boolean(prior) },
     reasons,
   };
 }

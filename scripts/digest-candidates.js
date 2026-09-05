@@ -12,11 +12,10 @@ function exclude(excluded, candidateId, reason) {
   excluded.reasons.push({ candidateId, reason });
 }
 
-function candidateTimestamp(candidate) {
-  const value = candidate.publishedAt ?? candidate.firstSeenAt;
-  const parsed = Date.parse(value);
+function weeklyCandidateTimestamp(candidate) {
+  const parsed = Date.parse(candidate.firstSeenAt);
   if (!Number.isFinite(parsed)) {
-    throw new TypeError(`Candidate ${candidate.candidateId} has no valid eligibility timestamp`);
+    throw new TypeError(`Candidate ${candidate.candidateId} has no valid firstSeenAt timestamp`);
   }
   return parsed;
 }
@@ -69,10 +68,13 @@ export async function resolveDigestCandidates({
       exclude(excluded, candidate.candidateId, 'channel-disabled');
       continue;
     }
-    const eligibleAt = candidateTimestamp(candidate);
-    if (eligibleAt < startMs || eligibleAt > endMs) {
-      exclude(excluded, candidate.candidateId, 'outside-coverage');
-      continue;
+    if (frequency === 'weekly') {
+      const eligibleAt = weeklyCandidateTimestamp(candidate);
+      const afterEnd = coverage.bounds.endInclusive ? eligibleAt > endMs : eligibleAt >= endMs;
+      if (eligibleAt < startMs || afterEnd) {
+        exclude(excluded, candidate.candidateId, 'outside-coverage');
+        continue;
+      }
     }
     const state = deliveryState.candidateStates.get(candidate.candidateId) ?? 'unpushed';
     if (state === 'delivery-uncertain' || state === 'pushed-unseen') {
@@ -91,4 +93,3 @@ export async function resolveDigestCandidates({
     ordering: 'candidate-feed-stable',
   };
 }
-
