@@ -28,7 +28,7 @@ import {
   mergeCandidateFeed,
 } from "./candidate-feed-store.js";
 import { normalizeLegacyFeeds } from "./candidate-normalization.js";
-import { createSourceStatus } from "./source-status.js";
+import { createSourceStatus, sanitizeDiagnostic } from "./source-status.js";
 import {
   publishFeedTransaction,
   recoverFeedPublication,
@@ -56,6 +56,7 @@ const MAX_ZH_ARTICLES_PER_SOURCE = 3;
 const X_USER_LOOKUP_BATCH_SIZE = 5;
 const X_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const X_RETRY_ATTEMPTS = 3;
+const RSS_PARSE_FAILURE_COUNT = Symbol('rssParseFailureCount');
 
 const SCRIPT_DIR = decodeURIComponent(new URL(".", import.meta.url).pathname);
 
@@ -126,44 +127,82 @@ async function loadSources() {
 
 // Parses an RSS feed XML string and returns episode objects with
 // title, publishedAt, guid, and link. RSS feeds list newest first.
+function validateFeedXml(xml) {
+  if (typeof xml !== 'string' || xml.trim() === '') throw new Error('Invalid feed XML: empty payload');
+  const structural = xml
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<\?[\s\S]*?\?>/g, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '');
+  const tags = [...structural.matchAll(/<\s*(\/?)\s*([A-Za-z_][\w:.-]*)\b[^>]*(\/?)\s*>/g)];
+  const leftover = structural.replace(/<\s*(\/?)\s*([A-Za-z_][\w:.-]*)\b[^>]*(\/?)\s*>/g, '');
+  if (leftover.includes('<') || tags.length === 0) throw new Error('Invalid feed XML: malformed markup');
+  const stack = [];
+  let root = null;
+  let rootCount = 0;
+  let hasChannel = false;
+  for (const match of tags) {
+    const closing = match[1] === '/';
+    const selfClosing = match[3] === '/' || /\/\s*>$/.test(match[0]);
+    const name = match[2];
+    const localName = name.split(':').pop().toLowerCase();
+    if (!closing && stack.length === 0) {
+      rootCount += 1;
+      if (!root) root = localName;
+    }
+    if (localName === 'channel') hasChannel = true;
+    if (closing) {
+      const expected = stack.pop();
+      if (expected !== name) throw new Error(`Invalid feed XML: mismatched closing tag ${name}`);
+    } else if (!selfClosing) {
+      stack.push(name);
+    }
+  }
+  if (stack.length > 0) throw new Error(`Invalid feed XML: unclosed tag ${stack.at(-1)}`);
+  if (rootCount !== 1) throw new Error('Invalid feed XML: exactly one root element is required');
+  if (root !== 'rss' && root !== 'feed') throw new Error(`Invalid feed XML: unsupported root ${root ?? '<none>'}`);
+  if (root === 'rss' && !hasChannel) throw new Error('Invalid feed XML: RSS channel is required');
+  return root;
+}
+
+function extractElement(block, name) {
+  const match = block.match(new RegExp(`<${name}\\b[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${name}>`, 'i'))
+    || block.match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'));
+  return match?.[1]?.trim() ?? null;
+}
+
+function rssDiagnostic(message) {
+  return sanitizeDiagnostic(message);
+}
+
 function parseRssFeed(xml) {
   const episodes = [];
-  // Match each <item> block in the RSS feed
-  const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+  let failedItemCount = 0;
+  const root = validateFeedXml(xml);
+  const itemRegex = root === 'rss'
+    ? /<item\b[^>]*>([\s\S]*?)<\/item>/gi
+    : /<entry\b[^>]*>([\s\S]*?)<\/entry>/gi;
   let itemMatch;
   while ((itemMatch = itemRegex.exec(xml)) !== null) {
     const block = itemMatch[1];
-
-    // Extract title (inside CDATA or plain text)
-    const titleMatch =
-      block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
-      block.match(/<title>([\s\S]*?)<\/title>/);
-    const title = titleMatch ? titleMatch[1].trim() : "Untitled";
-
-    // Extract GUID (unique episode identifier), stripping CDATA wrapper if present
-    const guidMatch =
-      block.match(/<guid[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/guid>/) ||
-      block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/);
-    let guid = guidMatch ? guidMatch[1].trim() : null;
-
-    // Extract publish date
-    const pubDateMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
-    const publishedAt = normalizePublishedAt(pubDateMatch?.[1]?.trim());
-
-    // Extract item link (for the feed output URL and fallback GUID)
-    const linkMatch =
-      block.match(/<link><!\[CDATA\[([\s\S]*?)\]\]><\/link>/) ||
-      block.match(/<link>([\s\S]*?)<\/link>/);
-    const link = linkMatch ? linkMatch[1].trim() : null;
+    const title = extractElement(block, 'title') || "Untitled";
+    let guid = extractElement(block, root === 'rss' ? 'guid' : 'id');
+    const publishedAt = normalizePublishedAt(
+      extractElement(block, root === 'rss' ? 'pubDate' : 'published')
+        ?? extractElement(block, 'updated'),
+    );
+    const link = root === 'rss'
+      ? extractElement(block, 'link')
+      : block.match(/<link\b[^>]*\bhref=["']([^"']+)["'][^>]*\/?\s*>/i)?.[1] ?? null;
 
     // Use link as GUID fallback when GUID is missing
     // Some RSS feeds (e.g. 少数派, 36kr) don't include GUID elements
     if (!guid) guid = link;
 
-    if (guid) {
-      episodes.push({ title, guid, publishedAt, link });
-    }
+    if (guid) episodes.push({ title, guid, publishedAt, link });
+    else failedItemCount += 1;
   }
+  Object.defineProperty(episodes, RSS_PARSE_FAILURE_COUNT, { value: failedItemCount });
   return episodes;
 }
 
@@ -437,7 +476,7 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}
     const sourceErrors = [];
     let failedCandidateCount = 0;
     if (!podcast.rssUrl) {
-      sourceErrors.push(`Podcast: No rssUrl configured for ${podcast.name}`);
+      sourceErrors.push(rssDiagnostic(`Podcast: No rssUrl configured for ${podcast.name}`));
     } else {
       try {
         console.error(`  Fetching RSS for ${podcast.name}...`);
@@ -452,9 +491,14 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}
           signal: AbortSignal.timeout(30000),
         });
         if (!rssRes.ok) {
-          sourceErrors.push(`Podcast: Failed to fetch RSS for ${podcast.name}: HTTP ${rssRes.status}`);
+          sourceErrors.push(rssDiagnostic(`Podcast: Failed to fetch RSS for ${podcast.name}: HTTP ${rssRes.status}`));
         } else {
-          const candidates = parseRssFeed(await rssRes.text())
+          const parsedEpisodes = parseRssFeed(await rssRes.text());
+          if (parsedEpisodes[RSS_PARSE_FAILURE_COUNT] > 0) {
+            failedCandidateCount += parsedEpisodes[RSS_PARSE_FAILURE_COUNT];
+            sourceErrors.push(rssDiagnostic(`Podcast: ${podcast.name}: ${parsedEpisodes[RSS_PARSE_FAILURE_COUNT]} feed item(s) missing identity`));
+          }
+          const candidates = parsedEpisodes
             .slice(0, 3)
             .filter((episode) => !state.seenVideos[episode.guid])
             .filter((episode) => !episode.publishedAt || new Date(episode.publishedAt) >= cutoff)
@@ -465,9 +509,9 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}
             state.seenVideos[episode.guid] = now();
             if (transcriptResult.error || !transcriptResult.transcript) {
               failedCandidateCount += 1;
-              sourceErrors.push(transcriptResult.error
+              sourceErrors.push(rssDiagnostic(transcriptResult.error
                 ? `Podcast: Transcript error for ${podcast.name} "${episode.title}": ${transcriptResult.error}`
-                : `Podcast: Empty transcript for ${podcast.name} "${episode.title}"`);
+                : `Podcast: Empty transcript for ${podcast.name} "${episode.title}"`));
               continue;
             }
 
@@ -502,7 +546,7 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}
           }
         }
       } catch (error) {
-        sourceErrors.push(`Podcast: Error processing ${podcast.name}: ${error.message}`);
+        sourceErrors.push(rssDiagnostic(`Podcast: Error processing ${podcast.name}: ${error.message}`));
       }
     }
 
@@ -678,15 +722,23 @@ async function fetchRssFeeds(
   errors,
   filterKeywords,
   excludeKeywords,
-  { fetchImpl = fetch, namespace = "rss", now = Date.now } = {},
+  { fetchImpl = fetch, namespace = "rss", now = Date.now, channel = namespace, statuses } = {},
 ) {
   const results = [];
   const nowMs = now();
   const cutoff = new Date(nowMs - lookbackHours * 60 * 60 * 1000);
 
   for (const source of sources) {
+    const sourceErrors = [];
+    let failedCandidateCount = 0;
     if (!source.rss) {
       console.error(`  ${source.name}: No RSS URL configured, skipping`);
+      sourceErrors.push(rssDiagnostic(`RSS: ${source.name}: No RSS URL configured`));
+      errors.push(...sourceErrors);
+      statuses?.push(createSourceStatus({
+        sourceId: source.id, channel, sourceName: source.name,
+        errors: sourceErrors, discoveryComplete: false,
+      }));
       continue;
     }
 
@@ -702,13 +754,22 @@ async function fetchRssFeeds(
       });
 
       if (!res.ok) {
-        errors.push(`RSS: Failed to fetch ${source.name}: HTTP ${res.status}`);
+        sourceErrors.push(rssDiagnostic(`RSS: Failed to fetch ${source.name}: HTTP ${res.status}`));
         console.error(`  ${source.name}: HTTP ${res.status}`);
-        continue;
+        throw new Error(`HTTP ${res.status}`);
       }
 
       const xml = await res.text();
-      const items = parseRssFeed(xml);
+      let items;
+      try {
+        items = parseRssFeed(xml);
+      } catch (error) {
+        throw new Error(`Invalid feed for ${source.name}: ${error.message}`);
+      }
+      if (items[RSS_PARSE_FAILURE_COUNT] > 0) {
+        failedCandidateCount += items[RSS_PARSE_FAILURE_COUNT];
+        sourceErrors.push(rssDiagnostic(`RSS: ${source.name}: ${items[RSS_PARSE_FAILURE_COUNT]} feed item(s) missing identity`));
+      }
       console.error(`  ${source.name}: ${items.length} items in feed`);
 
       // Filter by lookback, dedup, and optional keywords
@@ -716,7 +777,11 @@ async function fetchRssFeeds(
       for (const item of items) {
         // Dedup: use guid as key, fall back to item link
         const legacyKey = item.guid || item.link;
-        if (!legacyKey) continue;
+        if (!legacyKey) {
+          failedCandidateCount += 1;
+          sourceErrors.push(rssDiagnostic(`RSS: ${source.name}: candidate is missing guid and link`));
+          continue;
+        }
         const dedupKey = `${namespace}:${source.rss}:${legacyKey}`;
         if (state.seenArticles[dedupKey] || state.seenArticles[legacyKey]) {
           console.error(`    Skipping "${item.title}" (already seen)`);
@@ -774,8 +839,21 @@ async function fetchRssFeeds(
         });
         console.error(`  ${source.name}: ${newItems.length} new items`);
       }
+      errors.push(...sourceErrors);
+      statuses?.push(createSourceStatus({
+        sourceId: source.id, channel, sourceName: source.name,
+        candidateCount: newItems.length, failedCandidateCount, errors: sourceErrors,
+      }));
     } catch (err) {
-      errors.push(`RSS: Error fetching ${source.name}: ${err.message}`);
+      if (!sourceErrors.some((error) => error.includes(err.message))) {
+        sourceErrors.push(rssDiagnostic(`RSS: Error fetching ${source.name}: ${err.message}`));
+      }
+      errors.push(...sourceErrors);
+      statuses?.push(createSourceStatus({
+        sourceId: source.id, channel, sourceName: source.name,
+        candidateCount: 0, failedCandidateCount,
+        errors: sourceErrors, discoveryComplete: false,
+      }));
       console.error(`  ${source.name}: ${err.message}`);
     }
   }

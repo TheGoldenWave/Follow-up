@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildStatuses, fetchPodcastContent, main } from '../generate-feed.js';
+import { buildStatuses, fetchPodcastContent, fetchRssFeeds, main, parseRssFeed } from '../generate-feed.js';
 
 function memoryRuntime(initial = {}, { failRenameAt = Infinity } = {}) {
   const files = new Map(Object.entries(initial));
@@ -119,6 +119,122 @@ test('podcast statuses distinguish partial, error, and proven no-results sources
     { sourceId: 'podcast:error', status: 'error', candidateCount: 0, failedCandidateCount: 1 },
     { sourceId: 'podcast:empty', status: 'no-results', candidateCount: 0, failedCandidateCount: undefined },
   ]);
+});
+
+test('podcast rejects HTML and truncated XML but accepts valid empty RSS and Atom', async () => {
+  for (const [body, expectedStatus] of [
+    ['<html>not rss</html>', 'error'],
+    ['<rss><channel><item><guid>broken</guid></item>', 'error'],
+    ['<rss version="2.0"><channel></channel></rss>', 'no-results'],
+    ['<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>', 'no-results'],
+  ]) {
+    const statuses = [];
+    const errors = [];
+    const results = await fetchPodcastContent(
+      [{ id: 'podcast:test', name: 'Test Podcast', rssUrl: 'https://rss.example/test', url: 'https://video.example/test' }],
+      'key', { seenVideos: {} }, errors,
+      {
+        fetchImpl: async () => ({ ok: true, status: 200, text: async () => body }),
+        statuses,
+        now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+      },
+    );
+    assert.deepEqual(results, [], body);
+    assert.equal(statuses[0].status, expectedStatus, body);
+    if (expectedStatus === 'error') assert.match(errors[0], /Test Podcast.*invalid feed/i);
+    else assert.deepEqual(errors, []);
+  }
+});
+
+test('generic RSS sources reject malformed bodies and only valid empty feeds are no-results', async () => {
+  for (const [body, expectedStatus] of [
+    ['<html>not rss</html>', 'error'],
+    ['<rss><channel><item><guid>broken</guid></item>', 'error'],
+    ['<rss version="2.0"><channel></channel></rss>', 'no-results'],
+    ['<feed xmlns="http://www.w3.org/2005/Atom"></feed>', 'no-results'],
+  ]) {
+    const statuses = [];
+    const errors = [];
+    const results = await fetchRssFeeds(
+      [{ id: 'newsletter:test', name: 'Test Newsletter', rss: 'https://rss.example/test', url: 'https://newsletter.example' }],
+      72, 1, { seenArticles: {} }, errors, undefined, undefined,
+      {
+        fetchImpl: async () => ({ ok: true, status: 200, text: async () => body }),
+        namespace: 'newsletters', channel: 'newsletters', statuses,
+        now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+      },
+    );
+    assert.deepEqual(results, [], body);
+    assert.equal(statuses[0].status, expectedStatus, body);
+    if (expectedStatus === 'error') assert.match(errors[0], /Test Newsletter.*invalid feed/i);
+    else assert.deepEqual(errors, []);
+  }
+});
+
+test('parseRssFeed rejects non-feed and structurally truncated XML', () => {
+  assert.throws(() => parseRssFeed('<html>not rss</html>'), /invalid feed/i);
+  assert.throws(() => parseRssFeed('<rss><channel><item></item>'), /invalid feed/i);
+  assert.deepEqual(parseRssFeed('<rss><channel></channel></rss>'), []);
+  assert.deepEqual(parseRssFeed('<feed xmlns="http://www.w3.org/2005/Atom"></feed>'), []);
+});
+
+test('podcast and generic RSS mark a mixed valid and identity-less feed partial', async () => {
+  const body = `<rss><channel>
+    <item><title>Valid</title><guid>valid</guid><link>https://example.com/valid</link></item>
+    <item><title>Missing identity</title></item>
+  </channel></rss>`;
+  const podcastStatuses = [];
+  const podcastResults = await fetchPodcastContent(
+    [{ id: 'podcast:mixed', name: 'Mixed Podcast', rssUrl: 'https://rss.example/mixed', url: 'https://video.example/mixed' }],
+    'key', { seenVideos: {} }, [], {
+      fetchImpl: async () => ({ ok: true, status: 200, text: async () => body }),
+      fetchTranscriptImpl: async () => ({ transcript: 'Transcript' }),
+      findYouTubeImpl: async () => null,
+      statuses: podcastStatuses,
+      now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+    },
+  );
+  assert.equal(podcastResults.length, 1);
+  assert.equal(podcastStatuses[0].status, 'partial');
+  assert.equal(podcastStatuses[0].failedCandidateCount, 1);
+
+  const rssStatuses = [];
+  const rssResults = await fetchRssFeeds(
+    [{ id: 'newsletter:mixed', name: 'Mixed Newsletter', rss: 'https://rss.example/mixed', url: 'https://newsletter.example' }],
+    72, 2, { seenArticles: {} }, [], undefined, undefined, {
+      fetchImpl: async () => ({ ok: true, status: 200, text: async () => body }),
+      namespace: 'newsletters', channel: 'newsletters', statuses: rssStatuses,
+      now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+    },
+  );
+  assert.equal(rssResults[0].items.length, 1);
+  assert.equal(rssStatuses[0].status, 'partial');
+  assert.equal(rssStatuses[0].failedCandidateCount, 1);
+});
+
+test('podcast and generic RSS sanitize source-specific upstream diagnostics', async () => {
+  const podcastErrors = [];
+  await fetchPodcastContent(
+    [{ id: 'podcast:safe', name: 'Safe Podcast', rssUrl: 'https://rss.example/safe', url: 'https://video.example/safe' }],
+    'key', { seenVideos: {} }, podcastErrors, {
+      fetchImpl: async () => rssResponse([{ guid: 'safe', title: 'Safe', publishedAt: 'Sat, 05 Sep 2026 08:00:00 GMT' }]),
+      fetchTranscriptImpl: async () => ({ error: 'token=secret https://private.example/path' }),
+      statuses: [], now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+    },
+  );
+  assert.match(podcastErrors[0], /Safe Podcast/);
+  assert.doesNotMatch(podcastErrors[0], /secret|private\.example/);
+
+  const rssErrors = [];
+  await fetchRssFeeds(
+    [{ id: 'newsletter:safe', name: 'Safe Newsletter', rss: 'https://rss.example/safe', url: 'https://newsletter.example' }],
+    72, 1, { seenArticles: {} }, rssErrors, undefined, undefined, {
+      fetchImpl: async () => { throw new Error('api_key=secret https://private.example/path'); },
+      namespace: 'newsletters', channel: 'newsletters', statuses: [],
+    },
+  );
+  assert.match(rssErrors[0], /Safe Newsletter/);
+  assert.doesNotMatch(rssErrors[0], /secret|private\.example/);
 });
 
 test('ordinary full generation rejects a missing candidate artifact before collection or publication', async () => {
