@@ -1,8 +1,8 @@
 # Follow-up Version Release and Upgrade Design
 
-Status: Approved direction; `v0.1.0` is the first release baseline
+Status: Approved direction; revised for the `v0.2.0` product-closure release
 
-Date: 2026-09-02
+Date: 2026-09-05
 
 ## Purpose
 
@@ -10,10 +10,10 @@ Follow-up needs a release model that lets the Skill, acquisition runtime, Adapte
 bundle, managed tools, and authenticated Sidecars evolve without forcing users to
 reinstall everything or lose local configuration and login state.
 
-The product currently has no Git tag or GitHub Release. The repository can only be
-identified by commit. The first release is therefore `v0.1.0`, a reproducible
-baseline of the existing centralized-Feed product. Local acquisition remains a
-planned capability until its per-source migration gates pass.
+Before `v0.1.0`, the product had no Git tag or GitHub Release and could only be
+identified by commit. The published `v0.1.0` release now provides the reproducible
+baseline of the centralized-Feed product. Local acquisition remains a planned
+capability until its per-source migration gates pass.
 
 ## User-facing release policy
 
@@ -218,8 +218,10 @@ installation path is intentionally simple:
 5. The installation reports the product version from the root `VERSION` file and the
    release manifest. A mismatch is an installation error.
 
-The `v0.1.0` release notes document these steps. Automatic discovery, staging,
-activation, and rollback are delivered with the upgrade foundation in `v0.2.0`.
+The `v0.1.0` release notes document these steps. `v0.2.0` adds a verified
+first-install entry point and user-facing `doctor`, but upgrades from `v0.1.0`
+remain explicit and user-confirmed. Automatic discovery, atomic activation, and
+rollback move to the local-acquisition foundation beginning in `v0.3.0`.
 
 ## Runtime content compatibility
 
@@ -249,14 +251,17 @@ A Stable release is produced only from a clean, reviewed commit:
 3. Build release archives from tracked files only and generate a separate checksums
    Release asset for complete-archive verification. Archive verification relies on the
    critical file hashes and this checksum because the archive contains no Git metadata.
-4. Create the signed/annotated immutable `vX.Y.Z` tag.
-5. Let the tag-triggered workflow publish one GitHub Release with manifest, checksums,
-   release archive, release notes,
-   compatibility notes, and any manual authorization requirements.
-6. Install the public assets into a temporary home and run the clean-install and
-   reinstall-recovery smoke tests before marking `v0.1.0` complete. Executable and
-   configuration rollback exercises become mandatory when the upgrade foundation is
-   introduced in `v0.2.0`.
+4. Install the built archive into a temporary home and run the release-specific
+   clean-install and reinstall-recovery gates before tagging. For `v0.2.0`, these
+   gates also cover the renamed Skill registration, channel-selection migration,
+   `doctor`, and preservation of pre-existing mutable data under
+   `~/.follow-builders`.
+5. Create the signed/annotated immutable `vX.Y.Z` tag.
+6. Let the tag-triggered workflow publish one GitHub Release with manifest, checksums,
+   release archive, release notes, compatibility notes, and any manual authorization
+   requirements; then download the public assets and repeat a checksum and minimal
+   installation smoke check. Executable and configuration rollback exercises become
+   mandatory when the upgrade foundation is introduced in `v0.3.0`.
 
 For `v0.1.0`, reinstall recovery means extracting the same tagged archive into a fresh
 program directory and running `npm ci` again while an existing test
@@ -293,15 +298,21 @@ released as a supported capability.
 | Version | Scope |
 |---|---|
 | `v0.1.0` | Reproducible centralized-Feed baseline and release metadata |
-| `v0.2.0` | Acquisition Runtime, Signal Batch contract, vendoring, and upgrade foundation |
-| `v0.3.0` | Source registry, managed tools, RSS/blog/GitHub/HN/Reddit in shadow mode |
-| `v0.4.0` | YouTube, podcasts, Digg, Techmeme, and arXiv; source-level hybrid migration |
-| `v0.5.0` | Authorized X, Xiaohongshu, and WeChat Sidecars |
-| `v0.6.0` | Local-acquisition onboarding, diagnostics, and source-level fallback |
-| `v0.7.0` | Central acquisition retired after all source observation gates pass |
-| `v0.8.x` | Reliability, security, recovery, and cross-platform hardening |
+| `v0.2.0` | Centralized product closure: 17 official Blogs, channel switches, verified install, `doctor`, and `/follow-up` onboarding |
+| `v0.3.0` | Acquisition Runtime, Signal Batch contract, source registry, controlled vendoring, and RSS/Blog shadow mode |
+| `v0.4.0` | GitHub, Hacker News, Reddit, Techmeme, and arXiv; source-level hybrid migration |
+| `v0.5.0` | YouTube, podcasts, Digg, and managed local tools |
+| `v0.6.0` | Authorized X Adapter with source-scoped consent and fallback |
+| `v0.7.0` | Xiaohongshu and WeChat Sidecars with local-only authenticated control plane |
+| `v0.8.0` | Local-first onboarding, cross-platform diagnostics, rollback, and migration completion |
 | `v0.9.0` | Configuration, Signal Batch, Sidecar, and upgrade contract freeze |
 | `v1.0.0` | Stable local-first product with documented compatibility commitments |
+
+Central acquisition retirement is a gate-driven milestone, not a reserved version:
+it occurs only after every existing source completes its required shadow runs and
+14-day observation window without an active rollback condition. Reliability,
+security, recovery, and cross-platform checks are release gates throughout the
+roadmap rather than work deferred to a late hardening release.
 
 Milestones describe intended scope, not deadlines or already delivered capability.
 
@@ -336,7 +347,8 @@ Milestones describe intended scope, not deadlines or already delivered capabilit
 ## Upgrade-foundation acceptance criteria
 
 These criteria become release gates when the upgrade foundation is introduced in
-`v0.2.0`; they do not block the initial `v0.1.0` baseline:
+`v0.3.0`; they do not block the `v0.1.0` baseline or the intentionally narrower
+`v0.2.0` product-closure release:
 
 - A clean installation can identify its product and component versions offline.
 - Upgrade discovery exposes only newer Stable releases and requires confirmation.
