@@ -142,6 +142,12 @@ export function validateSelectionAgainstRequest(request, manifest, { excludedCan
     }
   }
 
+  for (const candidateId of candidateById.keys()) {
+    if (!assigned.has(candidateId)) {
+      errors.push(`/eligibleCandidates eligible candidate ${candidateId} must appear in exactly one cluster`);
+    }
+  }
+
   for (const [index, eventClusterId] of manifest.selectedEventClusterIds.entries()) {
     const cluster = clusterById.get(eventClusterId);
     if (!cluster) errors.push(`/selectedEventClusterIds/${index} does not reference a cluster`);

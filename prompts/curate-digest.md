@@ -6,7 +6,7 @@
 
 - 只处理 `eligibleCandidates`，不得补充外部候选，也不得恢复 delivery 已排除的候选。
 - 将描述同一现实事件、发布或研究成果的候选聚为一个 event cluster；不同事件不得为了提高 corroboration 而合并。
-- 每个候选最多属于一个 cluster。manifest 的 `clusters` 必须保留全部已评分 cluster，包括合格但因组合约束落选的 cluster；`selectedEventClusterIds` 单独记录最终入选顺序。
+- 每个 `eligibleCandidates` 候选必须且只能属于一个 cluster。manifest 的 `clusters` 必须完整覆盖全部 eligible candidate，包括低于 60 分的 cluster，以及合格但因组合约束落选的 cluster；不得省略低分候选或第三个 channel 来规避组合约束。只有 `eligibleCandidates` 为空时，`clusters` 才可以为空。`selectedEventClusterIds` 单独记录最终入选顺序。
 - 不生成最终摘要或投递文案，只生成选择 manifest。
 
 ## 主来源
@@ -24,6 +24,8 @@
 - `corroboration` 0-10：独立来源的交叉确认强度。cluster 少于两个不同 `sourceId` 时必须为 0。
 
 `totalScore >= 60` 才合格。不要为了达到 6 条而提高低价值内容的分数；合格项不足时允许选择 0-5 条，最多选择 10 条。
+
+分值代表语义判断，validator 只能机械检查整数范围、权重算术、门槛与确定性选择，不能证明某项内容“真实应为 59 分还是 60 分”。必须诚实评分，不得通过虚构 59 分规避 portfolio 约束。
 
 ## ID 与确定性顺序
 

@@ -151,3 +151,66 @@ test('validator enforces membership, arithmetic, threshold order, exclusions, an
   const wrongOrder = { ...manifest, selectedEventClusterIds: [] };
   assert.equal(validateSelectionAgainstRequest(request(candidates), wrongOrder).valid, false);
 });
+
+test('validator requires every eligible candidate to appear in exactly one cluster', () => {
+  const candidates = [
+    candidate('a', 'blogs', 'blog:a', '2026-09-06T07:00:00.000Z'),
+    candidate('b', 'x', 'x:b', '2026-09-06T07:01:00.000Z'),
+    candidate('c', 'newsletters', 'newsletter:c', '2026-09-06T07:02:00.000Z'),
+  ];
+  const clusters = candidates.map((item, index) => cluster(item, 90 - index, 20));
+  const validManifest = {
+    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z', clusters,
+    selectedEventClusterIds: selectEventClusters(request(candidates), clusters),
+  };
+  assert.deepEqual(validateSelectionAgainstRequest(request(candidates), validManifest), {
+    valid: true, errors: [],
+  });
+
+  const emptyManifest = { ...validManifest, clusters: [], selectedEventClusterIds: [] };
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), emptyManifest).errors.join('; '),
+    /eligible candidate.*cluster/i,
+  );
+
+  const omittedHighScore = {
+    ...validManifest,
+    clusters: clusters.slice(1),
+    selectedEventClusterIds: selectEventClusters(request(candidates), clusters.slice(1)),
+  };
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), omittedHighScore).errors.join('; '),
+    /eligible candidate.*cluster/i,
+  );
+
+  const omittedThirdChannel = {
+    ...validManifest,
+    clusters: clusters.slice(0, 2),
+    selectedEventClusterIds: selectEventClusters(request(candidates), clusters.slice(0, 2)),
+  };
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), omittedThirdChannel).errors.join('; '),
+    /eligible candidate.*cluster/i,
+  );
+
+  const unknown = candidate('f', 'academic', 'academic:f', '2026-09-06T07:03:00.000Z');
+  const extraUnknown = structuredClone(validManifest);
+  extraUnknown.clusters.push(cluster(unknown, 60, 20));
+  extraUnknown.selectedEventClusterIds = selectEventClusters(
+    request(candidates), extraUnknown.clusters,
+  );
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), extraUnknown).errors.join('; '),
+    /ineligible candidate/i,
+  );
+});
+
+test('validator permits empty clusters only when no candidates are eligible', () => {
+  const emptyManifest = {
+    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z',
+    clusters: [], selectedEventClusterIds: [],
+  };
+  assert.deepEqual(validateSelectionAgainstRequest(request([]), emptyManifest), {
+    valid: true, errors: [],
+  });
+});

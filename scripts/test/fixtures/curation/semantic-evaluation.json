@@ -36,6 +36,19 @@
         "mustNotInventInterests": true,
         "relevanceBasis": ["enabledChannels", "Follow-up product scope"]
       }
+    },
+    {
+      "name": "不得虚构 59 分来规避确定性 portfolio 规则",
+      "candidate": {
+        "channel": "newsletters",
+        "title": "Independent confirmation of a major model release",
+        "content": "The source independently verifies availability and material capability changes."
+      },
+      "expectedReview": {
+        "requiresSemanticScoreReview": true,
+        "notMechanicallyProvable": true,
+        "reason": "validator 可检查分值范围与算术，但不能机械证明该内容应得 59 或 60 分。"
+      }
     }
   ]
 }
