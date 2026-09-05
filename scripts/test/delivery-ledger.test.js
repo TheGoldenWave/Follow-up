@@ -9,8 +9,10 @@ import {
   MIN_LEDGER_RETENTION_DAYS,
   appendDeliveryEvent,
   appendDeliveryEvents,
+  compactDeliveryLedger,
   deriveDeliveryState,
   readDeliveryLedger,
+  reservePendingAttempt,
   selectRetainedDeliveryEvents,
 } from '../delivery-ledger.js';
 
@@ -66,6 +68,39 @@ test('appendDeliveryEvent creates an append-only JSONL ledger that can be read b
 
   assert.deepEqual(await readDeliveryLedger({ ledgerPath }), [pending(), resolution('delivered')]);
   assert.equal((await readFile(ledgerPath, 'utf8')).endsWith('\n'), true);
+});
+
+test('concurrent reservations for the same candidate allow exactly one winner', async (t) => {
+  const ledgerPath = await ledgerFixture(t);
+  const candidateId = hashId('contended-candidate');
+  const attempts = ['attempt-a', 'attempt-b'].map((attemptId) => pending({
+    attemptId,
+    digestId: `digest-${attemptId}`,
+    candidateIds: [candidateId],
+  }));
+  const results = await Promise.allSettled(attempts.map((event) => (
+    reservePendingAttempt(event, { ledgerPath })
+  )));
+  assert.equal(results.filter(({ status }) => status === 'fulfilled').length, 1);
+  assert.equal(results.filter(({ status }) => status === 'rejected').length, 1);
+  assert.match(results.find(({ status }) => status === 'rejected').reason.message, /already reserved|conflict/i);
+  assert.equal((await readDeliveryLedger({ ledgerPath })).length, 1);
+});
+
+test('ordinary pending append enforces the same candidate reservation conflict', async (t) => {
+  const ledgerPath = await ledgerFixture(t);
+  const candidateId = hashId('duplicate-candidate');
+  await appendDeliveryEvent(pending({ attemptId: 'first', candidateIds: [candidateId] }), { ledgerPath });
+  await assert.rejects(
+    appendDeliveryEvent(pending({ attemptId: 'second', candidateIds: [candidateId] }), { ledgerPath }),
+    /already reserved|conflict/i,
+  );
+
+  await appendDeliveryEvent(resolution('assumed-delivered', { attemptId: 'first' }), { ledgerPath });
+  await assert.rejects(
+    reservePendingAttempt(pending({ attemptId: 'third', candidateIds: [candidateId] }), { ledgerPath }),
+    /already reserved|conflict/i,
+  );
 });
 
 test('readDeliveryLedger rejects corrupted, truncated, and unknown JSONL events', async (t) => {
@@ -144,6 +179,30 @@ test('each delivery event type uses a closed non-secret field contract', () => {
     /eventClusterIds.*SHA-256|SHA-256.*eventClusterIds/i,
   );
   assert.doesNotThrow(() => deriveDeliveryState([pending()]));
+  assert.doesNotThrow(() => deriveDeliveryState([
+    pending(), resolution('delivered', { providerReceipt: '<message.123@example.com>' }),
+  ]));
+  assert.doesNotThrow(() => deriveDeliveryState([
+    pending(), resolution('delivered', { providerReceipt: 'telegram:1234567890' }),
+  ]));
+  assert.throws(
+    () => deriveDeliveryState([
+      pending(), resolution('delivered', { providerReceipt: `receipt\nsecret` }),
+    ]),
+    /providerReceipt/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([
+      pending(), resolution('delivered', { providerReceipt: 'x'.repeat(513) }),
+    ]),
+    /providerReceipt/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([
+      pending(), resolution('delivered', { providerReceipt: 'Bearer secret-value' }),
+    ]),
+    /providerReceipt/i,
+  );
   assert.throws(
     () => deriveDeliveryState([pending(), { ...resolution('delivered'), candidateIds: [] }]),
     /unsupported field.*candidateIds/i,
@@ -237,6 +296,90 @@ test('appendDeliveryEvents appends a retry pair together under the ledger lock',
   ];
   await appendDeliveryEvents(retryEvents, { ledgerPath });
   assert.deepEqual(await readDeliveryLedger({ ledgerPath }), [old, ...retryEvents]);
+});
+
+test('readers share the ledger lock and never misclassify a concurrent append as truncation', async (t) => {
+  const ledgerPath = await ledgerFixture(t);
+  const event = pending();
+  const reads = Array.from({ length: 12 }, () => readDeliveryLedger({ ledgerPath }));
+  const results = await Promise.allSettled([
+    ...reads,
+    appendDeliveryEvent(event, { ledgerPath }),
+  ]);
+  assert.equal(results.every(({ status }) => status === 'fulfilled'), true);
+  for (const result of results.slice(0, reads.length)) {
+    assert.ok(result.value.length === 0 || result.value.length === 1);
+  }
+  assert.deepEqual(await readDeliveryLedger({ ledgerPath }), [event]);
+});
+
+test('streaming ledger reads enforce byte, line, event, and ID-array limits', async (t) => {
+  const ledgerPath = await ledgerFixture(t);
+  await appendDeliveryEvent(pending(), { ledgerPath });
+  await assert.rejects(
+    readDeliveryLedger({ ledgerPath, limits: { maxFileBytes: 8 } }),
+    /file.*limit|bytes/i,
+  );
+  await assert.rejects(
+    readDeliveryLedger({ ledgerPath, limits: { maxLineBytes: 8 } }),
+    /line.*limit|bytes/i,
+  );
+  await assert.rejects(
+    readDeliveryLedger({ ledgerPath, limits: { maxEvents: 0 } }),
+    /event.*limit/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([pending({
+      candidateIds: [hashId('one'), hashId('two')],
+    })], { limits: { maxCandidateIds: 1 } }),
+    /candidateIds.*limit/i,
+  );
+  assert.throws(
+    () => deriveDeliveryState([pending({
+      eventClusterIds: [hashId('one'), hashId('two')],
+    })], { limits: { maxEventClusterIds: 1 } }),
+    /eventClusterIds.*limit/i,
+  );
+});
+
+test('compact retains unresolved attempts, active candidate state, and latest successful anchors', async (t) => {
+  const ledgerPath = await ledgerFixture(t);
+  const now = '2026-09-30T00:00:00.000Z';
+  const old = '2026-06-01T00:00:00.000Z';
+  const events = [
+    pending({ attemptId: 'uncertain', occurredAt: old, candidateIds: [hashId('uncertain')] }),
+    pending({ attemptId: 'active-delivered', occurredAt: old, candidateIds: [hashId('active')] }),
+    resolution('delivered', {
+      attemptId: 'active-delivered', occurredAt: '2026-06-01T00:01:00.000Z',
+    }),
+    pending({ attemptId: 'daily-anchor', occurredAt: '2026-06-02T00:00:00.000Z', candidateIds: [] }),
+    resolution('delivered', {
+      attemptId: 'daily-anchor', occurredAt: '2026-06-02T00:01:00.000Z',
+    }),
+    pending({
+      attemptId: 'weekly-anchor', frequency: 'weekly', occurredAt: '2026-06-03T00:00:00.000Z',
+      candidateIds: [],
+    }),
+    resolution('delivered', {
+      attemptId: 'weekly-anchor', occurredAt: '2026-06-03T00:01:00.000Z',
+    }),
+    pending({ attemptId: 'obsolete-failed', occurredAt: old, candidateIds: [hashId('obsolete')] }),
+    resolution('failed', {
+      attemptId: 'obsolete-failed', occurredAt: '2026-06-01T00:01:00.000Z',
+    }),
+  ];
+  await appendDeliveryEvents(events, { ledgerPath });
+  const result = await compactDeliveryLedger({
+    ledgerPath,
+    now,
+    activeCandidateIds: [hashId('active')],
+  });
+  assert.equal(result.removedEvents, 2);
+  const retained = await readDeliveryLedger({ ledgerPath });
+  assert.deepEqual(
+    [...new Set(retained.map(({ attemptId }) => attemptId))].sort(),
+    ['active-delivered', 'daily-anchor', 'uncertain', 'weekly-anchor'],
+  );
 });
 
 test('retention never accepts less than 90 days and preserves old events that still determine state', () => {

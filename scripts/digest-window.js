@@ -68,9 +68,16 @@ export function deriveDigestWindow({
   }
 
   if (truncation?.oldestRetainedAt && Array.isArray(truncation.affectedSourceIds)) {
-    const affected = truncation.affectedSourceIds.some((sourceId) => enabledSourceIds.includes(sourceId));
-    const oldestRetainedMs = timestamp(truncation.oldestRetainedAt, 'truncation.oldestRetainedAt');
-    if (affected && requestedStartMs <= oldestRetainedMs && oldestRetainedMs <= endMs) {
+    const affectedBoundaries = truncation.affectedSourceIds
+      .filter((sourceId) => enabledSourceIds.includes(sourceId))
+      .map((sourceId) => truncation.oldestRetainedFirstSeenAtBySource?.[sourceId]
+        ?? truncation.oldestRetainedAt)
+      .map((value) => timestamp(value, 'truncation firstSeenAt boundary'));
+    const oldestRetainedMs = affectedBoundaries.length > 0
+      ? Math.max(...affectedBoundaries)
+      : null;
+    if (oldestRetainedMs !== null
+      && requestedStartMs <= oldestRetainedMs && oldestRetainedMs <= endMs) {
       reasons.push('history-truncated');
       actualStartMs = Math.max(actualStartMs, oldestRetainedMs);
     }

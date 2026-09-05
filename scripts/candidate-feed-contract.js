@@ -158,6 +158,26 @@ function timestampErrors(feed) {
   return errors;
 }
 
+function truncationErrors(feed) {
+  const errors = [];
+  const boundaries = feed?.truncation?.oldestRetainedFirstSeenAtBySource;
+  if (!boundaries || typeof boundaries !== 'object' || Array.isArray(boundaries)) return errors;
+  const affected = new Set(feed.truncation.affectedSourceIds ?? []);
+  for (const sourceId of Object.keys(boundaries)) {
+    if (!affected.has(sourceId)) {
+      errors.push(`/truncation/oldestRetainedFirstSeenAtBySource contains unaffected source ${sourceId}`);
+    }
+  }
+  if (feed.historyTruncated) {
+    for (const sourceId of affected) {
+      if (!Object.hasOwn(boundaries, sourceId)) {
+        errors.push(`/truncation/oldestRetainedFirstSeenAtBySource is missing affected source ${sourceId}`);
+      }
+    }
+  }
+  return errors;
+}
+
 function registryCoverageErrors(feed, expectedRegistry) {
   if (!Array.isArray(expectedRegistry)) {
     return ['/registry requires an expectedRegistry array for completeness validation'];
@@ -202,6 +222,7 @@ export function validateCandidateFeed(feed, { expectedRegistry } = {}) {
     errors.push(...uniquenessErrors(feed));
     errors.push(...semanticErrors(feed));
     errors.push(...timestampErrors(feed));
+    errors.push(...truncationErrors(feed));
     errors.push(...registryCoverageErrors(feed, expectedRegistry));
   }
   return { valid: errors.length === 0, errors };

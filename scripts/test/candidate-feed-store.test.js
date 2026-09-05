@@ -193,6 +193,50 @@ test('global cap records only otherwise-retained removals and deterministic trun
   assert.deepEqual(merged.truncation.affectedSourceIds, ['x:a', 'x:b']);
   assert.equal(merged.truncation.removedCount, 5);
   assert.equal(merged.truncation.oldestRetainedAt, candidates[999].publishedAt);
+  assert.deepEqual(merged.truncation.oldestRetainedFirstSeenAtBySource, {
+    'x:a': candidates[999].firstSeenAt,
+    'x:b': candidates[998].firstSeenAt,
+  });
+});
+
+test('cap truncation records first-seen boundaries even when publication dates are old', () => {
+  const nowMs = Date.parse(collectionStart);
+  const candidates = Array.from({ length: 1005 }, (_, index) => candidate({
+    sourceId: index % 2 ? 'x:a' : 'x:b', nativeId: `first-seen-cap-${index}`,
+    publishedAt: '2026-09-01T00:00:00.000Z',
+    firstSeenAt: new Date(nowMs - index * 1000).toISOString(),
+  }));
+  const merged = mergeCandidateFeed(prior(candidates.slice(0, 1000)), {
+    currentCandidates: candidates.slice(1000),
+    statuses: registry.map((source) => status(source)), registry, collectionStart,
+  });
+  assert.equal(merged.historyTruncated, true);
+  assert.equal(
+    merged.truncation.oldestRetainedFirstSeenAtBySource['x:a'],
+    candidates[999].firstSeenAt,
+  );
+});
+
+test('first-seen truncation boundary includes a newly discovered old publication removed by the cap', () => {
+  const nowMs = Date.parse(collectionStart);
+  const retained = Array.from({ length: 1000 }, (_, index) => candidate({
+    sourceId: index % 2 ? 'x:a' : 'x:b', nativeId: `newer-publication-${index}`,
+    publishedAt: new Date(nowMs - index * 1000).toISOString(),
+    firstSeenAt: '2026-09-01T00:00:00.000Z',
+  }));
+  const removed = candidate({
+    sourceId: 'x:a', nativeId: 'old-publication-newly-discovered',
+    publishedAt: '2026-09-01T00:00:00.000Z',
+    firstSeenAt: '2026-09-06T07:59:00.000Z',
+  });
+  const merged = mergeCandidateFeed(prior(retained), {
+    currentCandidates: [removed],
+    statuses: registry.map((source) => status(source)), registry, collectionStart,
+  });
+  assert.equal(
+    merged.truncation.oldestRetainedFirstSeenAtBySource['x:a'],
+    removed.firstSeenAt,
+  );
 });
 
 test('keeps prior cap truncation visible while the missing interval remains in retention', () => {
@@ -213,6 +257,30 @@ test('keeps prior cap truncation visible while the missing interval remains in r
 
   const merged = mergeCandidateFeed(previous, {
     currentCandidates: [], statuses: registry.map((source) => status(source)), registry, collectionStart,
+  });
+  assert.equal(merged.historyTruncated, true);
+  assert.deepEqual(merged.truncation, previous.truncation);
+});
+
+test('keeps prior truncation while an affected first-seen boundary remains recent', () => {
+  const nextCollection = '2026-09-20T08:00:00.000Z';
+  const current = candidate({
+    nativeId: 'current', publishedAt: '2026-09-19T07:00:00.000Z',
+    firstSeenAt: '2026-09-19T07:00:00.000Z', lastSeenAt: '2026-09-19T08:00:00.000Z',
+  });
+  const previous = prior([current], {
+    generatedAt: '2026-09-19T08:00:00.000Z',
+    historyTruncated: true,
+    truncation: {
+      affectedSourceIds: ['x:a'],
+      oldestRetainedAt: '2026-08-01T00:00:00.000Z',
+      oldestRetainedFirstSeenAtBySource: { 'x:a': '2026-09-19T00:00:00.000Z' },
+      removedCount: 1,
+    },
+  });
+  const merged = mergeCandidateFeed(previous, {
+    currentCandidates: [], statuses: registry.map((source) => status(source)), registry,
+    collectionStart: nextCollection,
   });
   assert.equal(merged.historyTruncated, true);
   assert.deepEqual(merged.truncation, previous.truncation);

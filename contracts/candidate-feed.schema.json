@@ -42,6 +42,7 @@
             "properties": {
               "affectedSourceIds": { "maxItems": 0 },
               "oldestRetainedAt": { "type": "null" },
+              "oldestRetainedFirstSeenAtBySource": { "maxProperties": 0 },
               "removedCount": { "const": 0 }
             }
           }
@@ -98,6 +99,11 @@
             { "$ref": "#/$defs/dateTime" },
             { "type": "null" }
           ]
+        },
+        "oldestRetainedFirstSeenAtBySource": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/sourceId" },
+          "additionalProperties": { "$ref": "#/$defs/dateTime" }
         },
         "removedCount": { "type": "integer", "minimum": 0 }
       }

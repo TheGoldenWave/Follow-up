@@ -118,6 +118,7 @@ test('truncation only makes coverage incomplete for affected requested sources a
     continuousHistorySince: '2026-09-01T00:00:00.000Z', deliveryEvents: [],
     truncation: {
       affectedSourceIds: ['blog:a'], oldestRetainedAt: '2026-09-05T00:00:00.000Z', removedCount: 2,
+      oldestRetainedFirstSeenAtBySource: { 'blog:a': '2026-09-05T00:00:00.000Z' },
     },
   };
   assert.equal(deriveDigestWindow({ ...base, enabledSourceIds: ['x:a'] }).status, 'complete');
@@ -146,4 +147,20 @@ test('truncation only makes coverage incomplete for affected requested sources a
     enabledSourceIds: ['blog:a'],
   });
   assert.equal(equalBoundary.status, 'incomplete-history');
+});
+
+test('weekly truncation completeness uses the affected source firstSeenAt boundary', () => {
+  const coverage = deriveDigestWindow({
+    frequency: 'weekly', now: '2026-09-10T00:00:00.000Z',
+    continuousHistorySince: '2026-09-01T00:00:00.000Z', deliveryEvents: [],
+    enabledSourceIds: ['blog:a'],
+    truncation: {
+      affectedSourceIds: ['blog:a'],
+      oldestRetainedAt: '2025-01-01T00:00:00.000Z',
+      oldestRetainedFirstSeenAtBySource: { 'blog:a': '2026-09-08T00:00:00.000Z' },
+      removedCount: 1,
+    },
+  });
+  assert.equal(coverage.status, 'incomplete-history');
+  assert.equal(coverage.actualInterval.start, '2026-09-08T00:00:00.000Z');
 });
