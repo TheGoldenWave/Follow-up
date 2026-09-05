@@ -20,6 +20,11 @@ on:
           - newsletters-only
           - academic-only
           - zh-tech-only
+      initialize_candidate_feed:
+        description: 'Initialize the rolling candidate Feed exactly once (mode must be all)'
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: central-feed-generation
@@ -54,8 +59,14 @@ jobs:
           X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
           POD2TXT_API_KEY: ${{ secrets.POD2TXT_API_KEY }}
         run: |
+          if [ "${{ inputs.initialize_candidate_feed }}" = "true" ] && [ "${{ inputs.mode }}" != "all" ]; then
+            echo "Candidate Feed initialization requires mode=all." >&2
+            exit 1
+          fi
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" != "all" ]; then
             cd scripts && node generate-feed.js --${{ inputs.mode }}
+          elif [ "${{ inputs.initialize_candidate_feed }}" = "true" ]; then
+            cd scripts && node generate-feed.js --initialize-candidate-feed
           else
             cd scripts && node generate-feed.js
           fi
@@ -77,6 +88,7 @@ jobs:
             feed-newsletters.json
             feed-academic.json
             feed-zh-tech.json
+            feed-candidates.json
             state-feed.json
 
   publish:
@@ -105,6 +117,7 @@ jobs:
           cp generated-feeds/feed-newsletters.json feed-newsletters.json
           cp generated-feeds/feed-academic.json feed-academic.json
           cp generated-feeds/feed-zh-tech.json feed-zh-tech.json
+          cp generated-feeds/feed-candidates.json feed-candidates.json
           cp generated-feeds/state-feed.json state-feed.json
 
       - name: Commit and push feeds
@@ -113,7 +126,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add feed-x.json feed-podcasts.json feed-blogs.json \
             feed-newsletters.json feed-academic.json feed-zh-tech.json \
-            state-feed.json
+            feed-candidates.json state-feed.json
           if git diff --cached --quiet; then
             exit 0
           fi

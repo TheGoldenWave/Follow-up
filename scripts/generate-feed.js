@@ -13,14 +13,22 @@
 // Env vars needed: X_BEARER_TOKEN, POD2TXT_API_KEY
 // ============================================================================
 
-import { readFile, writeFile } from "fs/promises";
+import { readFile, rename, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
 import { pathToFileURL } from "url";
 
-import { createFeedEnvelope } from "./feed-contract.js";
+import { createFeedEnvelope, validateFeed } from "./feed-contract.js";
 import { fetchBlogContent } from "./blog-collector.js";
 import { validateBlogSources } from "./blog-source-config.js";
+import {
+  CANDIDATE_FEED_FILE,
+  initializeCandidateFeed,
+  loadCandidateFeed,
+  mergeCandidateFeed,
+} from "./candidate-feed-store.js";
+import { normalizeLegacyFeeds } from "./candidate-normalization.js";
+import { createSourceStatus } from "./source-status.js";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -44,9 +52,7 @@ const X_USER_LOOKUP_BATCH_SIZE = 5;
 const X_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const X_RETRY_ATTEMPTS = 3;
 
-// State file lives in the repo root so it gets committed by GitHub Actions
 const SCRIPT_DIR = decodeURIComponent(new URL(".", import.meta.url).pathname);
-const STATE_PATH = join(SCRIPT_DIR, "..", "state-feed.json");
 
 function normalizePublishedAt(value) {
   if (!value) return null;
@@ -58,25 +64,6 @@ function normalizePublishedAt(value) {
 
 function errorsSince(errors, startIndex) {
   return errors.slice(startIndex).filter((error) => error.startsWith("RSS"));
-}
-
-// -- State Management --------------------------------------------------------
-
-// Tracks which tweet IDs and video IDs we've already included in feeds
-// so we never send the same content twice across runs.
-
-async function loadState() {
-  if (!existsSync(STATE_PATH)) {
-    return { seenTweets: {}, seenVideos: {}, seenArticles: {} };
-  }
-  try {
-    const state = JSON.parse(await readFile(STATE_PATH, "utf-8"));
-    // Ensure seenArticles exists for older state files
-    if (!state.seenArticles) state.seenArticles = {};
-    return state;
-  } catch {
-    return { seenTweets: {}, seenVideos: {}, seenArticles: {} };
-  }
 }
 
 function pruneState(state, now = Date.now()) {
@@ -94,11 +81,6 @@ function pruneState(state, now = Date.now()) {
     if (ts < articleCutoff) delete state.seenArticles[id];
   }
   return state;
-}
-
-async function saveState(state) {
-  pruneState(state);
-  await writeFile(STATE_PATH, JSON.stringify(state, null, 2));
 }
 
 // -- Load Sources ------------------------------------------------------------
@@ -437,8 +419,8 @@ async function fetchPod2txtTranscript(rssUrl, guid, apiKey) {
 // 1. Fetches the RSS feed to discover episodes
 // 2. Filters by lookback window and dedup
 // 3. Fetches transcript via pod2txt for the newest unseen episode
-async function fetchPodcastContent(podcasts, apiKey, state, errors) {
-  const cutoff = new Date(Date.now() - PODCAST_LOOKBACK_HOURS * 60 * 60 * 1000);
+async function fetchPodcastContent(podcasts, apiKey, state, errors, { now = Date.now } = {}) {
+  const cutoff = new Date(now() - PODCAST_LOOKBACK_HOURS * 60 * 60 * 1000);
   const allCandidates = [];
 
   // Step 1: Discover episodes from each podcast's RSS feed
@@ -526,14 +508,14 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors) {
     );
 
     // Mark as seen regardless so we don't retry failed episodes daily
-    state.seenVideos[selected.guid] = Date.now();
+    state.seenVideos[selected.guid] = now();
 
     if (result.error) {
       console.error(
         `    Transcript error: ${result.error} — skipping to next candidate`,
       );
       errors.push(
-        `Podcast: Transcript error for "${selected.title}": ${result.error}`,
+        `Podcast: Transcript error for ${selected.podcast.name} "${selected.title}": ${result.error}`,
       );
       continue;
     }
@@ -542,6 +524,7 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors) {
       console.error(
         `    Empty transcript for "${selected.title}" — skipping to next candidate`,
       );
+      errors.push(`Podcast: Empty transcript for ${selected.podcast.name} "${selected.title}"`);
       continue;
     }
 
@@ -567,6 +550,7 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors) {
     return [
       {
         source: "podcast",
+        sourceId: selected.podcast.id,
         name: selected.podcast.name,
         title: selected.title,
         guid: selected.guid,
@@ -604,9 +588,9 @@ async function fetchXWithRetry(url, options) {
   return lastResponse;
 }
 
-async function fetchXContent(xAccounts, bearerToken, state, errors) {
+async function fetchXContent(xAccounts, bearerToken, state, errors, { now = Date.now } = {}) {
   const results = [];
-  const cutoff = new Date(Date.now() - TWEET_LOOKBACK_HOURS * 60 * 60 * 1000);
+  const cutoff = new Date(now() - TWEET_LOOKBACK_HOURS * 60 * 60 * 1000);
 
   // Batch lookup user IDs. Smaller batches make one flaky X response less likely
   // to wipe out the whole feed.
@@ -642,7 +626,7 @@ async function fetchXContent(xAccounts, bearerToken, state, errors) {
         }
       }
     } catch (err) {
-      errors.push(`X API: User lookup error: ${err.message}`);
+      errors.push(`X API: User lookup error for ${batch.join(",")}: ${err.message}`);
     }
   }
 
@@ -697,13 +681,14 @@ async function fetchXContent(xAccounts, bearerToken, state, errors) {
         });
 
         // Mark as seen
-        state.seenTweets[t.id] = Date.now();
+        state.seenTweets[t.id] = now();
       }
 
       if (newTweets.length === 0) continue;
 
       results.push({
         source: "x",
+        sourceId: account.id,
         name: account.name,
         handle: account.handle,
         bio: userData.description,
@@ -807,6 +792,7 @@ async function fetchRssFeeds(
         }
 
         newItems.push({
+          sourceId: source.id,
           title: item.title || "Untitled",
           url: item.link || source.url,
           publishedAt: item.publishedAt || null,
@@ -822,6 +808,7 @@ async function fetchRssFeeds(
 
       if (newItems.length > 0) {
         results.push({
+          sourceId: source.id,
           source: source.name,
           url: source.url,
           tags: source.tags || [],
@@ -840,13 +827,185 @@ async function fetchRssFeeds(
 
 // -- Main --------------------------------------------------------------------
 
+const CHANNEL_FILES = {
+  x: "feed-x.json",
+  podcasts: "feed-podcasts.json",
+  blogs: "feed-blogs.json",
+  newsletters: "feed-newsletters.json",
+  academic: "feed-academic.json",
+  "zh-tech": "feed-zh-tech.json",
+};
+
+const CHANNEL_PAYLOADS = {
+  x: "x",
+  podcasts: "podcasts",
+  blogs: "blogs",
+  newsletters: "newsletters",
+  academic: "papers",
+  "zh-tech": "articles",
+};
+
+function sourceRegistryFromSources(sources) {
+  return [
+    ...(sources.x_accounts ?? []).map((source) => ({ ...source, channel: "x" })),
+    ...(sources.podcasts ?? []).map((source) => ({ ...source, channel: "podcasts" })),
+    ...(sources.blogs ?? []).map((source) => ({ ...source, channel: "blogs" })),
+    ...(sources.newsletters ?? []).map((source) => ({ ...source, channel: "newsletters" })),
+    ...(sources.academic?.sources ?? []).map((source) => ({ ...source, channel: "academic" })),
+    ...(sources.zhTech ?? []).map((source) => ({ ...source, channel: "zh-tech" })),
+  ];
+}
+
+function sourceCandidateCount(feed, source) {
+  const payload = feed?.[CHANNEL_PAYLOADS[source.channel]] ?? [];
+  if (source.channel === "x") {
+    return payload.filter((group) => group.sourceId === source.id || group.handle === source.handle)
+      .reduce((sum, group) => sum + (group.tweets?.length ?? 0), 0);
+  }
+  if (source.channel === "podcasts" || source.channel === "blogs") {
+    return payload.filter((item) => item.sourceId === source.id || item.name === source.name).length;
+  }
+  return payload.filter((group) => group.sourceId === source.id
+    || group.url === source.url || group.url === source.rss)
+    .reduce((sum, group) => sum + (group.items?.length ?? 0), 0);
+}
+
+function sourceErrors(errors, source) {
+  const identities = [source.id, source.name, source.rss, source.rssUrl]
+    .filter(Boolean).map(String);
+  return errors.filter((error) => identities.some((identity) => error.includes(identity))
+    || (source.handle && error.startsWith('X API') && (error.includes(`@${source.handle}`)
+      || new RegExp(`(?:^|[, ])${source.handle}(?:[, :]|$)`, 'i').test(error)))
+    || (source.channel === 'x' && error.includes('Rate limited')));
+}
+
+function buildStatuses(registry, feeds, errors, structuredStatuses = []) {
+  const expectedIds = new Set(registry.map(({ id }) => id));
+  const explicitIds = structuredStatuses.map(({ sourceId }) => sourceId);
+  if (new Set(explicitIds).size !== explicitIds.length) {
+    throw new Error('Structured source statuses contain duplicate source IDs');
+  }
+  const unknown = explicitIds.find((sourceId) => !expectedIds.has(sourceId));
+  if (unknown) throw new Error(`Structured source status references unknown source ${unknown}`);
+  const explicit = new Map(structuredStatuses.map((status) => [status.sourceId, status]));
+  return registry.map((source) => explicit.get(source.id) ?? createSourceStatus({
+    sourceId: source.id,
+    channel: source.channel,
+    sourceName: source.name,
+    candidateCount: sourceCandidateCount(feeds[source.channel], source),
+    errors: sourceErrors(errors, source),
+  }));
+}
+
+async function readState(path, fsImpl) {
+  try {
+    const state = JSON.parse(await fsImpl.readFile(path, "utf8"));
+    return {
+      seenTweets: state.seenTweets ?? {},
+      seenVideos: state.seenVideos ?? {},
+      seenArticles: state.seenArticles ?? {},
+    };
+  } catch {
+    return { seenTweets: {}, seenVideos: {}, seenArticles: {} };
+  }
+}
+
+async function publishAtomically(documents, fsImpl, token) {
+  const snapshots = new Map();
+  const staged = [];
+  try {
+    for (const [path, document] of documents) {
+      try {
+        snapshots.set(path, await fsImpl.readFile(path, "utf8"));
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+        snapshots.set(path, null);
+      }
+      const stagePath = `${path}.stage-${token}`;
+      await fsImpl.writeFile(stagePath, `${JSON.stringify(document, null, 2)}\n`);
+      staged.push([stagePath, path]);
+    }
+  } catch (error) {
+    for (const [stagePath] of staged) await fsImpl.unlink(stagePath).catch(() => {});
+    throw error;
+  }
+
+  const published = [];
+  try {
+    for (const [stagePath, path] of staged) {
+      await fsImpl.rename(stagePath, path);
+      published.push(path);
+    }
+  } catch (error) {
+    for (const path of published.reverse()) {
+      const snapshot = snapshots.get(path);
+      if (snapshot === null) await fsImpl.unlink(path).catch(() => {});
+      else await fsImpl.writeFile(path, snapshot);
+    }
+    for (const [stagePath] of staged) await fsImpl.unlink(stagePath).catch(() => {});
+    throw error;
+  }
+}
+
+async function collectAll({ channels, sources, state, fetchImpl, now, env, stderr }) {
+  const errors = [];
+  const feeds = {};
+  const structuredStatuses = [];
+  const generatedAt = new Date(now()).toISOString();
+
+  if (channels.includes("x")) {
+    stderr("Fetching X/Twitter content...");
+    const content = await fetchXContent(sources.x_accounts ?? [], env.X_BEARER_TOKEN, state, errors, { now });
+    feeds.x = createFeedEnvelope({ generatedAt, lookbackHours: TWEET_LOOKBACK_HOURS, x: content,
+      stats: { xBuilders: content.length, totalTweets: content.reduce((sum, group) => sum + group.tweets.length, 0) },
+      errors: errors.filter((error) => error.startsWith("X API")).length ? errors.filter((error) => error.startsWith("X API")) : undefined });
+  }
+  if (channels.includes("podcasts")) {
+    stderr("Fetching podcast content (RSS + pod2txt)...");
+    const content = await fetchPodcastContent(sources.podcasts ?? [], env.POD2TXT_API_KEY, state, errors, { now });
+    feeds.podcasts = createFeedEnvelope({ generatedAt, lookbackHours: PODCAST_LOOKBACK_HOURS, podcasts: content,
+      stats: { podcastEpisodes: content.length },
+      errors: errors.filter((error) => error.startsWith("Podcast")).length ? errors.filter((error) => error.startsWith("Podcast")) : undefined });
+  }
+  if (channels.includes("blogs")) {
+    stderr("Fetching blog content...");
+    const content = await fetchBlogContent(sources.blogs ?? [], state, errors, {
+      fetchImpl, now, statuses: structuredStatuses,
+    });
+    feeds.blogs = createFeedEnvelope({ generatedAt, lookbackHours: BLOG_LOOKBACK_HOURS, blogs: content,
+      stats: { blogPosts: content.length },
+      errors: errors.filter((error) => error.startsWith("Blog")).length ? errors.filter((error) => error.startsWith("Blog")) : undefined });
+  }
+  for (const [channel, configuredSources, lookbackHours, maxPerSource] of [
+    ["newsletters", sources.newsletters ?? [], NEWSLETTER_LOOKBACK_HOURS, MAX_NEWSLETTERS_PER_SOURCE],
+    ["academic", sources.academic?.sources ?? [], ACADEMIC_LOOKBACK_HOURS, MAX_PAPERS_PER_SOURCE],
+    ["zh-tech", sources.zhTech ?? [], ZH_TECH_LOOKBACK_HOURS, MAX_ZH_ARTICLES_PER_SOURCE],
+  ]) {
+    if (!channels.includes(channel)) continue;
+    const errorStart = errors.length;
+    const content = await fetchRssFeeds(configuredSources, lookbackHours, maxPerSource, state, errors,
+      channel === "academic" ? sources.academic?.filters?.minKeywords ?? [] : undefined,
+      channel === "academic" ? sources.academic?.filters?.excludeKeywords ?? [] : undefined,
+      { fetchImpl, namespace: channel, now, channel, statuses: structuredStatuses });
+    feeds[channel] = createFeedEnvelope({ generatedAt, lookbackHours,
+      [CHANNEL_PAYLOADS[channel]]: content, stats: { sources: content.length },
+      errors: errorsSince(errors, errorStart).length ? errorsSince(errors, errorStart) : undefined });
+  }
+  return { feeds, state, errors, structuredStatuses };
+}
+
 async function main(options = {}) {
-  const args = options.args ?? process.argv.slice(2);
+  const processImpl = options.processImpl ?? process;
+  const args = options.args ?? processImpl.argv.slice(2);
+  const env = options.env ?? processImpl.env;
   const fetchImpl = options.fetchImpl ?? globalThis.fetch;
   const now = options.now ?? Date.now;
   const stdout = options.stdout ?? console.log;
   const stderr = options.stderr ?? console.error;
   const loadSourcesImpl = options.loadSourcesImpl ?? loadSources;
+  const fsImpl = options.fsImpl ?? { readFile, writeFile, rename, unlink };
+  const rootDir = options.rootDir ?? join(SCRIPT_DIR, "..");
+  const collectAllImpl = options.collectAllImpl ?? collectAll;
   const shadow = args.includes("--shadow");
   const blogSourceId = args.find((arg) => arg.startsWith("--blog-source="))?.slice("--blog-source=".length);
   const tweetsOnly = args.includes("--tweets-only");
@@ -855,18 +1014,23 @@ async function main(options = {}) {
   const newslettersOnly = args.includes("--newsletters-only");
   const academicOnly = args.includes("--academic-only");
   const zhTechOnly = args.includes("--zh-tech-only");
+  const initialize = args.includes("--initialize-candidate-feed");
 
   // If a specific --*-only flag is set, only that feed type runs.
   // If no flag is set, all feed types run.
-  const anyOnly = tweetsOnly || podcastsOnly || blogsOnly || newslettersOnly || academicOnly || zhTechOnly;
+  const anyOnly = tweetsOnly || podcastsOnly || blogsOnly || newslettersOnly || academicOnly || zhTechOnly || Boolean(blogSourceId);
   const runTweets = tweetsOnly || !anyOnly;
   const runPodcasts = podcastsOnly || !anyOnly;
-  const runBlogs = blogsOnly || !anyOnly;
+  const runBlogs = blogsOnly || Boolean(blogSourceId) || !anyOnly;
   const runNewsletters = newslettersOnly || !anyOnly;
   const runAcademic = academicOnly || !anyOnly;
   const runZhTech = zhTechOnly || !anyOnly;
 
-  const sources = await loadSourcesImpl();
+  if (anyOnly && initialize) {
+    throw new Error("--initialize-candidate-feed requires a complete generation");
+  }
+
+  let sources = await loadSourcesImpl();
 
   if (shadow) {
     const selectedBlogs = blogSourceId
@@ -895,232 +1059,79 @@ async function main(options = {}) {
     return JSON.parse(serialized);
   }
 
-  const xBearerToken = process.env.X_BEARER_TOKEN;
-  const pod2txtKey = process.env.POD2TXT_API_KEY;
-
-  if (runPodcasts && !pod2txtKey) {
-    console.error("POD2TXT_API_KEY not set");
-    process.exit(1);
-  }
-  if (runTweets && !xBearerToken) {
-    console.error("X_BEARER_TOKEN not set");
-    process.exit(1);
+  if (blogSourceId) {
+    const selected = (sources.blogs ?? []).filter(({ id }) => id === blogSourceId);
+    if (selected.length === 0 && options.collectAllImpl === undefined) throw new Error(`Unknown blog source: ${blogSourceId}`);
+    sources = { ...sources, blogs: selected };
   }
 
-  const state = await loadState();
-  const errors = [];
-
-  // Fetch tweets
-  if (runTweets) {
-    console.error("Fetching X/Twitter content...");
-    const xContent = await fetchXContent(
-      sources.x_accounts,
-      xBearerToken,
-      state,
-      errors,
-    );
-    console.error(`  Found ${xContent.length} builders with new tweets`);
-
-    const totalTweets = xContent.reduce((sum, a) => sum + a.tweets.length, 0);
-    const xErrors = errors.filter((e) => e.startsWith("X API"));
-
-    if (xErrors.length > 0) {
-      console.error("  X API errors:");
-      for (const error of xErrors) {
-        console.error(`    - ${error}`);
+  const channels = [
+    ...(runTweets ? ["x"] : []), ...(runPodcasts ? ["podcasts"] : []),
+    ...(runBlogs ? ["blogs"] : []), ...(runNewsletters ? ["newsletters"] : []),
+    ...(runAcademic ? ["academic"] : []), ...(runZhTech ? ["zh-tech"] : []),
+  ];
+  const registry = sourceRegistryFromSources(sources);
+  const candidatePath = join(rootDir, CANDIDATE_FEED_FILE);
+  let previousCandidateFeed;
+  let initializationFeeds;
+  if (!anyOnly) {
+    if (initialize) {
+      try {
+        await fsImpl.readFile(candidatePath, "utf8");
+        throw new Error("Candidate Feed already exists; initialization refuses to overwrite it");
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
       }
+      initializationFeeds = {};
+      for (const channel of Object.keys(CHANNEL_FILES)) {
+        const filename = CHANNEL_FILES[channel];
+        let feed;
+        try {
+          feed = JSON.parse(await fsImpl.readFile(join(rootDir, filename), "utf8"));
+        } catch (error) {
+          throw new Error(`${filename}: cannot initialize from the current Feed: ${error.message}`, { cause: error });
+        }
+        const validation = validateFeed(feed, channel);
+        if (!validation.valid) throw new Error(`${filename}: ${validation.errors.join('; ')}`);
+        initializationFeeds[channel] = feed;
+      }
+    } else {
+      previousCandidateFeed = await loadCandidateFeed({ path: candidatePath, readFileImpl: fsImpl.readFile, registry });
     }
+  }
 
-    if (xContent.length === 0 && xErrors.length > 0) {
-      throw new Error(
-        `X feed failed: 0 builders returned and ${xErrors.length} X API error(s) occurred`,
-      );
-    }
+  if (runPodcasts && !env.POD2TXT_API_KEY) throw new Error("POD2TXT_API_KEY not set");
+  if (runTweets && !env.X_BEARER_TOKEN) throw new Error("X_BEARER_TOKEN not set");
 
-    const xFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: TWEET_LOOKBACK_HOURS,
-      x: xContent,
-      stats: { xBuilders: xContent.length, totalTweets },
-      errors: xErrors.length > 0 ? xErrors : undefined,
+  const state = await readState(join(rootDir, "state-feed.json"), fsImpl);
+  const collectionStartMs = now();
+  const collectionStart = new Date(collectionStartMs).toISOString();
+  const collected = await collectAllImpl({ channels, sources, state, fetchImpl, now, env, stderr });
+  const feeds = collected.feeds ?? {};
+  const documents = channels.map((channel) => [join(rootDir, CHANNEL_FILES[channel]), feeds[channel]]);
+
+  if (!anyOnly) {
+    const statuses = collected.statuses ?? buildStatuses(
+      registry, feeds, collected.errors ?? [], collected.structuredStatuses ?? [],
+    );
+    const currentCandidates = collected.candidates ?? normalizeLegacyFeeds(feeds, {
+      registry, seenAt: collectionStart,
     });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-x.json"),
-      JSON.stringify(xFeed, null, 2),
-    );
-    console.error(
-      `  feed-x.json: ${xContent.length} builders, ${totalTweets} tweets`,
-    );
+    const candidateFeed = initialize
+      ? initializeCandidateFeed({ feeds: initializationFeeds, currentCandidates, statuses, registry, collectionStart })
+      : mergeCandidateFeed(previousCandidateFeed, { currentCandidates, statuses, registry, collectionStart });
+    documents.push([candidatePath, candidateFeed]);
+    documents.push([join(rootDir, "state-feed.json"), pruneState(collected.state ?? state, collectionStartMs)]);
   }
-
-  // Fetch podcasts
-  if (runPodcasts) {
-    console.error("Fetching podcast content (RSS + pod2txt)...");
-    const podcasts = await fetchPodcastContent(
-      sources.podcasts,
-      pod2txtKey,
-      state,
-      errors,
-    );
-    console.error(`  Found ${podcasts.length} new episodes`);
-
-    const podcastFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: PODCAST_LOOKBACK_HOURS,
-      podcasts,
-      stats: { podcastEpisodes: podcasts.length },
-      errors:
-        errors.filter((e) => e.startsWith("Podcast")).length > 0
-          ? errors.filter((e) => e.startsWith("Podcast"))
-          : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-podcasts.json"),
-      JSON.stringify(podcastFeed, null, 2),
-    );
-    console.error(`  feed-podcasts.json: ${podcasts.length} episodes`);
-  }
-
-  // Fetch blog posts
-  if (runBlogs && sources.blogs && sources.blogs.length > 0) {
-    console.error("Fetching blog content...");
-    const selectedBlogs = blogSourceId
-      ? sources.blogs.filter(({ id }) => id === blogSourceId)
-      : sources.blogs;
-    if (blogSourceId && selectedBlogs.length === 0) {
-      throw new Error(`Unknown blog source: ${blogSourceId}`);
-    }
-    const blogContent = await fetchBlogContent(selectedBlogs, state, errors, { fetchImpl, now });
-    console.error(`  Found ${blogContent.length} new blog post(s)`);
-
-    const blogFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: BLOG_LOOKBACK_HOURS,
-      blogs: blogContent,
-      stats: { blogPosts: blogContent.length },
-      errors:
-        errors.filter((e) => e.startsWith("Blog")).length > 0
-          ? errors.filter((e) => e.startsWith("Blog"))
-          : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-blogs.json"),
-      JSON.stringify(blogFeed, null, 2),
-    );
-    console.error(`  feed-blogs.json: ${blogContent.length} posts`);
-  }
-
-  // Fetch newsletters (RSS-based)
-  if (runNewsletters && sources.newsletters && sources.newsletters.length > 0) {
-    console.error("Fetching newsletter content (RSS)...");
-    const errorStart = errors.length;
-    const newsletterContent = await fetchRssFeeds(
-      sources.newsletters,
-      NEWSLETTER_LOOKBACK_HOURS,
-      MAX_NEWSLETTERS_PER_SOURCE,
-      state,
-      errors,
-      undefined,
-      undefined,
-      { namespace: "newsletters" },
-    );
-    console.error(`  Found ${newsletterContent.length} new newsletter(s)`);
-
-    const newsletterFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: NEWSLETTER_LOOKBACK_HOURS,
-      newsletters: newsletterContent,
-      stats: { newsletterSources: newsletterContent.length },
-      errors: errorsSince(errors, errorStart).length > 0
-        ? errorsSince(errors, errorStart)
-        : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-newsletters.json"),
-      JSON.stringify(newsletterFeed, null, 2),
-    );
-    console.error(`  feed-newsletters.json: ${newsletterContent.length} sources with new content`);
-  }
-
-  // Fetch academic papers (RSS from arXiv)
-  if (runAcademic && sources.academic && sources.academic.sources && sources.academic.sources.length > 0) {
-    console.error("Fetching academic papers (arXiv RSS)...");
-    const errorStart = errors.length;
-    const filterKeywords = sources.academic.filters?.minKeywords || [];
-    const excludeKeywords = sources.academic.filters?.excludeKeywords || [];
-    const academicContent = await fetchRssFeeds(
-      sources.academic.sources,
-      ACADEMIC_LOOKBACK_HOURS,
-      MAX_PAPERS_PER_SOURCE,
-      state,
-      errors,
-      filterKeywords,
-      excludeKeywords,
-      { namespace: "academic" },
-    );
-    console.error(`  Found ${academicContent.length} categories with new papers`);
-
-    const totalPapers = academicContent.reduce((sum, src) => sum + src.items.length, 0);
-    const academicFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: ACADEMIC_LOOKBACK_HOURS,
-      papers: academicContent,
-      stats: { categories: academicContent.length, totalPapers },
-      errors: errorsSince(errors, errorStart).length > 0
-        ? errorsSince(errors, errorStart)
-        : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-academic.json"),
-      JSON.stringify(academicFeed, null, 2),
-    );
-    console.error(`  feed-academic.json: ${totalPapers} papers across ${academicContent.length} categories`);
-  }
-
-  // Fetch Chinese tech media (RSS-based)
-  if (runZhTech && sources.zhTech && sources.zhTech.length > 0) {
-    console.error("Fetching Chinese tech media (RSS)...");
-    const errorStart = errors.length;
-    const zhTechContent = await fetchRssFeeds(
-      sources.zhTech,
-      ZH_TECH_LOOKBACK_HOURS,
-      MAX_ZH_ARTICLES_PER_SOURCE,
-      state,
-      errors,
-      undefined,
-      undefined,
-      { namespace: "zh-tech" },
-    );
-    console.error(`  Found ${zhTechContent.length} sources with new articles`);
-
-    const totalArticles = zhTechContent.reduce((sum, src) => sum + src.items.length, 0);
-    const zhTechFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: ZH_TECH_LOOKBACK_HOURS,
-      articles: zhTechContent,
-      stats: { sources: zhTechContent.length, totalArticles },
-      errors: errorsSince(errors, errorStart).length > 0
-        ? errorsSince(errors, errorStart)
-        : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-zh-tech.json"),
-      JSON.stringify(zhTechFeed, null, 2),
-    );
-    console.error(`  feed-zh-tech.json: ${totalArticles} articles from ${zhTechContent.length} sources`);
-  }
-
-  // Save dedup state
-  await saveState(state);
-
-  if (errors.length > 0) {
-    console.error(`  ${errors.length} non-fatal errors`);
-  }
+  await publishAtomically(documents, fsImpl, String(collectionStartMs));
+  return Object.fromEntries(documents.map(([path, document]) => [path, document]));
 }
 
 export {
   errorsSince,
   fetchRssFeeds,
+  buildStatuses,
+  collectAll,
   loadSources,
   main,
   normalizePublishedAt,
@@ -1131,6 +1142,6 @@ export {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error("Feed generation failed:", err.message);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }

@@ -27,6 +27,8 @@ import {
   loadCentralFeedData,
 } from '../prepare-digest.js';
 import { validateArtifactDirectory } from '../validate-feed-artifact.js';
+import { validateCandidateFeed } from '../candidate-feed-contract.js';
+import { loadSourceRegistry } from '../source-registry.js';
 
 const repositoryRoot = new URL('../../', import.meta.url);
 
@@ -425,7 +427,7 @@ test('package and generation workflow run the unified test suite before generati
   assert.ok(generateStep > testStep);
 });
 
-test('generated feed validation covers all six artifacts and rejects an invalid one', async () => {
+test('generated feed validation covers all six compatible feeds plus candidate feed', async () => {
   assert.deepEqual(CENTRAL_FEED_FILES.map(({ filename }) => filename), feedCases.map(([, filename]) => filename));
 
   const validErrors = await validateFeedFiles({
@@ -441,6 +443,14 @@ test('generated feed validation covers all six artifacts and rejects an invalid 
     ),
   });
   assert.ok(invalidErrors.some((error) => error.includes('feed-academic.json')));
+
+  const missingCandidateErrors = await validateFeedFiles({
+    readJson: async (filename) => {
+      if (filename === 'feed-candidates.json') throw new Error('missing');
+      return readJson(filename);
+    },
+  });
+  assert.ok(missingCandidateErrors.some((error) => error.includes('feed-candidates.json')));
 });
 
 test('generation workflow validates generated feeds before staging them', async () => {
@@ -503,13 +513,14 @@ test('workflow dispatch and generated-file tracking cover exactly the six live c
   assert.doesNotMatch(workflow, /reports-only|feed-reports\.json/);
 });
 
-test('feed artifact gate accepts exactly six feeds plus state and rejects unsafe contents', async (t) => {
+test('feed artifact gate accepts exactly six feeds plus candidate and state', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'follow-up-feeds-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
 
   for (const [, filename] of feedCases) {
     await writeFile(directory + '/' + filename, await readFile(new URL(filename, repositoryRoot)));
   }
+  await writeFile(join(directory, 'feed-candidates.json'), await readFile(new URL('feed-candidates.json', repositoryRoot)));
   await writeFile(join(directory, 'state-feed.json'), await readFile(new URL('state-feed.json', repositoryRoot)));
   assert.deepEqual(await validateArtifactDirectory(directory), []);
 
@@ -544,14 +555,14 @@ test('feed workflow pins actions and separates secret generation from publishing
   assert.doesNotMatch(publishJob, /secrets\.|X_BEARER_TOKEN|POD2TXT_API_KEY|npm (ci|install|test)/);
 });
 
-test('feed workflow transfers and publishes only the exact seven generated files', async () => {
+test('feed workflow transfers and publishes only the exact eight generated files', async () => {
   const workflow = await readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8');
-  const expectedFiles = [...feedCases.map(([, filename]) => filename), 'state-feed.json'];
+  const expectedFiles = [...feedCases.map(([, filename]) => filename), 'feed-candidates.json', 'state-feed.json'];
   const uploadStart = workflow.indexOf('actions/upload-artifact@');
   const publishStart = workflow.indexOf('  publish:');
   const uploadBlock = workflow.slice(uploadStart, publishStart);
   for (const filename of expectedFiles) assert.match(uploadBlock, new RegExp(`^\\s+${filename.replace('.', '\\.')}\\s*$`, 'm'));
-  assert.equal((uploadBlock.match(/^\s+feed-[^\s]+\.json\s*$/gm) || []).length, 6);
+  assert.equal((uploadBlock.match(/^\s+feed-[^\s]+\.json\s*$/gm) || []).length, 7);
   assert.match(uploadBlock, /if-no-files-found: error/);
 
   const publishJob = workflow.slice(publishStart);
@@ -564,4 +575,21 @@ test('feed workflow transfers and publishes only the exact seven generated files
   assert.match(publishJob, /ref: main/);
   assert.match(publishJob, /git fetch origin main/);
   assert.match(publishJob, /git rebase origin\/main/);
+});
+
+test('checked-in candidate feed is initialized and valid for the complete source registry', async () => {
+  const [candidateFeed, registry] = await Promise.all([
+    readJson('feed-candidates.json'),
+    loadSourceRegistry(),
+  ]);
+  const validation = validateCandidateFeed(candidateFeed, { expectedRegistry: registry });
+  assert.deepEqual(validation, { valid: true, errors: [] });
+  assert.equal(candidateFeed.initializedAt, candidateFeed.continuousHistorySince);
+});
+
+test('workflow exposes one-time candidate initialization and includes it only in full generation', async () => {
+  const workflow = await readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8');
+  assert.match(workflow, /initialize_candidate_feed:[\s\S]*type: boolean/);
+  assert.match(workflow, /--initialize-candidate-feed/);
+  assert.match(workflow, /initialize_candidate_feed[\s\S]*mode.*all|mode.*all[\s\S]*initialize_candidate_feed/);
 });

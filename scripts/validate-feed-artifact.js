@@ -3,45 +3,24 @@
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {
+  CANDIDATE_FEED_FILE,
+  CENTRAL_FEED_FILES,
+  validateFeedFiles,
+} from './feed-contract.js';
+import { loadSourceRegistry } from './source-registry.js';
 
-const FEEDS = [
-  ['feed-x.json', 'x'],
-  ['feed-podcasts.json', 'podcasts'],
-  ['feed-blogs.json', 'blogs'],
-  ['feed-newsletters.json', 'newsletters'],
-  ['feed-academic.json', 'papers'],
-  ['feed-zh-tech.json', 'articles'],
+const EXPECTED_FILES = [
+  ...CENTRAL_FEED_FILES.map(({ filename }) => filename),
+  CANDIDATE_FEED_FILE,
+  'state-feed.json',
 ];
-const EXPECTED_FILES = [...FEEDS.map(([filename]) => filename), 'state-feed.json'];
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function validateFeedEnvelope(feed, filename, payloadKey) {
-  const errors = [];
-  if (!isObject(feed)) return [`${filename}: must contain a JSON object`];
-  if (!/^1\.\d+$/.test(feed.schemaVersion ?? '')) {
-    errors.push(`${filename}: schemaVersion must be compatible 1.x`);
-  }
-  if (typeof feed.generatedAt !== 'string' || Number.isNaN(Date.parse(feed.generatedAt))) {
-    errors.push(`${filename}: generatedAt must be an ISO-compatible date`);
-  }
-  if (typeof feed.lookbackHours !== 'number' || feed.lookbackHours <= 0) {
-    errors.push(`${filename}: lookbackHours must be positive`);
-  }
-  if (!isObject(feed.stats)) errors.push(`${filename}: stats must be an object`);
-  if (!Array.isArray(feed[payloadKey])) {
-    errors.push(`${filename}: ${payloadKey} must be an array`);
-  }
-  if (feed.errors !== undefined
-      && (!Array.isArray(feed.errors) || !feed.errors.every((error) => typeof error === 'string'))) {
-    errors.push(`${filename}: errors must be an array of strings`);
-  }
-  return errors;
-}
-
-export async function validateArtifactDirectory(directory) {
+export async function validateArtifactDirectory(directory, { expectedRegistry } = {}) {
   const errors = [];
   const entries = (await readdir(directory)).sort();
   const expected = [...EXPECTED_FILES].sort();
@@ -71,10 +50,13 @@ export async function validateArtifactDirectory(directory) {
     }
   }
 
-  for (const [filename, payloadKey] of FEEDS) {
-    if (documents[filename]) {
-      errors.push(...validateFeedEnvelope(documents[filename], filename, payloadKey));
-    }
+  const feedFilesPresent = [...CENTRAL_FEED_FILES.map(({ filename }) => filename), CANDIDATE_FEED_FILE]
+    .every((filename) => documents[filename]);
+  if (feedFilesPresent) {
+    errors.push(...await validateFeedFiles({
+      readJson: async (filename) => documents[filename],
+      expectedRegistry: expectedRegistry ?? await loadSourceRegistry(),
+    }));
   }
   const state = documents['state-feed.json'];
   if (state && (!isObject(state)

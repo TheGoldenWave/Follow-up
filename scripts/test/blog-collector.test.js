@@ -226,7 +226,7 @@ test('fetchBlogArticle returns exact Blog keys and ISO or null dates', async () 
   );
 
   assert.deepEqual(Object.keys(valid), [
-    'source', 'name', 'title', 'url', 'publishedAt', 'author', 'description', 'content',
+    'source', 'sourceId', 'name', 'title', 'url', 'publishedAt', 'author', 'description', 'content',
   ]);
   assert.equal(valid.source, 'blog');
   assert.equal(valid.name, 'Example Blog');
@@ -497,6 +497,38 @@ test('fetchBlogContent isolates source failures and appends exact source-ordered
 
   assert.equal(results.length, 1);
   assert.deepEqual(errors, ['Earlier error', 'Blog: Bad Blog: discovery-rss: HTTP 503']);
+});
+
+test('fetchBlogContent reports one structured status per source and marks local candidate loss partial', async () => {
+  const statuses = [];
+  const blogs = [
+    source({ id: 'blog:partial', name: 'Partial Blog' }),
+    source({ id: 'blog:failed', name: 'Failed Blog', url: 'https://failed.example/blog/',
+      discovery: [{ type: 'rss', url: 'https://failed.example/feed.xml' }],
+      articleUrlPatterns: ['^https://failed\\.example/blog/'] }),
+  ];
+  const results = await fetchBlogContent(blogs, { seenArticles: {} }, [], {
+    statuses,
+    discoverImpl: async (blog) => {
+      if (blog.id === 'blog:failed') throw new Error('discovery unavailable');
+      return [
+        { title: 'Broken', url: 'https://example.com/blog/broken', publishedAt: '2026-09-03' },
+        { title: 'Good', url: 'https://example.com/blog/good', publishedAt: '2026-09-03' },
+      ];
+    },
+    fetchImpl: async (url) => url.endsWith('/broken')
+      ? response('', { status: 503, url })
+      : response(articleHtml({ canonical: '/blog/good' }), { url }),
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+  });
+
+  assert.equal(results.length, 1);
+  assert.deepEqual(statuses.map(({ sourceId, status, candidateCount, failedCandidateCount }) => ({
+    sourceId, status, candidateCount, failedCandidateCount,
+  })), [
+    { sourceId: 'blog:partial', status: 'partial', candidateCount: 1, failedCandidateCount: 1 },
+    { sourceId: 'blog:failed', status: 'error', candidateCount: 0, failedCandidateCount: undefined },
+  ]);
 });
 
 test('fetchBlogContent keeps article errors in discovery order despite concurrent completion', async () => {

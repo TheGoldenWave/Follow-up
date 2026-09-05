@@ -11,6 +11,7 @@ import {
   matchesBlogFetchSource,
   matchesBlogSource,
 } from './blog-source-config.js';
+import { createSourceStatus } from './source-status.js';
 
 const BLOG_LOOKBACK_HOURS = 72;
 const MAX_ARTICLES_PER_SOURCE = 3;
@@ -105,6 +106,7 @@ export async function fetchBlogArticle(candidate, source, options = {}) {
 
     const item = {
       source: 'blog',
+      sourceId: source.id,
       name: source.name,
       title: extracted.title || candidate.title || 'Untitled',
       url: extracted.canonicalUrl,
@@ -138,6 +140,7 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
   const cutoffMs = nowMs - BLOG_LOOKBACK_HOURS * 60 * 60 * 1000;
   const limit = createLimiter(options.maxConcurrent ?? MAX_CONCURRENT_REQUESTS);
   const limitedFetch = (...args) => limit(() => fetchImpl(...args));
+  const statuses = options.statuses;
 
   const sourceRuns = await Promise.all((sources ?? []).map(async (source) => {
     const sourceErrors = [];
@@ -149,7 +152,9 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
         errors: sourceErrors,
         shadow: options.shadow ?? false,
       });
+      const discoveryErrors = [...sourceErrors];
       const items = [];
+      let failedCandidateCount = 0;
       const sourceIdentities = new Set();
       for (const [index, candidate] of candidates.slice(0, 12).entries()) {
         const identities = articleIdentities(
@@ -171,7 +176,10 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
           errors: articleErrors,
         });
         sourceErrors.push(...articleErrors);
-        if (!item) continue;
+        if (!item) {
+          failedCandidateCount += 1;
+          continue;
+        }
         const authoritativePublishedMs = item.publishedAt
           ? Date.parse(item.publishedAt)
           : Number.NaN;
@@ -185,10 +193,36 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
         items.push(item);
         if (items.length === MAX_ARTICLES_PER_SOURCE) break;
       }
-      return { items, errors: sourceErrors };
+      return {
+        source,
+        items,
+        errors: sourceErrors,
+        status: createSourceStatus({
+          sourceId: source.id,
+          channel: 'blogs',
+          sourceName: source.name,
+          candidateCount: items.length,
+          failedCandidateCount,
+          errors: sourceErrors.slice(discoveryErrors.length),
+          warnings: items.length > 0 ? discoveryErrors : [],
+          equivalentFallbackSucceeded: items.length > 0 && discoveryErrors.length > 0,
+          discoveryComplete: discoveryErrors.length === 0 || items.length > 0,
+        }),
+      };
     } catch (error) {
       sourceErrors.push(`Blog: ${source.name}: collector: ${sanitizeBlogErrorMessage(error)}`);
-      return { items: [], errors: sourceErrors };
+      return {
+        source,
+        items: [],
+        errors: sourceErrors,
+        status: createSourceStatus({
+          sourceId: source.id,
+          channel: 'blogs',
+          sourceName: source.name,
+          errors: sourceErrors,
+          discoveryComplete: false,
+        }),
+      };
     }
   }));
 
@@ -196,6 +230,7 @@ export async function fetchBlogContent(sources, state, errors, options = {}) {
   const seenIdentities = new Set();
   for (const run of sourceRuns) {
     errors.push(...run.errors);
+    statuses?.push(run.status);
     for (const item of run.items) {
       if (!item) continue;
       const identities = item[ARTICLE_IDENTITIES] ?? [item.url];
