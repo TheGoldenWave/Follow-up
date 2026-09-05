@@ -67,4 +67,3 @@ test('invalid combinations use the same usage error contract', () => {
     /requires --platform custom/i,
   );
 });
-

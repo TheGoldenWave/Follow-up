@@ -46,4 +46,3 @@ export function normalizeConfig(config) {
       : [...ENABLED_CHANNELS],
   };
 }
-

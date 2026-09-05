@@ -53,4 +53,3 @@ export async function loadSourceRegistry({ readFileImpl = readFile } = {}) {
   ]));
   return createSourceRegistry(Object.fromEntries(entries));
 }
-

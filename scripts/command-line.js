@@ -33,4 +33,3 @@ export function parseCommandLine(argv, {
     throw new CommandLineUsageError(error.message, { cause: error });
   }
 }
-

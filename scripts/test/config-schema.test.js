@@ -52,4 +52,3 @@ test('missing enabledChannels defaults to all six live channels at runtime', () 
   });
   assert.equal(Object.hasOwn(config, 'enabledChannels'), false);
 });
-
