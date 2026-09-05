@@ -170,7 +170,7 @@ function buildAttemptState(events) {
         `Illegal replacement for attempt ${attemptId}: ${replacementAttemptId} must be a subsequent later pending attempt and cannot form a cycle`,
       );
     }
-    for (const field of ['digestId', 'candidateIds', 'eventClusterIds']) {
+    for (const field of ['digestId', 'frequency', 'candidateIds', 'eventClusterIds']) {
       const original = attempt.pending[field];
       const next = replacement.pending[field];
       const matches = Array.isArray(original)

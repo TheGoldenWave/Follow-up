@@ -206,6 +206,12 @@ test('a replacement pending must be later and preserve digest, candidate, and cl
     /eventClusterIds.*match|match.*eventClusterIds/i,
   );
   assert.throws(
+    () => deriveDeliveryState([old, superseded, {
+      ...replacement, frequency: 'weekly',
+    }]),
+    /frequency.*match|match.*frequency/i,
+  );
+  assert.throws(
     () => deriveDeliveryState([replacement, old, superseded]),
     /subsequent|later/i,
   );
