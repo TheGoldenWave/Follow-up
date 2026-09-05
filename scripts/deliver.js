@@ -189,9 +189,8 @@ export async function main({
   }
 
   if (options['result-out']) {
-    const durableResult = { ...outcome, resultPersistence: 'durable' };
     try {
-      await writeResult(options['result-out'], durableResult, {
+      await writeResult(options['result-out'], outcome, {
         fsImpl, randomUUID, label: 'delivery result',
       });
     } catch (error) {
@@ -201,7 +200,7 @@ export async function main({
       return 1;
     }
   } else {
-    stdout.write(`${JSON.stringify({ ...outcome, resultPersistence: 'durable' })}\n`);
+    stdout.write(`${JSON.stringify(outcome)}\n`);
   }
   if (outcome.status === 'delivered' || outcome.status === 'skipped') {
     return 0;

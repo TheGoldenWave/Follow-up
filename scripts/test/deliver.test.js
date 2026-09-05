@@ -188,6 +188,8 @@ test('SKILL routes every destination through the transaction and forbids automat
   assert.doesNotMatch(skill, /deliver\.js[^\n]*2>\/dev\/null/);
   assert.doesNotMatch(skill, /show the digest in the terminal as fallback/i);
   assert.match(skill, /delivery-uncertain[^]*不得自动.*fallback|delivery-uncertain[^]*禁止自动.*回退/i);
+  assert.match(skill, /exit code[^]*exit 0[^]*result|退出码[^]*exit 0[^]*result/i);
+  assert.match(skill, /exit[^]*非零[^]*doctor[^]*停止|nonzero[^]*doctor[^]*stop/i);
 });
 
 test('real stdout CLI keeps body visible and writes a parseable delivered result separately', async (t) => {
@@ -204,12 +206,12 @@ test('real stdout CLI keeps body visible and writes a parseable delivered result
   ], { env: { ...process.env, HOME: home } });
   assert.match(stdout, /Important update/);
   assert.equal(stderr, '');
+  const machineResult = JSON.parse(await readFile(resultPath, 'utf8'));
   assert.deepEqual(
-    (({ status, resultPersistence }) => ({ status, resultPersistence }))(
-      JSON.parse(await readFile(resultPath, 'utf8')),
-    ),
-    { status: 'delivered', resultPersistence: 'durable' },
+    (({ status, method, digestId }) => ({ status, method, digestId }))(machineResult),
+    { status: 'delivered', method: 'stdout', digestId: 'digest-1' },
   );
+  assert.equal(Object.hasOwn(machineResult, 'resultPersistence'), false);
   const ledger = await readDeliveryLedger({
     ledgerPath: join(userDir, 'state', 'delivery-ledger.jsonl'),
   });
@@ -255,12 +257,7 @@ test('postcommit result fsync uncertainty preserves committed result and deliver
     throw new AtomicWriteCommittedError('delivery result');
   });
   assert.equal(result.code, 1);
-  assert.deepEqual(
-    (({ status, resultPersistence }) => ({ status, resultPersistence }))(
-      JSON.parse(await readFile(result.resultPath, 'utf8')),
-    ),
-    { status: 'delivered', resultPersistence: 'durable' },
-  );
+  assert.deepEqual(JSON.parse(await readFile(result.resultPath, 'utf8')), outcome);
   assert.deepEqual(JSON.parse(result.stderr), {
     ...outcome, resultPersistence: 'committed-but-uncertain',
   });

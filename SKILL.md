@@ -357,6 +357,8 @@ cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-dire
 
 stdout destination 的用户正文只写 stdout；machine status 只从 `--result-out` 指定的 JSON 文件读取。不得把正文当 JSON 解析，也不得隐藏或丢弃 stdout 正文。
 
+必须先检查 `deliver.js` 的 exit code。只有 exit 0 才按 `--result-out` 文件中的 delivery outcome 继续处理；result 文件本身不声明 durability。exit 非零时，读取 stderr 的 machine diagnostic，并在文件存在时一并读取 result outcome，随后运行 `doctor` 检查 pending/journal 状态并停止本次流程。不得因为 result 文件存在就忽略非零退出码。
+
 - `delivered`：provider 已确认，ledger 与 outbox 已记录终态。
 - `delivery-failed`：provider 明确拒绝或本地配置在 handoff 前已知无效。本次 run 立即停止，不得隐式 fallback。若用户随后明确选择 stdout，先说明可能改变投递目的地并再次取得确认，再以 `--destination stdout` 创建新的独立 attempt。
 - `delivery-uncertain`：handoff 或本地事务结果无法确认，attempt 保持 pending。禁止自动重试、自动 fallback、自动回退或直接展示 `message.txt`，等待人工处置。
