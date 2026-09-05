@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 
@@ -8,6 +9,7 @@ const HASH = /^[a-f0-9]{64}$/u;
 const SAFE_GENERATION = /^[A-Za-z0-9][A-Za-z0-9.-]{0,399}$/u;
 const SAFE_DIGEST = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 export const DELIVERY_INPUT_LIMITS = Object.freeze({ jsonBytes: 2 * 1024 * 1024, messageBytes: 1024 * 1024 });
+const NO_FOLLOW = fsConstants.O_NOFOLLOW ?? 0;
 
 function safePlainText(value) {
   return sanitizeDiagnostic(value ?? '')
@@ -48,17 +50,40 @@ async function rejectSymlinkComponents(path) {
   }
 }
 
-async function readLimited(path, maximum) {
-  await rejectSymlink(path);
-  const handle = await open(path, 'r');
+export async function readFileLimited(path, maximum, {
+  lstatImpl = lstat,
+  openImpl = open,
+} = {}) {
+  const metadata = await lstatImpl(path);
+  if (metadata.isSymbolicLink()) throw new Error('Active digest contains an unsafe symbolic link');
+  const handle = await openImpl(path, fsConstants.O_RDONLY | NO_FOLLOW);
   try {
-    const metadata = await handle.stat();
-    if (!metadata.isFile()) throw new Error('Active digest input must be a regular file');
-    if (metadata.size > maximum) throw new Error('Active digest input exceeds byte limit');
-    return await handle.readFile();
+    const before = await handle.stat();
+    if (!before.isFile()) throw new Error('Active digest input must be a regular file');
+    if (before.size > maximum) throw new Error('Active digest input exceeds byte limit');
+    const chunks = [];
+    let total = 0;
+    while (total <= maximum) {
+      const buffer = Buffer.alloc(Math.min(64 * 1024, maximum + 1 - total));
+      if (buffer.length === 0) break;
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, total);
+      if (bytesRead === 0) break;
+      chunks.push(buffer.subarray(0, bytesRead));
+      total += bytesRead;
+    }
+    const after = await handle.stat();
+    if (total > maximum) throw new Error('Active digest input exceeds byte limit');
+    if (after.size !== before.size || after.size !== total) {
+      throw new Error('Active digest input changed while being read');
+    }
+    return Buffer.concat(chunks, total);
   } finally {
     await handle.close();
   }
+}
+
+async function readLimited(path, maximum) {
+  return readFileLimited(path, maximum);
 }
 
 async function readJson(path, maximum, label) {

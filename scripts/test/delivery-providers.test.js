@@ -47,7 +47,9 @@ test('Telegram confirmed chunks return all message IDs without logging credentia
     transport: async () => response(200, { ok: true, result: { message_id: sequence += 1 } }),
   });
   assert.deepEqual(result, {
-    status: 'delivered', receipt: { type: 'telegram', messageIds: [21, 22] },
+    status: 'delivered', receipt: {
+      type: 'telegram', messageCount: 2, firstMessageId: 21, lastMessageId: 22,
+    },
   });
   assert.doesNotMatch(logs.join('\n'), /test-only-token|x{20}|123/);
 });
@@ -135,4 +137,18 @@ test('HTTP rejection is classified before best-effort error body parsing', async
     apiKey: 'test-only-key', to: 'reader@example.com',
     transport: async () => ({ ok: false, status: 503, json: async () => { throw new Error('secret=leak'); } }),
   }), { status: 'uncertain', reasonCode: 'provider-result-unknown' });
+});
+
+test('Telegram receipt stays bounded for more than 100 chunks', async () => {
+  let messageId = 1000;
+  const result = await deliverTelegram('x'.repeat(4000 * 101), {
+    botToken: 'test-only-token', chatId: '123',
+    transport: async () => response(200, { ok: true, result: { message_id: messageId += 1 } }),
+  });
+  assert.deepEqual(result, {
+    status: 'delivered',
+    receipt: {
+      type: 'telegram', messageCount: 101, firstMessageId: 1001, lastMessageId: 1101,
+    },
+  });
 });

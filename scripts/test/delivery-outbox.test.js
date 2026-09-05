@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, open, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -67,11 +67,13 @@ test('terminal outbox state stores only bounded structured receipts', async (t) 
   await reserveOutboxAttempt(pending({ destinationType: 'telegram' }), options);
   await resolveOutboxAttempt('attempt-1', {
     status: 'delivered', occurredAt: '2026-09-06T08:01:00.000Z',
-    receipt: { type: 'telegram', messageIds: [101, 102] },
+    receipt: { type: 'telegram', messageCount: 2, firstMessageId: 101, lastMessageId: 102 },
   }, options);
   const record = await readOutboxAttempt('attempt-1', options);
   assert.equal(record.status, 'delivered');
-  assert.deepEqual(record.receipt, { type: 'telegram', messageIds: [101, 102] });
+  assert.deepEqual(record.receipt, {
+    type: 'telegram', messageCount: 2, firstMessageId: 101, lastMessageId: 102,
+  });
   assert.doesNotMatch(await readFile(join(options.outboxDir, 'attempt-1.json'), 'utf8'), /token|@example\.com/i);
 });
 
@@ -146,4 +148,71 @@ test('reconcile safely removes owned orphan temporary files but rejects unknown 
   assert.equal((await readDeliveryOutbox(options)).length, 1);
   await writeFile(join(options.outboxDir, 'unknown.tmp'), 'unknown');
   await assert.rejects(readDeliveryOutbox(options), /unknown|invalid.*entry/i);
+});
+
+function appendingJournal(event, phase = 'appending') {
+  const eventBytes = `${JSON.stringify(event)}\n`;
+  return {
+    schemaVersion: '1.0', phase, operation: 'reservation', attemptId: event.attemptId,
+    event, record: {
+      schemaVersion: '1.0', status: 'pending', attempt: event, updatedAt: event.occurredAt,
+    },
+    preAppendOffset: 0,
+    eventBytes: Buffer.from(eventBytes).toString('base64'),
+    eventHash: id(eventBytes),
+  };
+}
+
+test('restart repairs a partial ledger append from the appending journal before JSONL parsing', async (t) => {
+  const options = await paths(t);
+  const event = pending({ attemptId: 'attempt-partial' });
+  const serialized = `${JSON.stringify(event)}\n`;
+  const transactionDir = join(dirname(options.outboxDir), 'delivery-transactions');
+  await mkdir(transactionDir, { recursive: true });
+  await mkdir(dirname(options.ledgerPath), { recursive: true });
+  await writeFile(options.ledgerPath, serialized.slice(0, 37));
+  await writeFile(join(transactionDir, `${event.attemptId}.json`), `${JSON.stringify(appendingJournal(event))}\n`);
+
+  assert.deepEqual(await readDeliveryLedger(options), [event]);
+  assert.equal(await readFile(options.ledgerPath, 'utf8'), serialized);
+  assert.equal((await readOutboxAttempt(event.attemptId, options)).status, 'pending');
+});
+
+test('restart accepts a fully written event after sync failure without duplicating it', async (t) => {
+  const options = await paths(t);
+  const event = pending({ attemptId: 'attempt-full-sync' });
+  const serialized = `${JSON.stringify(event)}\n`;
+  const transactionDir = join(dirname(options.outboxDir), 'delivery-transactions');
+  await mkdir(transactionDir, { recursive: true });
+  await mkdir(dirname(options.ledgerPath), { recursive: true });
+  await writeFile(options.ledgerPath, serialized);
+  await writeFile(join(transactionDir, `${event.attemptId}.json`), `${JSON.stringify(appendingJournal(event))}\n`);
+
+  assert.deepEqual(await readDeliveryLedger(options), [event]);
+  assert.equal(await readFile(options.ledgerPath, 'utf8'), serialized);
+  assert.equal((await readOutboxAttempt(event.attemptId, options)).status, 'pending');
+});
+
+test('reservation reports uncertain and recovers after partial write or full write sync failure', async (t) => {
+  for (const [name, bytesToWrite] of [['partial', 41], ['full-sync', Infinity]]) {
+    await t.test(name, async (t) => {
+      const options = await paths(t);
+      const event = pending({ attemptId: `attempt-${name}` });
+      await assert.rejects(reserveOutboxAttempt(event, {
+        ...options,
+        appendLedgerImpl: async ({ ledgerPath, bytes, preAppendOffset }) => {
+          const handle = await open(ledgerPath, 'r+');
+          try {
+            const portion = bytes.subarray(0, Math.min(bytes.length, bytesToWrite));
+            await handle.write(portion, 0, portion.length, preAppendOffset);
+          } finally {
+            await handle.close();
+          }
+          throw new Error(name === 'partial' ? 'partial write' : 'sync failed');
+        },
+      }), (error) => error.code === 'DELIVERY_RESERVATION_UNCERTAIN');
+      assert.deepEqual(await readDeliveryLedger(options), [event]);
+      assert.equal((await readOutboxAttempt(event.attemptId, options)).status, 'pending');
+    });
+  }
 });

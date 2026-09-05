@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import test from 'node:test';
 
 import { deliverActiveDigest, main } from '../deliver.js';
@@ -10,6 +13,7 @@ import { readDeliveryLedger } from '../delivery-ledger.js';
 import { renderDigestMessage } from '../finalize-digest.js';
 
 const id = (value) => createHash('sha256').update(value).digest('hex');
+const execFileAsync = promisify(execFile);
 
 async function fixture(t, { status = 'ready', items } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'follow-up-deliver-'));
@@ -178,8 +182,30 @@ test('CLI is strict, emits one machine JSON result, and never reserves on local 
 
 test('SKILL routes every destination through the transaction and forbids automatic fallback', async () => {
   const skill = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
-  assert.match(skill, /deliver\.js --active .*--destination stdout/);
+  assert.match(skill, /deliver\.js --active .*--destination stdout .*--result-out/);
   assert.match(skill, /deliver\.js --active .*--destination (?:telegram\|email|<stdout\|telegram\|email>)/);
+  assert.doesNotMatch(skill, /deliver\.js[^\n]*2>\/dev\/null/);
   assert.doesNotMatch(skill, /show the digest in the terminal as fallback/i);
   assert.match(skill, /delivery-uncertain[^]*不得自动.*fallback|delivery-uncertain[^]*禁止自动.*回退/i);
+});
+
+test('real stdout CLI keeps body visible and writes a parseable delivered result separately', async (t) => {
+  const paths = await fixture(t);
+  const root = dirname(dirname(paths.ledgerPath));
+  const home = join(root, 'home');
+  const userDir = join(home, '.follow-builders');
+  await mkdir(userDir, { recursive: true });
+  await writeFile(join(userDir, 'config.json'), JSON.stringify({ delivery: { method: 'stdout' } }));
+  const resultPath = join(root, 'delivery-result.json');
+  const { stdout, stderr } = await execFileAsync(process.execPath, [
+    fileURLToPath(new URL('../deliver.js', import.meta.url)),
+    '--active', paths.activePath, '--destination', 'stdout', '--result-out', resultPath,
+  ], { env: { ...process.env, HOME: home } });
+  assert.match(stdout, /Important update/);
+  assert.equal(stderr, '');
+  assert.equal(JSON.parse(await readFile(resultPath, 'utf8')).status, 'delivered');
+  const ledger = await readDeliveryLedger({
+    ledgerPath: join(userDir, 'state', 'delivery-ledger.jsonl'),
+  });
+  assert.deepEqual(ledger.map(({ type }) => type), ['pending', 'delivered']);
 });

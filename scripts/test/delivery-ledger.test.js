@@ -216,6 +216,14 @@ test('each delivery event type uses a closed non-secret field contract', () => {
   ]));
   assert.doesNotThrow(() => deriveDeliveryState([
     pending(), resolution('delivered', {
+      providerReceipt: {
+        type: 'telegram', messageCount: 101,
+        firstMessageId: 1234567890, lastMessageId: 1234567990,
+      },
+    }),
+  ]));
+  assert.doesNotThrow(() => deriveDeliveryState([
+    pending(), resolution('delivered', {
       providerReceipt: { type: 'telegram', messageIds: [1234567890] },
     }),
   ]));

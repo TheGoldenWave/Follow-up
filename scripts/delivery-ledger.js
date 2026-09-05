@@ -107,11 +107,17 @@ function validateProviderReceipt(receipt, limits) {
       throw new TypeError('stdout providerReceipt contains unsupported fields');
     }
   } else if (receipt.type === 'telegram') {
-    if (Object.keys(receipt).sort().join(',') !== 'messageIds,type'
-      || !Array.isArray(receipt.messageIds) || receipt.messageIds.length === 0
-      || receipt.messageIds.length > 100
-      || receipt.messageIds.some((value) => !Number.isSafeInteger(value) || value < 0)) {
-      throw new TypeError('telegram providerReceipt must contain bounded messageIds');
+    const legacyIds = Object.keys(receipt).sort().join(',') === 'messageIds,type'
+      && Array.isArray(receipt.messageIds) && receipt.messageIds.length > 0
+      && receipt.messageIds.length <= 100
+      && receipt.messageIds.every((value) => Number.isSafeInteger(value) && value >= 0);
+    const aggregate = Object.keys(receipt).sort().join(',')
+        === 'firstMessageId,lastMessageId,messageCount,type'
+      && Number.isSafeInteger(receipt.messageCount) && receipt.messageCount > 0
+      && Number.isSafeInteger(receipt.firstMessageId) && receipt.firstMessageId >= 0
+      && Number.isSafeInteger(receipt.lastMessageId) && receipt.lastMessageId >= 0;
+    if (!legacyIds && !aggregate) {
+      throw new TypeError('telegram providerReceipt must contain a bounded aggregate receipt');
     }
   } else if (receipt.type === 'resend') {
     if (Object.keys(receipt).sort().join(',') !== 'id,type'
@@ -350,7 +356,7 @@ async function ensureLedgerFile(ledgerPath) {
   }
 }
 
-async function withLedgerLock(ledgerPath, callback) {
+async function withLedgerLock(ledgerPath, callback, options = {}) {
   const absolute = resolve(ledgerPath);
   await ensureLedgerFile(absolute);
   await requireSafeLedgerPath(`${absolute}.lock`, { allowMissing: true });
@@ -361,6 +367,8 @@ async function withLedgerLock(ledgerPath, callback) {
   try {
     await requireSafeLedgerPath(absolute);
     await requireSafeLedgerPath(`${absolute}.lock`);
+    const { recoverDeliveryLedgerBeforeRead } = await import('./delivery-outbox.js');
+    await recoverDeliveryLedgerBeforeRead(absolute, options);
     return await callback();
   } finally {
     await release();
@@ -440,7 +448,7 @@ export async function readDeliveryLedger(options = {}) {
       await reconcileDeliveryTransactionsForEvents(events, options);
     }
     return events;
-  });
+  }, options);
 }
 
 export async function appendDeliveryEvent(event, options = {}) {
@@ -506,20 +514,26 @@ export async function appendDeliveryEvents(events, options = {}) {
     await options.transaction?.reconcile?.(existingEvents);
     let prepared;
     let ledgerAppended = false;
+    let appendStarted = false;
     try {
-      prepared = await options.transaction?.prepare?.();
+      const appendPlan = await createLedgerAppendPlan(ledgerPath, events, limits);
+      prepared = await options.transaction?.prepare?.(appendPlan);
+      await options.transaction?.appending?.(prepared);
+      appendStarted = true;
       const state = await appendDeliveryEventsUnlocked(
-        ledgerPath, events, limits, existingEvents,
+        ledgerPath, events, limits, existingEvents, appendPlan, options,
       );
       ledgerAppended = true;
       await options.transaction?.ledgerAppended?.(prepared);
       await options.transaction?.commit?.(prepared);
       return state;
     } catch (error) {
-      try { await options.transaction?.rollback?.(prepared, { ledgerAppended }); } catch { /* recovery owns cleanup */ }
+      try {
+        await options.transaction?.rollback?.(prepared, { ledgerAppended, appendStarted });
+      } catch { /* recovery owns cleanup */ }
       throw error;
     }
-  });
+  }, options);
 }
 
 export async function reservePendingAttempt(event, options = {}) {
@@ -532,50 +546,76 @@ export async function reservePendingAttempt(event, options = {}) {
   return withLedgerLock(ledgerPath, async () => {
     let prepared;
     let ledgerAppended = false;
+    let appendStarted = false;
     try {
       const existingEvents = await readDeliveryLedgerUnlocked(ledgerPath, { limits });
       await options.transaction?.reconcile?.(existingEvents);
       const combined = [...existingEvents, event];
       deriveDeliveryState(combined, { limits });
       assertPendingReservations(existingEvents, [event], { limits });
-      prepared = await options.transaction?.prepare?.();
-      const state = await appendDeliveryEventsUnlocked(ledgerPath, [event], limits, existingEvents);
+      const appendPlan = await createLedgerAppendPlan(ledgerPath, [event], limits);
+      prepared = await options.transaction?.prepare?.(appendPlan);
+      await options.transaction?.appending?.(prepared);
+      appendStarted = true;
+      const state = await appendDeliveryEventsUnlocked(
+        ledgerPath, [event], limits, existingEvents, appendPlan, options,
+      );
       ledgerAppended = true;
       await options.transaction?.ledgerAppended?.(prepared);
       await options.transaction?.commit?.(prepared);
       return state;
     } catch (error) {
-      try { await options.transaction?.rollback?.(prepared, { ledgerAppended }); } catch { /* recovery owns cleanup */ }
+      try {
+        await options.transaction?.rollback?.(prepared, { ledgerAppended, appendStarted });
+      } catch { /* recovery owns cleanup */ }
       throw error;
     }
-  });
+  }, options);
 }
 
-async function appendDeliveryEventsUnlocked(ledgerPath, events, limits, existingInput) {
-  const existingEvents = existingInput
-    ?? await readDeliveryLedgerUnlocked(ledgerPath, { limits });
-  const combined = [...existingEvents, ...events];
-  deriveDeliveryState(combined, { limits });
-  assertPendingReservations(existingEvents, events, { limits });
+async function createLedgerAppendPlan(ledgerPath, events, limits) {
   const serialized = `${events.map((event) => JSON.stringify(event)).join('\n')}\n`;
   await requireSafeLedgerPath(ledgerPath);
   const metadataHandle = await open(ledgerPath, fsConstants.O_RDONLY | NO_FOLLOW);
-  let currentSize;
+  let preAppendOffset;
   try {
     const metadata = await metadataHandle.stat();
     if (!metadata.isFile()) throw new Error('Delivery ledger must be a regular file');
-    currentSize = metadata.size;
+    preAppendOffset = metadata.size;
   } finally {
     await metadataHandle.close();
   }
   if (Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes
-    || currentSize + Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes) {
+    || preAppendOffset + Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes) {
     throw new RangeError(`Delivery ledger append exceeds the ${limits.maxFileBytes}-byte file limit`);
   }
   for (const [index, line] of serialized.trimEnd().split('\n').entries()) {
     if (Buffer.byteLength(line, 'utf8') > limits.maxLineBytes) {
       throw new RangeError(`Delivery ledger appended line ${index + 1} exceeds the line byte limit`);
     }
+  }
+  return { preAppendOffset, serialized };
+}
+
+async function appendDeliveryEventsUnlocked(
+  ledgerPath, events, limits, existingInput, appendPlanInput, options = {},
+) {
+  const existingEvents = existingInput
+    ?? await readDeliveryLedgerUnlocked(ledgerPath, { limits });
+  const combined = [...existingEvents, ...events];
+  deriveDeliveryState(combined, { limits });
+  assertPendingReservations(existingEvents, events, { limits });
+  const appendPlan = appendPlanInput ?? await createLedgerAppendPlan(ledgerPath, events, limits);
+  const { serialized } = appendPlan;
+  if (options.appendLedgerImpl) {
+    if (typeof options.appendLedgerImpl !== 'function') {
+      throw new TypeError('appendLedgerImpl must be a function');
+    }
+    await options.appendLedgerImpl({
+      ledgerPath, bytes: Buffer.from(serialized),
+      preAppendOffset: appendPlan.preAppendOffset,
+    });
+    return deriveDeliveryState(combined, { limits });
   }
   const handle = await open(ledgerPath, fsConstants.O_WRONLY | fsConstants.O_APPEND | NO_FOLLOW);
   try {
@@ -664,5 +704,5 @@ export async function compactDeliveryLedger(options = {}) {
       retainedEvents: retained.length,
       removedEvents: events.length - retained.length,
     };
-  });
+  }, options);
 }

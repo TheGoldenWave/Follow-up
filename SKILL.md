@@ -346,14 +346,16 @@ finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确�
 读取 `config.delivery.method`，并将其作为显式 `--destination` 传入统一 transaction 入口。stdout、Telegram 和 email 都不得绕过 `deliver.js` 直接读取或发送 `message.txt`：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --result-out <absolute-delivery-result-path>
 ```
 
 默认 stdout 也必须运行：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination stdout 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination stdout --result-out <absolute-delivery-result-path>
 ```
+
+stdout destination 的用户正文只写 stdout；machine status 只从 `--result-out` 指定的 JSON 文件读取。不得把正文当 JSON 解析，也不得隐藏或丢弃 stdout 正文。
 
 - `delivered`：provider 已确认，ledger 与 outbox 已记录终态。
 - `delivery-failed`：provider 明确拒绝或本地配置在 handoff 前已知无效。本次 run 立即停止，不得隐式 fallback。若用户随后明确选择 stdout，先说明可能改变投递目的地并再次取得确认，再以 `--destination stdout` 创建新的独立 attempt。

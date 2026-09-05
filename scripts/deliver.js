@@ -12,6 +12,7 @@ import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-lin
 import { loadActiveDigest } from './delivery-message.js';
 import { reserveOutboxAttempt, resolveOutboxAttempt } from './delivery-outbox.js';
 import { deliverWithProvider, validateDestination } from './delivery-providers.js';
+import { writeJsonAtomic } from './prepare-digest.js';
 
 const DEFAULT_USER_DIR = join(homedir(), '.follow-builders');
 
@@ -21,13 +22,19 @@ export async function loadActiveDigestMessage(activePath, options = {}) {
 
 function parseOptions(argv) {
   return parseCommandLine(argv, {
-    options: { active: { type: 'string' }, destination: { type: 'string' } },
+    options: {
+      active: { type: 'string' }, destination: { type: 'string' },
+      'result-out': { type: 'string' },
+    },
     validate({ values, positionals }) {
       if (positionals.length) throw new CommandLineUsageError('unexpected positional arguments');
       if (!values.active) throw new CommandLineUsageError('--active is required');
       if (!isAbsolute(values.active)) throw new CommandLineUsageError('--active must be absolute');
       if (values.destination && !['stdout', 'telegram', 'email'].includes(values.destination)) {
         throw new CommandLineUsageError('--destination must be stdout, telegram, or email');
+      }
+      if (values['result-out'] && !isAbsolute(values['result-out'])) {
+        throw new CommandLineUsageError('--result-out must be absolute');
       }
     },
   }).values;
@@ -148,7 +155,7 @@ export async function main({
   argv = process.argv.slice(2), stdout = process.stdout, stderr = process.stderr,
   configPath = join(DEFAULT_USER_DIR, 'config.json'), envPath = join(DEFAULT_USER_DIR, '.env'),
   env = process.env, ledgerPath, outboxDir, transactionDir, fsImpl,
-  transport, providerStdout = stderr,
+  transport, providerStdout,
   randomUUID = systemRandomUUID, now,
 } = {}) {
   let options;
@@ -160,17 +167,40 @@ export async function main({
   try {
     const config = await loadConfig(configPath);
     const credentials = await loadCredentials(envPath, env);
+    const destination = {
+      ...(config.delivery ?? {}), method: options.destination ?? config.delivery?.method ?? 'stdout',
+    };
+    if (destination.method === 'stdout' && !options['result-out']) {
+      stderr.write('usage: --result-out is required for stdout delivery\n');
+      return EX_USAGE;
+    }
     const result = await deliverActiveDigest({
       activePath: options.active,
-      destination: { ...(config.delivery ?? {}), method: options.destination ?? config.delivery?.method ?? 'stdout' },
+      destination,
       credentials,
       ledgerPath, outboxDir, transactionDir, fsImpl,
-      transport, providerStdout, randomUUID, now,
+      transport, providerStdout: providerStdout ?? (destination.method === 'stdout' ? stdout : stderr),
+      randomUUID, now,
     });
-    stdout.write(`${JSON.stringify(result)}\n`);
+    if (options['result-out']) {
+      await writeJsonAtomic(options['result-out'], result, {
+        fsImpl, randomUUID, label: 'delivery result',
+      });
+    } else {
+      stdout.write(`${JSON.stringify(result)}\n`);
+    }
     return result.status === 'delivered' || result.status === 'skipped' ? 0 : 1;
   } catch {
-    stdout.write(`${JSON.stringify({ status: 'delivery-failed', reason: 'delivery-not-started' })}\n`);
+    const failure = { status: 'delivery-failed', reason: 'delivery-not-started' };
+    if (options['result-out']) {
+      try {
+        await writeJsonAtomic(options['result-out'], failure, {
+          fsImpl, randomUUID, label: 'delivery result',
+        });
+      } catch { stderr.write('delivery-failed: result could not be written\n'); }
+    } else {
+      stdout.write(`${JSON.stringify(failure)}\n`);
+    }
     return 1;
   }
 }

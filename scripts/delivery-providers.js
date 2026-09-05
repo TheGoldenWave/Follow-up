@@ -188,7 +188,13 @@ export async function deliverTelegram(message, {
       return { status: 'uncertain', reasonCode: 'provider-result-unknown' };
     }
   }
-  return { status: 'delivered', receipt: { type: 'telegram', messageIds } };
+  return {
+    status: 'delivered',
+    receipt: {
+      type: 'telegram', messageCount: messageIds.length,
+      firstMessageId: messageIds[0], lastMessageId: messageIds.at(-1),
+    },
+  };
 }
 
 export async function deliverEmail(message, {

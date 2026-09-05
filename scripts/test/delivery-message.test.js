@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { loadActiveDigest, validateFinalDigestArtifact } from '../delivery-message.js';
+import {
+  loadActiveDigest,
+  readFileLimited,
+  validateFinalDigestArtifact,
+} from '../delivery-message.js';
 import { renderDigestMessage } from '../finalize-digest.js';
 
 const id = (value) => createHash('sha256').update(value).digest('hex');
@@ -167,4 +171,22 @@ test('final artifact semantic validation enforces score threshold and status pri
   noUpdateWithIncompleteSources.sourceCompleteness.complete = false;
   noUpdateWithIncompleteSources.sourceCompleteness.status = 'incomplete';
   assert.throws(() => validateFinalDigestArtifact(noUpdateWithIncompleteSources), /no-important|complete/i);
+});
+
+test('bounded fd reader reads at most max plus one and rejects concurrent size changes', async () => {
+  let reads = 0;
+  const handle = {
+    async stat() { return { isFile: () => true, size: reads === 0 ? 4 : 5 }; },
+    async read(buffer, offset, length) {
+      reads += 1;
+      buffer.set(Buffer.from('abcde').subarray(0, length), offset);
+      return { bytesRead: Math.min(5, length) };
+    },
+    async close() {},
+  };
+  await assert.rejects(readFileLimited('/safe/file', 4, {
+    lstatImpl: async () => ({ isSymbolicLink: () => false }),
+    openImpl: async () => handle,
+  }), /byte limit|changed/i);
+  assert.equal(reads, 1);
 });

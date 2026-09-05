@@ -1,4 +1,5 @@
-import { randomUUID as systemRandomUUID } from 'node:crypto';
+import { createHash, randomUUID as systemRandomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import * as systemFs from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
@@ -16,7 +17,7 @@ const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u;
 const STRICT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const OUTBOX_BYTES = 256 * 1024;
 const JOURNAL_BYTES = 512 * 1024;
-const JOURNAL_PHASES = new Set(['prepared', 'ledger-appended', 'outbox-committed']);
+const JOURNAL_PHASES = new Set(['prepared', 'appending', 'ledger-appended', 'outbox-committed']);
 const OWNED_OUTBOX_TEMP = /^\.delivery-outbox-[A-Za-z0-9._:-]+-[A-Za-z0-9._-]+\.tmp$/u;
 const OWNED_JOURNAL_TEMP = /^\.delivery-journal-[A-Za-z0-9._:-]+-[A-Za-z0-9._-]+\.tmp$/u;
 
@@ -132,7 +133,10 @@ export function validateOutboxRecord(record) {
 }
 
 function validateJournal(journal) {
-  const fields = ['schemaVersion', 'phase', 'operation', 'attemptId', 'event', 'record'];
+  const fields = [
+    'schemaVersion', 'phase', 'operation', 'attemptId', 'event', 'record',
+    'preAppendOffset', 'eventBytes', 'eventHash',
+  ];
   if (!journal || typeof journal !== 'object' || Array.isArray(journal)
     || Object.keys(journal).sort().join(',') !== fields.sort().join(',')
     || journal.schemaVersion !== '1.0' || !JOURNAL_PHASES.has(journal.phase)
@@ -153,6 +157,19 @@ function validateJournal(journal) {
   if (journal.operation === 'resolution'
     && journal.event.type !== journal.record.status) {
     throw new Error('Invalid resolution journal');
+  }
+  if (!Number.isSafeInteger(journal.preAppendOffset) || journal.preAppendOffset < 0
+    || typeof journal.eventBytes !== 'string' || journal.eventBytes.length === 0
+    || typeof journal.eventHash !== 'string' || !/^[a-f0-9]{64}$/u.test(journal.eventHash)) {
+    throw new Error('Invalid delivery journal append authority');
+  }
+  const expected = Buffer.from(journal.eventBytes, 'base64');
+  const serialized = Buffer.from(`${JSON.stringify(journal.event)}\n`);
+  if (expected.length === 0 || expected.length > 1024 * 1024
+    || expected.toString('base64') !== journal.eventBytes
+    || !expected.equals(serialized)
+    || createHash('sha256').update(expected).digest('hex') !== journal.eventHash) {
+    throw new Error('Delivery journal event bytes or hash are invalid');
   }
   if (Buffer.byteLength(JSON.stringify(journal)) > JOURNAL_BYTES) {
     throw new RangeError('Delivery transaction journal exceeds byte limit');
@@ -309,6 +326,65 @@ async function reconcileUnlocked(events, rawOptions = {}) {
   return journals.size > 0;
 }
 
+export async function recoverDeliveryLedgerBeforeRead(ledgerPath, rawOptions = {}) {
+  const options = resolvedOptions(rawOptions);
+  try { await requireSafePath(options.transactionDir, options.fsImpl); }
+  catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+  const appending = [];
+  for (const entry of await options.fsImpl.readdir(options.transactionDir, { withFileTypes: true })) {
+    if (OWNED_JOURNAL_TEMP.test(entry.name)) continue;
+    if (!entry.isFile() || !entry.name.endsWith('.json')) {
+      throw new Error(`Invalid delivery transaction journal entry ${entry.name}`);
+    }
+    const journal = validateJournal(await readJsonFile(
+      join(options.transactionDir, entry.name), JOURNAL_BYTES, options.fsImpl,
+      'Delivery transaction journal',
+    ));
+    if (entry.name !== `${journal.attemptId}.json`) throw new Error('Delivery journal filename mismatch');
+    if (journal.phase === 'appending') appending.push(journal);
+  }
+  if (appending.length === 0) return false;
+  if (appending.length !== 1) throw new Error('Multiple appending delivery journals are corrupt');
+  const journal = appending[0];
+  const expected = Buffer.from(journal.eventBytes, 'base64');
+  const handle = await options.fsImpl.open(
+    ledgerPath,
+    fsConstants.O_RDWR | (fsConstants.O_NOFOLLOW ?? 0),
+  );
+  try {
+    const metadata = await handle.stat();
+    const end = journal.preAppendOffset + expected.length;
+    if (metadata.size < journal.preAppendOffset || metadata.size > end) {
+      throw new Error('Delivery ledger tail does not match appending journal');
+    }
+    const tailLength = metadata.size - journal.preAppendOffset;
+    const tail = Buffer.alloc(tailLength);
+    if (tailLength > 0) await handle.read(tail, 0, tailLength, journal.preAppendOffset);
+    if (!expected.subarray(0, tailLength).equals(tail)) {
+      throw new Error('Delivery ledger tail does not match appending journal');
+    }
+    if (tailLength !== expected.length) {
+      await handle.truncate(journal.preAppendOffset);
+      let written = 0;
+      while (written < expected.length) {
+        const result = await handle.write(
+          expected, written, expected.length - written, journal.preAppendOffset + written,
+        );
+        if (result.bytesWritten <= 0) throw new Error('Delivery ledger recovery made no progress');
+        written += result.bytesWritten;
+      }
+    }
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await writeJournal({ ...journal, phase: 'ledger-appended' }, options);
+  return true;
+}
+
 export async function reconcileDeliveryTransactionsForEvents(events, options = {}) {
   return reconcileUnlocked(events, options);
 }
@@ -327,15 +403,29 @@ function transactionFor(event, record, rawOptions) {
   let journal = {
     schemaVersion: '1.0', phase: 'prepared', operation,
     attemptId: event.attemptId, event, record,
+    preAppendOffset: 0, eventBytes: '', eventHash: '0'.repeat(64),
   };
   const transaction = {
     ledgerWasAppended: false,
+    ledgerMayBeAppended: false,
     reconcile: (events) => reconcileUnlocked(events, options),
-    async prepare() {
+    async prepare(appendPlan) {
       await ensureDirectory(options.outboxDir, options.fsImpl);
       await ensureDirectory(options.transactionDir, options.fsImpl);
+      const eventBytes = Buffer.from(appendPlan.serialized);
+      journal = {
+        ...journal,
+        preAppendOffset: appendPlan.preAppendOffset,
+        eventBytes: eventBytes.toString('base64'),
+        eventHash: createHash('sha256').update(eventBytes).digest('hex'),
+      };
       await writeJournal(journal, options);
       return journal;
+    },
+    async appending() {
+      journal = { ...journal, phase: 'appending' };
+      await writeJournal(journal, options);
+      transaction.ledgerMayBeAppended = true;
     },
     async ledgerAppended() {
       transaction.ledgerWasAppended = true;
@@ -349,8 +439,8 @@ function transactionFor(event, record, rawOptions) {
       await options.fsImpl.unlink(join(options.transactionDir, `${event.attemptId}.json`));
       await fsyncDirectory(options.transactionDir, options.fsImpl);
     },
-    async rollback(_prepared, { ledgerAppended }) {
-      if (ledgerAppended) return;
+    async rollback(_prepared, { ledgerAppended, appendStarted }) {
+      if (ledgerAppended || appendStarted) return;
       await options.fsImpl.unlink(join(options.transactionDir, `${event.attemptId}.json`)).catch(() => {});
       await fsyncDirectory(options.transactionDir, options.fsImpl);
     },
@@ -388,7 +478,7 @@ export async function reserveOutboxAttempt(event, options = {}) {
   try {
     await reservePendingAttempt(event, { ...options, transaction });
   } catch (error) {
-    if (transaction.ledgerWasAppended) {
+    if (transaction.ledgerWasAppended || transaction.ledgerMayBeAppended) {
       throw new DeliveryReservationUncertainError('Delivery reservation requires reconciliation', {
         cause: error,
       });
