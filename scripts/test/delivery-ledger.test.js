@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -114,6 +114,38 @@ test('readDeliveryLedger rejects corrupted, truncated, and unknown JSONL events'
 
   await writeFile(ledgerPath, `${JSON.stringify({ ...pending(), type: 'mystery' })}\n`);
   await assert.rejects(readDeliveryLedger({ ledgerPath }), /unknown.*mystery/i);
+});
+
+test('ledger operations reject symlinked files and parent paths without modifying targets', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'follow-up-ledger-link-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const target = join(root, 'target.jsonl');
+  await writeFile(target, 'sentinel\n');
+  const state = join(root, 'state');
+  await mkdir(state);
+  const linkedLedger = join(state, 'delivery-ledger.jsonl');
+  await symlink(target, linkedLedger);
+  await assert.rejects(readDeliveryLedger({ ledgerPath: linkedLedger }), /symbolic link|symlink/i);
+  await assert.rejects(appendDeliveryEvent(pending(), { ledgerPath: linkedLedger }), /symbolic link|symlink/i);
+  await assert.rejects(compactDeliveryLedger({ ledgerPath: linkedLedger }), /symbolic link|symlink/i);
+  assert.equal(await readFile(target, 'utf8'), 'sentinel\n');
+
+  const realState = join(root, 'real-state');
+  await mkdir(realState);
+  const linkedState = join(root, 'linked-state');
+  await symlink(realState, linkedState);
+  await assert.rejects(
+    reservePendingAttempt(pending(), { ledgerPath: join(linkedState, 'delivery-ledger.jsonl') }),
+    /symbolic link|symlink/i,
+  );
+  await assert.rejects(readFile(join(realState, 'delivery-ledger.jsonl')), /ENOENT/);
+
+  const regularLedger = join(root, 'regular-ledger.jsonl');
+  await writeFile(regularLedger, '');
+  const lockTarget = join(root, 'lock-target');
+  await mkdir(lockTarget);
+  await symlink(lockTarget, `${regularLedger}.lock`);
+  await assert.rejects(readDeliveryLedger({ ledgerPath: regularLedger }), /symbolic link|symlink/i);
 });
 
 test('delivery state is derived from legal attempt sequences rather than the last ledger line', () => {

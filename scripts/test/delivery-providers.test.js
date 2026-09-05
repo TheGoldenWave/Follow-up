@@ -121,3 +121,18 @@ test('Telegram and Resend abort transport and response parsing timeouts', async 
     });
   }
 });
+
+test('HTTP rejection is classified before best-effort error body parsing', async () => {
+  const malformed = { ok: false, status: 422, json: async () => { throw new Error('bad json'); } };
+  const empty = { ok: false, status: 400, json: async () => null };
+  assert.deepEqual(await deliverEmail('digest', {
+    apiKey: 'test-only-key', to: 'reader@example.com', transport: async () => malformed,
+  }), { status: 'failed', reasonCode: 'provider-rejected' });
+  assert.deepEqual(await deliverTelegram('digest', {
+    botToken: 'test-only-token', chatId: '123', transport: async () => empty,
+  }), { status: 'failed', reasonCode: 'provider-rejected' });
+  assert.deepEqual(await deliverEmail('digest', {
+    apiKey: 'test-only-key', to: 'reader@example.com',
+    transport: async () => ({ ok: false, status: 503, json: async () => { throw new Error('secret=leak'); } }),
+  }), { status: 'uncertain', reasonCode: 'provider-result-unknown' });
+});

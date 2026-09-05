@@ -85,7 +85,7 @@ function validTimestamp(value) {
     && new Date(value).toISOString() === value;
 }
 
-function validateArtifact(artifact) {
+export function validateFinalDigestArtifact(artifact) {
   exactFields(artifact, [
     'schemaVersion', 'status', 'digestId', 'requestHash', 'frequency', 'generatedAt',
     'coverage', 'sourceCompleteness', 'incompleteSources', 'contentStats', 'items', 'message',
@@ -171,6 +171,7 @@ function validateArtifact(artifact) {
       !nonNegativeInteger(item.scores[field]) || item.scores[field] > maximum
     )) || item.scores.totalScore !== item.scores.impact + item.scores.relevance
       + item.scores.evidence + item.scores.novelty + item.scores.corroboration
+      || item.scores.totalScore < 60
       || typeof item.link !== 'string' || !item.link.startsWith('https://')
       || typeof item.title !== 'string' || item.title.length === 0
       || typeof item.sourceId !== 'string' || item.sourceId.length === 0
@@ -179,7 +180,7 @@ function validateArtifact(artifact) {
       || !(item.publishedAt === null || validTimestamp(item.publishedAt))
       || typeof item.reason !== 'string' || item.reason.length === 0 || item.reason.length > 280
       || !Array.isArray(item.corroborating)) {
-      throw new Error('Digest item is invalid');
+      throw new Error('Digest item score or fields are invalid');
     }
     for (const candidate of item.corroborating) {
       exactFields(candidate, ['candidateId', 'sourceId', 'title', 'link'], 'Digest corroborating item');
@@ -193,6 +194,37 @@ function validateArtifact(artifact) {
   if ((artifact.status === 'ready' && artifact.items.length === 0)
     || (artifact.status === 'no-important-updates' && artifact.items.length !== 0)) {
     throw new Error('Digest artifact status and selected items are inconsistent');
+  }
+  const historyComplete = artifact.coverage.status === 'complete' && artifact.coverage.complete;
+  const sourcesComplete = artifact.sourceCompleteness.status === 'complete'
+    && artifact.sourceCompleteness.complete;
+  if (artifact.coverage.complete !== (artifact.coverage.status === 'complete')
+    || artifact.sourceCompleteness.complete !== (artifact.sourceCompleteness.status === 'complete')) {
+    throw new Error('Digest completeness flags and statuses are inconsistent');
+  }
+  if (artifact.coverage.complete !== (artifact.coverage.reasons.length === 0)) {
+    throw new Error('Digest coverage completeness and reasons are inconsistent');
+  }
+  const aggregateSourcesComplete = artifact.sourceCompleteness.feedFresh
+    && artifact.sourceCompleteness.missingSourceCount === 0
+    && artifact.sourceCompleteness.partialSourceCount === 0
+    && artifact.sourceCompleteness.errorSourceCount === 0;
+  if (artifact.sourceCompleteness.complete !== aggregateSourcesComplete) {
+    throw new Error('Digest source completeness and aggregates are inconsistent');
+  }
+  if (artifact.status === 'ready'
+    && (!historyComplete || !sourcesComplete || artifact.items.length === 0)) {
+    throw new Error('ready Digest requires complete history, complete sources, and selected items');
+  }
+  if (artifact.status === 'no-important-updates'
+    && (!historyComplete || !sourcesComplete || artifact.items.length !== 0)) {
+    throw new Error('no-important-updates Digest requires complete history and sources with no items');
+  }
+  if (artifact.status === 'partial' && (!historyComplete || sourcesComplete)) {
+    throw new Error('partial Digest requires complete history and incomplete sources');
+  }
+  if (artifact.status === 'incomplete-history' && historyComplete) {
+    throw new Error('incomplete-history Digest requires incomplete coverage');
   }
   return artifact;
 }
@@ -262,7 +294,7 @@ export async function loadActiveDigest(activePath, { limits = DELIVERY_INPUT_LIM
   const { value: artifact, bytes: artifactBytes } = await readJson(
     join(generationDir, active.artifact), limits.jsonBytes, 'Digest artifact',
   );
-  validateArtifact(artifact);
+  validateFinalDigestArtifact(artifact);
   const messageBytes = await readLimited(join(generationDir, active.message), limits.messageBytes);
   const message = messageBytes.toString('utf8');
   if (manifest?.schemaVersion !== '1.0' || manifest.generation !== active.generation) {

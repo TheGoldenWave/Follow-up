@@ -1,6 +1,6 @@
-import { createReadStream } from 'node:fs';
-import { mkdir, open, rename, stat, unlink } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { constants as fsConstants } from 'node:fs';
+import { lstat, mkdir, open, realpath, rename, unlink } from 'node:fs/promises';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import lockfile from 'proper-lockfile';
 
@@ -45,6 +45,7 @@ const STRICT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 const REASON_CODE = /^[a-z][a-z0-9-]{0,63}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
+const NO_FOLLOW = fsConstants.O_NOFOLLOW ?? 0;
 
 export function resolveDeliveryLedgerPath(options = {}) {
   return options.ledgerPath
@@ -294,8 +295,28 @@ export function deriveDeliveryState(events, options = {}) {
   };
 }
 
+async function requireSafeLedgerPath(path, { allowMissing = false } = {}) {
+  const absolute = resolve(path);
+  let current = sep;
+  for (const component of absolute.split(sep).filter(Boolean)) {
+    current = join(current, component);
+    try {
+      const metadata = await lstat(current);
+      if (metadata.isSymbolicLink()) {
+        const isMacOsVarAlias = current === '/var' && await realpath(current) === '/private/var';
+        if (!isMacOsVarAlias) throw new Error('Delivery ledger path contains a symbolic link');
+      }
+    } catch (error) {
+      if (allowMissing && error?.code === 'ENOENT') return absolute;
+      throw error;
+    }
+  }
+  return absolute;
+}
+
 async function fsyncDirectory(path) {
-  const handle = await open(path, 'r');
+  await requireSafeLedgerPath(path);
+  const handle = await open(path, fsConstants.O_RDONLY | NO_FOLLOW);
   try {
     await handle.sync();
   } finally {
@@ -304,27 +325,42 @@ async function fsyncDirectory(path) {
 }
 
 async function ensureLedgerFile(ledgerPath) {
-  await mkdir(dirname(ledgerPath), { recursive: true });
+  const absolute = resolve(ledgerPath);
+  await requireSafeLedgerPath(dirname(absolute), { allowMissing: true });
+  await mkdir(dirname(absolute), { recursive: true, mode: 0o700 });
+  await requireSafeLedgerPath(dirname(absolute));
+  await requireSafeLedgerPath(absolute, { allowMissing: true });
   try {
-    const handle = await open(ledgerPath, 'ax');
+    const handle = await open(
+      absolute,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | NO_FOLLOW,
+      0o600,
+    );
     try {
       await handle.sync();
     } finally {
       await handle.close();
     }
-    await fsyncDirectory(dirname(ledgerPath));
+    await fsyncDirectory(dirname(absolute));
   } catch (error) {
     if (error.code !== 'EEXIST') throw error;
+    await requireSafeLedgerPath(absolute);
+    const metadata = await lstat(absolute);
+    if (!metadata.isFile()) throw new Error('Delivery ledger must be a regular file');
   }
 }
 
 async function withLedgerLock(ledgerPath, callback) {
-  await ensureLedgerFile(ledgerPath);
-  const release = await lockfile.lock(ledgerPath, {
+  const absolute = resolve(ledgerPath);
+  await ensureLedgerFile(absolute);
+  await requireSafeLedgerPath(`${absolute}.lock`, { allowMissing: true });
+  const release = await lockfile.lock(absolute, {
     realpath: false,
     retries: { retries: 20, factor: 1.25, minTimeout: 5, maxTimeout: 250 },
   });
   try {
+    await requireSafeLedgerPath(absolute);
+    await requireSafeLedgerPath(`${absolute}.lock`);
     return await callback();
   } finally {
     await release();
@@ -333,64 +369,64 @@ async function withLedgerLock(ledgerPath, callback) {
 
 async function readDeliveryLedgerUnlocked(ledgerPath, options = {}) {
   const limits = resolveLimits(options.limits);
-  const metadata = await stat(ledgerPath);
-  if (metadata.size > limits.maxFileBytes) {
-    throw new RangeError(`Delivery ledger file exceeds the ${limits.maxFileBytes}-byte limit`);
-  }
-  if (metadata.size === 0) return [];
-  const handle = await open(ledgerPath, 'r');
+  await requireSafeLedgerPath(ledgerPath);
+  const handle = await open(ledgerPath, fsConstants.O_RDONLY | NO_FOLLOW);
   try {
+    const metadata = await handle.stat();
+    if (!metadata.isFile()) throw new Error('Delivery ledger must be a regular file');
+    if (metadata.size > limits.maxFileBytes) {
+      throw new RangeError(`Delivery ledger file exceeds the ${limits.maxFileBytes}-byte limit`);
+    }
+    if (metadata.size === 0) return [];
     const tail = Buffer.alloc(1);
     await handle.read(tail, 0, 1, metadata.size - 1);
     if (tail[0] !== 0x0a) {
       throw new Error(`Invalid or truncated delivery ledger ${ledgerPath}: missing final newline`);
     }
+    const events = [];
+    let lineNumber = 0;
+    let pending = Buffer.alloc(0);
+    const parseLine = (lineBuffer) => {
+      lineNumber += 1;
+      const line = lineBuffer.toString('utf8');
+      if (line.trim().length === 0) {
+        throw new Error(`Invalid delivery ledger ${ledgerPath} at line ${lineNumber}: blank event`);
+      }
+      if (events.length >= limits.maxEvents) {
+        throw new RangeError(`Delivery ledger exceeds the ${limits.maxEvents}-event limit`);
+      }
+      try { events.push(JSON.parse(line)); }
+      catch (error) {
+        throw new Error(`Invalid delivery ledger ${ledgerPath} at line ${lineNumber}: ${error.message}`);
+      }
+    };
+    for await (const chunk of handle.createReadStream({ autoClose: false, start: 0 })) {
+      let offset = 0;
+      for (let newline = chunk.indexOf(0x0a, offset);
+        newline !== -1;
+        newline = chunk.indexOf(0x0a, offset)) {
+        const segment = chunk.subarray(offset, newline);
+        if (pending.length + segment.length > limits.maxLineBytes) {
+          throw new RangeError(`Delivery ledger line ${lineNumber + 1} exceeds the line byte limit`);
+        }
+        parseLine(pending.length === 0 ? segment : Buffer.concat([pending, segment]));
+        pending = Buffer.alloc(0);
+        offset = newline + 1;
+      }
+      const remainder = chunk.subarray(offset);
+      if (pending.length + remainder.length > limits.maxLineBytes) {
+        throw new RangeError(`Delivery ledger line ${lineNumber + 1} exceeds the line byte limit`);
+      }
+      if (remainder.length > 0) {
+        pending = pending.length === 0 ? Buffer.from(remainder) : Buffer.concat([pending, remainder]);
+      }
+    }
+    if (pending.length !== 0) throw new Error(`Invalid or truncated delivery ledger ${ledgerPath}`);
+    deriveDeliveryState(events, { limits });
+    return events;
   } finally {
     await handle.close();
   }
-
-  const events = [];
-  let lineNumber = 0;
-  let pending = Buffer.alloc(0);
-  const parseLine = (lineBuffer) => {
-    lineNumber += 1;
-    const line = lineBuffer.toString('utf8');
-    if (line.trim().length === 0) {
-      throw new Error(`Invalid delivery ledger ${ledgerPath} at line ${lineNumber}: blank event`);
-    }
-    if (events.length >= limits.maxEvents) {
-      throw new RangeError(`Delivery ledger exceeds the ${limits.maxEvents}-event limit`);
-    }
-    try {
-      events.push(JSON.parse(line));
-    } catch (error) {
-      throw new Error(`Invalid delivery ledger ${ledgerPath} at line ${lineNumber}: ${error.message}`);
-    }
-  };
-  for await (const chunk of createReadStream(ledgerPath)) {
-    let offset = 0;
-    for (let newline = chunk.indexOf(0x0a, offset);
-      newline !== -1;
-      newline = chunk.indexOf(0x0a, offset)) {
-      const segment = chunk.subarray(offset, newline);
-      if (pending.length + segment.length > limits.maxLineBytes) {
-        throw new RangeError(`Delivery ledger line ${lineNumber + 1} exceeds the line byte limit`);
-      }
-      parseLine(pending.length === 0 ? segment : Buffer.concat([pending, segment]));
-      pending = Buffer.alloc(0);
-      offset = newline + 1;
-    }
-    const remainder = chunk.subarray(offset);
-    if (pending.length + remainder.length > limits.maxLineBytes) {
-      throw new RangeError(`Delivery ledger line ${lineNumber + 1} exceeds the line byte limit`);
-    }
-    if (remainder.length > 0) {
-      pending = pending.length === 0 ? Buffer.from(remainder) : Buffer.concat([pending, remainder]);
-    }
-  }
-  if (pending.length !== 0) throw new Error(`Invalid or truncated delivery ledger ${ledgerPath}`);
-  deriveDeliveryState(events, { limits });
-  return events;
 }
 
 export async function readDeliveryLedger(options = {}) {
@@ -522,8 +558,18 @@ async function appendDeliveryEventsUnlocked(ledgerPath, events, limits, existing
   deriveDeliveryState(combined, { limits });
   assertPendingReservations(existingEvents, events, { limits });
   const serialized = `${events.map((event) => JSON.stringify(event)).join('\n')}\n`;
+  await requireSafeLedgerPath(ledgerPath);
+  const metadataHandle = await open(ledgerPath, fsConstants.O_RDONLY | NO_FOLLOW);
+  let currentSize;
+  try {
+    const metadata = await metadataHandle.stat();
+    if (!metadata.isFile()) throw new Error('Delivery ledger must be a regular file');
+    currentSize = metadata.size;
+  } finally {
+    await metadataHandle.close();
+  }
   if (Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes
-    || (await stat(ledgerPath)).size + Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes) {
+    || currentSize + Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes) {
     throw new RangeError(`Delivery ledger append exceeds the ${limits.maxFileBytes}-byte file limit`);
   }
   for (const [index, line] of serialized.trimEnd().split('\n').entries()) {
@@ -531,7 +577,7 @@ async function appendDeliveryEventsUnlocked(ledgerPath, events, limits, existing
       throw new RangeError(`Delivery ledger appended line ${index + 1} exceeds the line byte limit`);
     }
   }
-  const handle = await open(ledgerPath, 'a');
+  const handle = await open(ledgerPath, fsConstants.O_WRONLY | fsConstants.O_APPEND | NO_FOLLOW);
   try {
     await handle.writeFile(serialized, 'utf8');
     await handle.sync();
@@ -594,7 +640,12 @@ export async function compactDeliveryLedger(options = {}) {
     const serialized = retained.length === 0
       ? ''
       : `${retained.map((event) => JSON.stringify(event)).join('\n')}\n`;
-    const handle = await open(temporaryPath, 'wx');
+    await requireSafeLedgerPath(temporaryPath, { allowMissing: true });
+    const handle = await open(
+      temporaryPath,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | NO_FOLLOW,
+      0o600,
+    );
     try {
       await handle.writeFile(serialized, 'utf8');
       await handle.sync();
@@ -602,6 +653,7 @@ export async function compactDeliveryLedger(options = {}) {
       await handle.close();
     }
     try {
+      await requireSafeLedgerPath(ledgerPath);
       await rename(temporaryPath, ledgerPath);
       await fsyncDirectory(dirname(ledgerPath));
     } catch (error) {

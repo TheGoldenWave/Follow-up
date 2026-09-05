@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { loadActiveDigest } from '../delivery-message.js';
+import { loadActiveDigest, validateFinalDigestArtifact } from '../delivery-message.js';
 import { renderDigestMessage } from '../finalize-digest.js';
 
 const id = (value) => createHash('sha256').update(value).digest('hex');
@@ -136,4 +136,35 @@ test('loadActiveDigest rejects a symlink in any active path component', async (t
   t.after(() => rm(aliasRoot, { recursive: true, force: true }));
   await symlink(fixture.activePath.slice(0, -'/active.json'.length), join(aliasRoot, 'linked'));
   await assert.rejects(loadActiveDigest(join(aliasRoot, 'linked', 'active.json')), /symbolic link|symlink/i);
+});
+
+test('final artifact semantic validation enforces score threshold and status priority', async (t) => {
+  const { artifact } = await generationFixture(t);
+  assert.throws(() => validateFinalDigestArtifact({
+    ...structuredClone(artifact), items: [{
+      ...artifact.items[0],
+      scores: { impact: 10, relevance: 10, evidence: 10, novelty: 10, corroboration: 0, totalScore: 40 },
+    }],
+  }), /60|threshold|score/i);
+
+  const readyWithIncompleteSources = structuredClone(artifact);
+  readyWithIncompleteSources.sourceCompleteness.complete = false;
+  readyWithIncompleteSources.sourceCompleteness.status = 'incomplete';
+  assert.throws(() => validateFinalDigestArtifact(readyWithIncompleteSources), /ready|source.*complete/i);
+
+  const partialWithCompleteSources = structuredClone(artifact);
+  partialWithCompleteSources.status = 'partial';
+  assert.throws(() => validateFinalDigestArtifact(partialWithCompleteSources), /partial|source.*incomplete/i);
+
+  const incompleteWithoutHistoryGap = structuredClone(artifact);
+  incompleteWithoutHistoryGap.status = 'incomplete-history';
+  assert.throws(() => validateFinalDigestArtifact(incompleteWithoutHistoryGap), /history|coverage/i);
+
+  const noUpdateWithIncompleteSources = structuredClone(artifact);
+  noUpdateWithIncompleteSources.status = 'no-important-updates';
+  noUpdateWithIncompleteSources.items = [];
+  noUpdateWithIncompleteSources.contentStats.selectedCount = 0;
+  noUpdateWithIncompleteSources.sourceCompleteness.complete = false;
+  noUpdateWithIncompleteSources.sourceCompleteness.status = 'incomplete';
+  assert.throws(() => validateFinalDigestArtifact(noUpdateWithIncompleteSources), /no-important|complete/i);
 });

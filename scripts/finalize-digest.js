@@ -6,7 +6,7 @@ import { basename, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
-import { renderDigestMessage } from './delivery-message.js';
+import { renderDigestMessage, validateFinalDigestArtifact } from './delivery-message.js';
 import { validateSelectionAgainstRequest } from './digest-selection.js';
 import {
   AtomicWriteCommittedError,
@@ -102,14 +102,14 @@ export function finalizeDigest(request, selection) {
     selectedCount: 0,
   };
   const contentStats = { ...baseStats, selectedCount: items.length };
-  return {
+  return validateFinalDigestArtifact({
     schemaVersion: '1.0', status, digestId: request.digestId, requestHash: request.requestHash,
     frequency: request.frequency, generatedAt: selection.generatedAt,
     coverage: request.coverage, sourceCompleteness: request.sourceCompleteness,
     incompleteSources,
     contentStats,
     items, message: messageFor(status, request.frequency, items.length, incompleteSources),
-  };
+  });
 }
 
 async function closeQuietly(handle) {

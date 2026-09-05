@@ -34,14 +34,9 @@ function splitTelegramMessage(message, maximum = 4000) {
   return chunks;
 }
 
-async function requestJson(url, options, {
-  transport, timeoutMs, AbortControllerImpl = AbortController,
-  setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout,
+async function withTimeout(operation, {
+  controller, timeoutMs, setTimeoutImpl, clearTimeoutImpl,
 }) {
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
-    throw new TypeError('Provider timeout must be a positive integer');
-  }
-  const controller = new AbortControllerImpl();
   let timer;
   const timeout = new Promise((_, reject) => {
     timer = setTimeoutImpl(() => {
@@ -49,17 +44,51 @@ async function requestJson(url, options, {
       reject(Object.assign(new Error('provider timeout'), { name: 'AbortError' }));
     }, timeoutMs);
   });
-  try {
-    return await Promise.race([
-      (async () => {
-        const response = await transport(url, { ...options, signal: controller.signal });
-        return { response, body: await response.json() };
-      })(),
-      timeout,
-    ]);
-  } finally {
-    clearTimeoutImpl(timer);
+  try { return await Promise.race([operation(), timeout]); }
+  finally { clearTimeoutImpl(timer); }
+}
+
+async function readBoundedJson(response, maximum = 16 * 1024) {
+  if (response.body?.getReader) {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maximum) throw new Error('provider response exceeds byte limit');
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+    return JSON.parse(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8'));
   }
+  const value = await response.json();
+  if (Buffer.byteLength(JSON.stringify(value ?? null)) > maximum) {
+    throw new Error('provider response exceeds byte limit');
+  }
+  return value;
+}
+
+async function requestProvider(url, options, {
+  transport, timeoutMs, AbortControllerImpl = AbortController,
+  setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout,
+}) {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError('Provider timeout must be a positive integer');
+  }
+  const controller = new AbortControllerImpl();
+  const timeoutOptions = { controller, timeoutMs, setTimeoutImpl, clearTimeoutImpl };
+  const response = await withTimeout(
+    () => transport(url, { ...options, signal: controller.signal }), timeoutOptions,
+  );
+  return {
+    response,
+    readJson: () => withTimeout(() => readBoundedJson(response), timeoutOptions),
+  };
 }
 
 function classifyHttp(status) {
@@ -127,7 +156,7 @@ export async function deliverTelegram(message, {
   const messageIds = [];
   for (const chunk of splitTelegramMessage(message)) {
     try {
-      const { response, body } = await requestJson(
+      const { response, readJson } = await requestProvider(
         `https://api.telegram.org/bot${botToken}/sendMessage`,
         {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -137,13 +166,18 @@ export async function deliverTelegram(message, {
           setTimeoutImpl, clearTimeoutImpl,
         },
       );
-      if (!response.ok || body?.ok !== true) {
+      if (!response.ok) {
         const classified = messageIds.length > 0 ? 'uncertain' : classifyHttp(response.status);
+        await readJson().catch(() => null);
         logger(`telegram outcome=${classified}`);
         return {
           status: classified,
           reasonCode: classified === 'failed' ? 'provider-rejected' : 'provider-result-unknown',
         };
+      }
+      const body = await readJson();
+      if (body?.ok !== true) {
+        return { status: 'uncertain', reasonCode: 'provider-result-unknown' };
       }
       const messageId = body?.result?.message_id;
       if (!Number.isSafeInteger(messageId) || messageId < 0) {
@@ -162,7 +196,7 @@ export async function deliverEmail(message, {
   timeoutMs = 15_000, AbortControllerImpl, setTimeoutImpl, clearTimeoutImpl,
 } = {}) {
   try {
-    const { response, body } = await requestJson('https://api.resend.com/emails', {
+    const { response, readJson } = await requestProvider('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
@@ -174,9 +208,11 @@ export async function deliverEmail(message, {
     });
     if (!response.ok) {
       const status = classifyHttp(response.status);
+      await readJson().catch(() => null);
       logger(`resend outcome=${status}`);
       return { status, reasonCode: status === 'failed' ? 'provider-rejected' : 'provider-result-unknown' };
     }
+    const body = await readJson();
     if (!RECEIPT_ID.test(body?.id ?? '')) {
       return { status: 'uncertain', reasonCode: 'provider-result-unknown' };
     }
