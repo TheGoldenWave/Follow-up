@@ -183,23 +183,28 @@ test('each delivery event type uses a closed non-secret field contract', () => {
     pending(), resolution('delivered', { providerReceipt: '<message.123@example.com>' }),
   ]));
   assert.doesNotThrow(() => deriveDeliveryState([
-    pending(), resolution('delivered', { providerReceipt: 'telegram:1234567890' }),
+    pending(), resolution('delivered', {
+      providerReceipt: { type: 'telegram', messageIds: [1234567890] },
+    }),
+  ]));
+  assert.doesNotThrow(() => deriveDeliveryState([
+    pending(), resolution('delivered', { providerReceipt: { type: 'resend', id: 'email_123' } }),
   ]));
   assert.throws(
     () => deriveDeliveryState([
-      pending(), resolution('delivered', { providerReceipt: `receipt\nsecret` }),
+      pending(), resolution('delivered', { providerReceipt: { type: 'resend', id: `receipt\nsecret` } }),
     ]),
     /providerReceipt/i,
   );
   assert.throws(
     () => deriveDeliveryState([
-      pending(), resolution('delivered', { providerReceipt: 'x'.repeat(513) }),
+      pending(), resolution('delivered', { providerReceipt: { type: 'resend', id: 'x'.repeat(513) } }),
     ]),
     /providerReceipt/i,
   );
   assert.throws(
     () => deriveDeliveryState([
-      pending(), resolution('delivered', { providerReceipt: 'Bearer secret-value' }),
+      pending(), resolution('delivered', { providerReceipt: { type: 'resend', id: 'Bearer secret-value' } }),
     ]),
     /providerReceipt/i,
   );

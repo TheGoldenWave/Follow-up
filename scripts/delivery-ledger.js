@@ -96,6 +96,38 @@ function validateHashIdArray(value, field, maximum) {
   }
 }
 
+function validateProviderReceipt(receipt, limits) {
+  if (typeof receipt === 'string') {
+    requireString(receipt, 'providerReceipt');
+  } else if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) {
+    throw new TypeError('Delivery event providerReceipt must be a legacy string or receipt object');
+  } else if (receipt.type === 'stdout') {
+    if (Object.keys(receipt).length !== 1) {
+      throw new TypeError('stdout providerReceipt contains unsupported fields');
+    }
+  } else if (receipt.type === 'telegram') {
+    if (Object.keys(receipt).sort().join(',') !== 'messageIds,type'
+      || !Array.isArray(receipt.messageIds) || receipt.messageIds.length === 0
+      || receipt.messageIds.length > 100
+      || receipt.messageIds.some((value) => !Number.isSafeInteger(value) || value < 0)) {
+      throw new TypeError('telegram providerReceipt must contain bounded messageIds');
+    }
+  } else if (receipt.type === 'resend') {
+    if (Object.keys(receipt).sort().join(',') !== 'id,type'
+      || typeof receipt.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(receipt.id)) {
+      throw new TypeError('resend providerReceipt must contain a safe id');
+    }
+  } else {
+    throw new TypeError('Delivery event providerReceipt has an unknown receipt type');
+  }
+  const serialized = typeof receipt === 'string' ? receipt : JSON.stringify(receipt);
+  if (/[\u0000-\u001f\u007f]/u.test(serialized)
+    || Buffer.byteLength(serialized, 'utf8') > limits.maxProviderReceiptBytes
+    || /\bBearer\s+\S+|\b(?:token|password|secret|api[_ -]?key)\s*[:=]/iu.test(serialized)) {
+    throw new TypeError('Delivery event providerReceipt must be bounded and non-secret');
+  }
+}
+
 export function validateDeliveryEvent(event, { limits: limitOverrides } = {}) {
   const limits = resolveLimits(limitOverrides);
   if (!event || typeof event !== 'object' || Array.isArray(event)) {
@@ -136,12 +168,7 @@ export function validateDeliveryEvent(event, { limits: limitOverrides } = {}) {
     }
   }
   if (event.type === 'delivered') {
-    requireString(event.providerReceipt, 'providerReceipt');
-    if (/[\u0000-\u001f\u007f]/u.test(event.providerReceipt)
-      || Buffer.byteLength(event.providerReceipt, 'utf8') > limits.maxProviderReceiptBytes
-      || /\bBearer\s+\S+|\b(?:token|password|secret|api[_ -]?key)\s*[:=]/iu.test(event.providerReceipt)) {
-      throw new TypeError('Delivery event providerReceipt must be a bounded opaque string without control characters');
-    }
+    validateProviderReceipt(event.providerReceipt, limits);
   }
   if (event.type === 'failed' && !REASON_CODE.test(event.reasonCode)) {
     throw new TypeError('Failed delivery event reasonCode must be a safe machine-readable code');
@@ -429,37 +456,60 @@ export async function appendDeliveryEvents(events, options = {}) {
   const limits = resolveLimits(options.limits);
   for (const event of events) validateDeliveryEvent(event, { limits });
   const ledgerPath = resolveDeliveryLedgerPath(options);
-  return withLedgerLock(ledgerPath, async () => {
-    const existingEvents = await readDeliveryLedgerUnlocked(ledgerPath, { limits });
-    const combined = [...existingEvents, ...events];
-    deriveDeliveryState(combined, { limits });
-    assertPendingReservations(existingEvents, events, { limits });
-    const serialized = `${events.map((event) => JSON.stringify(event)).join('\n')}\n`;
-    if (Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes
-      || (await stat(ledgerPath)).size + Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes) {
-      throw new RangeError(`Delivery ledger append exceeds the ${limits.maxFileBytes}-byte file limit`);
-    }
-    for (const [index, line] of serialized.trimEnd().split('\n').entries()) {
-      if (Buffer.byteLength(line, 'utf8') > limits.maxLineBytes) {
-        throw new RangeError(`Delivery ledger appended line ${index + 1} exceeds the line byte limit`);
-      }
-    }
-    const handle = await open(ledgerPath, 'a');
-    try {
-      await handle.writeFile(serialized, 'utf8');
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    return deriveDeliveryState(combined, { limits });
-  });
+  return withLedgerLock(ledgerPath, () => appendDeliveryEventsUnlocked(
+    ledgerPath, events, limits,
+  ));
 }
 
 export async function reservePendingAttempt(event, options = {}) {
   if (event?.type !== 'pending') {
     throw new TypeError('reservePendingAttempt requires a pending delivery event');
   }
-  return appendDeliveryEvent(event, options);
+  const limits = resolveLimits(options.limits);
+  validateDeliveryEvent(event, { limits });
+  const ledgerPath = resolveDeliveryLedgerPath(options);
+  return withLedgerLock(ledgerPath, async () => {
+    let prepared;
+    try {
+      const existingEvents = await readDeliveryLedgerUnlocked(ledgerPath, { limits });
+      const combined = [...existingEvents, event];
+      deriveDeliveryState(combined, { limits });
+      assertPendingReservations(existingEvents, [event], { limits });
+      prepared = await options.transaction?.prepare?.();
+      const state = await appendDeliveryEventsUnlocked(ledgerPath, [event], limits, existingEvents);
+      await options.transaction?.commit?.(prepared);
+      return state;
+    } catch (error) {
+      await options.transaction?.rollback?.(prepared).catch(() => {});
+      throw error;
+    }
+  });
+}
+
+async function appendDeliveryEventsUnlocked(ledgerPath, events, limits, existingInput) {
+  const existingEvents = existingInput
+    ?? await readDeliveryLedgerUnlocked(ledgerPath, { limits });
+  const combined = [...existingEvents, ...events];
+  deriveDeliveryState(combined, { limits });
+  assertPendingReservations(existingEvents, events, { limits });
+  const serialized = `${events.map((event) => JSON.stringify(event)).join('\n')}\n`;
+  if (Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes
+    || (await stat(ledgerPath)).size + Buffer.byteLength(serialized, 'utf8') > limits.maxFileBytes) {
+    throw new RangeError(`Delivery ledger append exceeds the ${limits.maxFileBytes}-byte file limit`);
+  }
+  for (const [index, line] of serialized.trimEnd().split('\n').entries()) {
+    if (Buffer.byteLength(line, 'utf8') > limits.maxLineBytes) {
+      throw new RangeError(`Delivery ledger appended line ${index + 1} exceeds the line byte limit`);
+    }
+  }
+  const handle = await open(ledgerPath, 'a');
+  try {
+    await handle.writeFile(serialized, 'utf8');
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  return deriveDeliveryState(combined, { limits });
 }
 
 export function selectRetainedDeliveryEvents(events, {

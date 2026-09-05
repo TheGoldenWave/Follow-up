@@ -1,240 +1,161 @@
 #!/usr/bin/env node
 
-// ============================================================================
-// Follow Builders — Delivery Script
-// ============================================================================
-// Sends a digest to the user via their chosen delivery method.
-// Supports: Telegram bot, Email (via Resend), or stdout (default).
-//
-// Usage:
-//   echo "digest text" | node deliver.js
-//   node deliver.js --message "digest text"
-//   node deliver.js --file /path/to/digest.txt
-//
-// The script reads delivery config from ~/.follow-builders/config.json
-// and API keys from ~/.follow-builders/.env
-//
-// Delivery methods:
-//   - "telegram": sends via Telegram Bot API (needs TELEGRAM_BOT_TOKEN + chat ID)
-//   - "email": sends via Resend API (needs RESEND_API_KEY + email address)
-//   - "stdout" (default): just prints to terminal
-// ============================================================================
+import { createHash, randomUUID as systemRandomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { isAbsolute, join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
-import { basename, dirname, join, resolve } from 'path';
-import { homedir } from 'os';
-import { pathToFileURL } from 'url';
-import { config as loadEnv } from 'dotenv';
+import { parse } from 'dotenv';
 
-// -- Constants ---------------------------------------------------------------
+import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
+import { loadActiveDigest } from './delivery-message.js';
+import { reserveOutboxAttempt, resolveOutboxAttempt } from './delivery-outbox.js';
+import { deliverWithProvider, validateDestination } from './delivery-providers.js';
 
-const USER_DIR = join(homedir(), '.follow-builders');
-const CONFIG_PATH = join(USER_DIR, 'config.json');
-const ENV_PATH = join(USER_DIR, '.env');
+const DEFAULT_USER_DIR = join(homedir(), '.follow-builders');
 
-// -- Read input --------------------------------------------------------------
-
-// The digest text can come from stdin, --message flag, or --file flag
-export async function loadActiveDigestMessage(activePath, { readFileImpl = readFile } = {}) {
-  if (basename(activePath) !== 'active.json') throw new Error('Active digest path must name active.json');
-  let active;
-  try { active = JSON.parse(await readFileImpl(activePath, 'utf8')); }
-  catch { throw new Error('Active digest could not be read'); }
-  if (!active || active.schemaVersion !== '1.0'
-      || typeof active.generation !== 'string'
-      || !/^[A-Za-z0-9][A-Za-z0-9.-]{0,399}$/u.test(active.generation)
-      || active.artifact !== 'artifact.json' || active.message !== 'message.txt') {
-    throw new Error('Active digest is invalid');
-  }
-  return readFileImpl(
-    join(dirname(resolve(activePath)), 'generations', active.generation, active.message),
-    'utf8',
-  );
+export async function loadActiveDigestMessage(activePath, options = {}) {
+  return (await loadActiveDigest(activePath, options)).message;
 }
 
-async function getDigestText(args = process.argv.slice(2)) {
-  const activeIdx = args.indexOf('--active');
-  if (activeIdx !== -1 && args[activeIdx + 1]) {
-    return loadActiveDigestMessage(args[activeIdx + 1]);
-  }
-
-  // Check --message flag
-  const msgIdx = args.indexOf('--message');
-  if (msgIdx !== -1 && args[msgIdx + 1]) {
-    return args[msgIdx + 1];
-  }
-
-  // Check --file flag
-  const fileIdx = args.indexOf('--file');
-  if (fileIdx !== -1 && args[fileIdx + 1]) {
-    return await readFile(args[fileIdx + 1], 'utf-8');
-  }
-
-  // Read from stdin
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf-8');
-}
-
-// -- Telegram Delivery -------------------------------------------------------
-
-// Sends the digest via Telegram Bot API.
-// The user creates a bot via @BotFather and provides the token.
-// The chat ID is obtained when the user sends their first message to the bot.
-async function sendTelegram(text, botToken, chatId) {
-  // Telegram has a 4096 character limit per message.
-  // If the digest is longer, we split it into chunks.
-  const MAX_LEN = 4000;
-  const chunks = [];
-  let remaining = text;
-  while (remaining.length > 0) {
-    if (remaining.length <= MAX_LEN) {
-      chunks.push(remaining);
-      break;
-    }
-    // Try to split at a newline near the limit
-    let splitAt = remaining.lastIndexOf('\n', MAX_LEN);
-    if (splitAt < MAX_LEN * 0.5) splitAt = MAX_LEN;
-    chunks.push(remaining.slice(0, splitAt));
-    remaining = remaining.slice(splitAt);
-  }
-
-  for (const chunk of chunks) {
-    const res = await fetch(
-      `https://api.telegram.org/bot${botToken}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: chunk,
-          parse_mode: 'Markdown',
-          disable_web_page_preview: true
-        })
-      }
-    );
-
-    if (!res.ok) {
-      const err = await res.json();
-      // If Markdown parsing fails, retry without parse_mode
-      if (err.description && err.description.includes("can't parse")) {
-        await fetch(
-          `https://api.telegram.org/bot${botToken}/sendMessage`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chatId,
-              text: chunk,
-              disable_web_page_preview: true
-            })
-          }
-        );
-      } else {
-        throw new Error(`Telegram API error: ${err.description}`);
-      }
-    }
-
-    // Small delay between chunks to avoid rate limiting
-    if (chunks.length > 1) await new Promise(r => setTimeout(r, 500));
-  }
-}
-
-// -- Email Delivery (Resend) -------------------------------------------------
-
-// Sends the digest via Resend's email API.
-// The user provides their own Resend API key and email address.
-async function sendEmail(text, apiKey, toEmail) {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+function parseOptions(argv) {
+  return parseCommandLine(argv, {
+    options: { active: { type: 'string' } },
+    validate({ values, positionals }) {
+      if (positionals.length) throw new CommandLineUsageError('unexpected positional arguments');
+      if (!values.active) throw new CommandLineUsageError('--active is required');
+      if (!isAbsolute(values.active)) throw new CommandLineUsageError('--active must be absolute');
     },
-    body: JSON.stringify({
-      from: 'AI Builders Digest <digest@resend.dev>',
-      to: [toEmail],
-      subject: `AI Builders Digest — ${new Date().toLocaleDateString('en-US', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-      })}`,
-      text: text
-    })
-  });
+  }).values;
+}
 
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(`Resend API error: ${err.message || JSON.stringify(err)}`);
+async function loadConfig(path) {
+  try {
+    const value = JSON.parse(await readFile(path, 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();
+    return value;
+  } catch {
+    throw new Error('Delivery configuration could not be read');
   }
 }
 
-// -- Main --------------------------------------------------------------------
-
-export async function main() {
-  // Load env and config
-  loadEnv({ path: ENV_PATH });
-
-  let config = {};
-  if (existsSync(CONFIG_PATH)) {
-    config = JSON.parse(await readFile(CONFIG_PATH, 'utf-8'));
+async function loadCredentials(path, inherited) {
+  try { return { ...inherited, ...parse(await readFile(path)) }; }
+  catch (error) {
+    if (error?.code === 'ENOENT') return { ...inherited };
+    throw new Error('Delivery credentials could not be read');
   }
+}
 
-  const delivery = config.delivery || { method: 'stdout' };
-  const digestText = await getDigestText();
-
-  if (!digestText || digestText.trim().length === 0) {
-    console.log(JSON.stringify({ status: 'skipped', reason: 'Empty digest text' }));
-    return;
+function timestamp(now) {
+  const value = typeof now === 'function' ? now() : new Date().toISOString();
+  const text = value instanceof Date ? value.toISOString() : value;
+  if (typeof text !== 'string' || Number.isNaN(Date.parse(text))
+    || new Date(text).toISOString() !== text) {
+    throw new Error('Delivery clock is invalid');
   }
+  return text;
+}
 
+export async function deliverActiveDigest({
+  activePath, destination, credentials = process.env,
+  ledgerPath, outboxDir, transport, providerStdout = process.stderr,
+  logger = () => {}, randomUUID = systemRandomUUID, now = () => new Date().toISOString(),
+  reserveAttempt = reserveOutboxAttempt, resolveAttempt = resolveOutboxAttempt,
+} = {}) {
+  const loaded = await loadActiveDigest(activePath);
+  if (loaded.message.trim().length === 0) {
+    return { status: 'skipped', reason: 'no-content', digestId: loaded.digestId };
+  }
+  const validated = validateDestination(destination, credentials);
+  const attemptId = randomUUID();
+  if (typeof attemptId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(attemptId)) {
+    throw new Error('Generated delivery attemptId is invalid');
+  }
+  const createdAt = timestamp(now);
+  const attempt = {
+    schemaVersion: '1.0', type: 'pending', occurredAt: createdAt, attemptId,
+    digestId: loaded.digestId, frequency: loaded.frequency,
+    candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
+    destinationType: validated.method,
+    messageHash: createHash('sha256').update(loaded.message).digest('hex'),
+  };
+  await reserveAttempt(attempt, { ledgerPath, outboxDir, randomUUID });
+  let outcome;
   try {
-    switch (delivery.method) {
-      case 'telegram': {
-        const botToken = process.env.TELEGRAM_BOT_TOKEN;
-        const chatId = delivery.chatId;
-        if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN not found in .env');
-        if (!chatId) throw new Error('delivery.chatId not found in config.json');
-        await sendTelegram(digestText, botToken, chatId);
-        console.log(JSON.stringify({
-          status: 'ok',
-          method: 'telegram',
-          message: 'Digest sent to Telegram'
-        }));
-        break;
-      }
-
-      case 'email': {
-        const apiKey = process.env.RESEND_API_KEY;
-        const toEmail = delivery.email;
-        if (!apiKey) throw new Error('RESEND_API_KEY not found in .env');
-        if (!toEmail) throw new Error('delivery.email not found in config.json');
-        await sendEmail(digestText, apiKey, toEmail);
-        console.log(JSON.stringify({
-          status: 'ok',
-          method: 'email',
-          message: `Digest sent to ${toEmail}`
-        }));
-        break;
-      }
-
-      case 'stdout':
-      default:
-        // Just print to terminal — the agent or OpenClaw handles delivery
-        console.log(digestText);
-        break;
+    outcome = await deliverWithProvider(loaded.message, validated, {
+      transport, providerStdout, logger,
+    });
+  } catch {
+    return {
+      status: 'delivery-uncertain', method: validated.method,
+      attemptId, digestId: loaded.digestId,
+    };
+  }
+  if (outcome.status === 'uncertain') {
+    return {
+      status: 'delivery-uncertain', method: validated.method,
+      attemptId, digestId: loaded.digestId,
+    };
+  }
+  const resolvedAt = timestamp(now);
+  if (outcome.status === 'failed') {
+    try {
+      await resolveAttempt(attemptId, {
+        status: 'failed', occurredAt: resolvedAt, reasonCode: outcome.reasonCode,
+      }, { ledgerPath, outboxDir, randomUUID });
+    } catch {
+      return {
+        status: 'delivery-uncertain', method: validated.method,
+        attemptId, digestId: loaded.digestId,
+      };
     }
-  } catch (err) {
-    console.log(JSON.stringify({
-      status: 'error',
-      method: delivery.method,
-      message: err.message
-    }));
-    process.exit(1);
+    return {
+      status: 'delivery-failed', method: validated.method,
+      attemptId, digestId: loaded.digestId,
+    };
+  }
+  try {
+    await resolveAttempt(attemptId, {
+      status: 'delivered', occurredAt: resolvedAt, receipt: outcome.receipt,
+    }, { ledgerPath, outboxDir, randomUUID });
+  } catch {
+    return {
+      status: 'delivery-uncertain', method: validated.method,
+      attemptId, digestId: loaded.digestId,
+    };
+  }
+  return { status: 'delivered', method: validated.method, attemptId, digestId: loaded.digestId };
+}
+
+export async function main({
+  argv = process.argv.slice(2), stdout = process.stdout, stderr = process.stderr,
+  configPath = join(DEFAULT_USER_DIR, 'config.json'), envPath = join(DEFAULT_USER_DIR, '.env'),
+  env = process.env, ledgerPath, outboxDir, transport, providerStdout = stderr,
+  randomUUID = systemRandomUUID, now,
+} = {}) {
+  let options;
+  try { options = parseOptions(argv); }
+  catch (error) {
+    stderr.write(`usage: ${error.message}\n`);
+    return error.exitCode ?? EX_USAGE;
+  }
+  try {
+    const config = await loadConfig(configPath);
+    const credentials = await loadCredentials(envPath, env);
+    const result = await deliverActiveDigest({
+      activePath: options.active, destination: config.delivery ?? { method: 'stdout' }, credentials,
+      ledgerPath, outboxDir, transport, providerStdout, randomUUID, now,
+    });
+    stdout.write(`${JSON.stringify(result)}\n`);
+    return result.status === 'delivered' || result.status === 'skipped' ? 0 : 1;
+  } catch {
+    stdout.write(`${JSON.stringify({ status: 'delivery-failed', reason: 'delivery-not-started' })}\n`);
+    return 1;
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  await main();
+  process.exitCode = await main();
 }

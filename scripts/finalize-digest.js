@@ -169,6 +169,11 @@ export async function activateDigestGeneration(outputDir, artifact, message, {
   let generation;
   let generationVisible = false;
   try {
+    const candidateIds = artifact.items.flatMap((item) => [
+      item.candidateId,
+      ...(item.corroborating ?? []).map((candidate) => candidate.candidateId),
+    ]);
+    const eventClusterIds = artifact.items.map((item) => item.eventClusterId);
     await rejectSymlink(root, fsImpl, true);
     await fsImpl.mkdir(root, { recursive: true, mode: 0o700 });
     await rejectSymlink(root, fsImpl);
@@ -203,6 +208,8 @@ export async function activateDigestGeneration(outputDir, artifact, message, {
       generation,
       digestId: artifact.digestId,
       requestHash: artifact.requestHash,
+      candidateIds,
+      eventClusterIds,
       artifact: 'artifact.json',
       message: 'message.txt',
     };
@@ -216,6 +223,7 @@ export async function activateDigestGeneration(outputDir, artifact, message, {
 
     const active = {
       schemaVersion: '1.0', generation, digestId: artifact.digestId,
+      requestHash: artifact.requestHash, candidateIds, eventClusterIds,
       artifact: 'artifact.json', message: 'message.txt',
     };
     try {

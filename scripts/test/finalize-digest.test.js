@@ -250,6 +250,13 @@ test('finalize writes a plain-text user message rather than delivering artifact 
   assert.deepEqual(active.manifest, {
     schemaVersion: '1.0', generation: `${requestDocument.digestId}-generation`,
     digestId: requestDocument.digestId, requestHash: requestDocument.requestHash,
+    candidateIds: [
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    ],
+    eventClusterIds: [
+      'ec811d9a4a78bcbaca36363ed9cce4348e7ef3a3f12533603af3b268d4311e69',
+    ],
     artifact: 'artifact.json', message: 'message.txt',
   });
   assert.equal(await loadActiveDigestMessage(join(outputDir, 'active.json')), text);
