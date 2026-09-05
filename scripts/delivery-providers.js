@@ -34,8 +34,32 @@ function splitTelegramMessage(message, maximum = 4000) {
   return chunks;
 }
 
-async function safeJson(response) {
-  try { return await response.json(); } catch { return null; }
+async function requestJson(url, options, {
+  transport, timeoutMs, AbortControllerImpl = AbortController,
+  setTimeoutImpl = setTimeout, clearTimeoutImpl = clearTimeout,
+}) {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) {
+    throw new TypeError('Provider timeout must be a positive integer');
+  }
+  const controller = new AbortControllerImpl();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeoutImpl(() => {
+      controller.abort();
+      reject(Object.assign(new Error('provider timeout'), { name: 'AbortError' }));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await transport(url, { ...options, signal: controller.signal });
+        return { response, body: await response.json() };
+      })(),
+      timeout,
+    ]);
+  } finally {
+    clearTimeoutImpl(timer);
+  }
 }
 
 function classifyHttp(status) {
@@ -44,28 +68,75 @@ function classifyHttp(status) {
 }
 
 export async function deliverStdout(message, output) {
+  if (!output || typeof output.write !== 'function') {
+    return { status: 'uncertain', reasonCode: 'provider-result-unknown' };
+  }
+  if (typeof output.once !== 'function') {
+    try {
+      await output.write(message);
+      return { status: 'delivered', receipt: { type: 'stdout' } };
+    } catch {
+      return { status: 'uncertain', reasonCode: 'provider-result-unknown' };
+    }
+  }
   try {
-    await output.write(message);
-    return { status: 'delivered', receipt: { type: 'stdout' } };
+    return await new Promise((resolve) => {
+      let settled = false;
+      let callbackDone = false;
+      let drainDone = false;
+      const cleanup = () => {
+        output.off?.('error', onError);
+        output.off?.('drain', onDrain);
+      };
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(result);
+      };
+      const maybeFinish = () => {
+        if (callbackDone && drainDone) finish({ status: 'delivered', receipt: { type: 'stdout' } });
+      };
+      const onError = () => finish({ status: 'uncertain', reasonCode: 'provider-result-unknown' });
+      const onDrain = () => { drainDone = true; maybeFinish(); };
+      output.once('error', onError);
+      output.once('drain', onDrain);
+      let accepted;
+      try {
+        accepted = output.write(message, (error) => {
+          if (error) onError();
+          else { callbackDone = true; maybeFinish(); }
+        });
+      } catch {
+        onError();
+        return;
+      }
+      drainDone = accepted !== false;
+      if (drainDone) output.off?.('drain', onDrain);
+      maybeFinish();
+    });
   } catch {
     return { status: 'uncertain', reasonCode: 'provider-result-unknown' };
   }
 }
 
 export async function deliverTelegram(message, {
-  botToken, chatId, transport = fetch, logger = () => {},
+  botToken, chatId, transport = fetch, logger = () => {}, timeoutMs = 15_000,
+  AbortControllerImpl, setTimeoutImpl, clearTimeoutImpl,
 } = {}) {
   const messageIds = [];
   for (const chunk of splitTelegramMessage(message)) {
     try {
-      const response = await transport(
+      const { response, body } = await requestJson(
         `https://api.telegram.org/bot${botToken}/sendMessage`,
         {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chat_id: chatId, text: chunk, disable_web_page_preview: true }),
+        }, {
+          transport, timeoutMs, AbortControllerImpl,
+          setTimeoutImpl, clearTimeoutImpl,
         },
       );
-      const body = await safeJson(response);
       if (!response.ok || body?.ok !== true) {
         const classified = messageIds.length > 0 ? 'uncertain' : classifyHttp(response.status);
         logger(`telegram outcome=${classified}`);
@@ -88,17 +159,19 @@ export async function deliverTelegram(message, {
 
 export async function deliverEmail(message, {
   apiKey, to, transport = fetch, now = () => new Date(), logger = () => {},
+  timeoutMs = 15_000, AbortControllerImpl, setTimeoutImpl, clearTimeoutImpl,
 } = {}) {
   try {
-    const response = await transport('https://api.resend.com/emails', {
+    const { response, body } = await requestJson('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
         from: 'AI Builders Digest <digest@resend.dev>', to: [to],
         subject: `AI Builders Digest - ${now().toISOString().slice(0, 10)}`, text: message,
       }),
+    }, {
+      transport, timeoutMs, AbortControllerImpl, setTimeoutImpl, clearTimeoutImpl,
     });
-    const body = await safeJson(response);
     if (!response.ok) {
       const status = classifyHttp(response.status);
       logger(`resend outcome=${status}`);

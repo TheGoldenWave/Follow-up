@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 
 import {
   readDeliveryOutbox,
   readOutboxAttempt,
+  reconcileDeliveryTransactions,
   reserveOutboxAttempt,
   resolveOutboxAttempt,
 } from '../delivery-outbox.js';
@@ -90,4 +91,59 @@ test('startup outbox index is deterministic and rejects corrupt or symlinked att
   await rm(join(options.outboxDir, 'corrupt.json'));
   await symlink(join(options.outboxDir, 'attempt-a.json'), join(options.outboxDir, 'linked.json'));
   await assert.rejects(readDeliveryOutbox(options), /symbolic link|symlink|invalid.*outbox/i);
+});
+
+test('reconcile restores a pending outbox after a crash following ledger append', async (t) => {
+  const options = await paths(t);
+  let failed = false;
+  const fsImpl = {
+    ...(await import('node:fs/promises')),
+    async rename(from, to) {
+      if (!failed && from.includes('.delivery-outbox-') && to.endsWith('attempt-crash.json')) {
+        failed = true;
+        throw new Error('simulated crash after ledger append');
+      }
+      return (await import('node:fs/promises')).rename(from, to);
+    },
+  };
+  await assert.rejects(reserveOutboxAttempt(pending({ attemptId: 'attempt-crash' }), {
+    ...options, fsImpl, randomUUID: () => 'reservation-crash',
+  }), (error) => error.code === 'DELIVERY_RESERVATION_UNCERTAIN');
+  assert.equal((await readDeliveryLedger(options)).length, 1);
+  await reconcileDeliveryTransactions(options);
+  assert.equal((await readOutboxAttempt('attempt-crash', options)).status, 'pending');
+});
+
+test('reconcile makes terminal outbox state agree with the authoritative ledger', async (t) => {
+  const options = await paths(t);
+  await reserveOutboxAttempt(pending({ attemptId: 'attempt-terminal' }), options);
+  let failed = false;
+  const fsImpl = {
+    ...(await import('node:fs/promises')),
+    async rename(from, to) {
+      if (!failed && from.includes('.delivery-outbox-') && to.endsWith('attempt-terminal.json')) {
+        failed = true;
+        throw new Error('simulated terminal crash');
+      }
+      return (await import('node:fs/promises')).rename(from, to);
+    },
+  };
+  await assert.rejects(resolveOutboxAttempt('attempt-terminal', {
+    status: 'delivered', occurredAt: '2026-09-06T08:01:00.000Z',
+    receipt: { type: 'stdout' },
+  }, { ...options, fsImpl, randomUUID: () => 'terminal-crash' }), /simulated terminal crash/);
+  await reconcileDeliveryTransactions(options);
+  assert.equal((await readOutboxAttempt('attempt-terminal', options)).status, 'delivered');
+});
+
+test('reconcile safely removes owned orphan temporary files but rejects unknown entries', async (t) => {
+  const options = await paths(t);
+  await reserveOutboxAttempt(pending(), options);
+  await writeFile(join(options.outboxDir, '.delivery-outbox-attempt-orphan-token.tmp'), 'partial');
+  const journalDir = join(dirname(options.outboxDir), 'delivery-transactions');
+  await mkdir(journalDir, { recursive: true });
+  await writeFile(join(journalDir, '.delivery-journal-attempt-orphan-token.tmp'), 'partial');
+  assert.equal((await readDeliveryOutbox(options)).length, 1);
+  await writeFile(join(options.outboxDir, 'unknown.tmp'), 'unknown');
+  await assert.rejects(readDeliveryOutbox(options), /unknown|invalid.*entry/i);
 });

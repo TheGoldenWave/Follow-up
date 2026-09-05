@@ -395,7 +395,16 @@ async function readDeliveryLedgerUnlocked(ledgerPath, options = {}) {
 
 export async function readDeliveryLedger(options = {}) {
   const ledgerPath = resolveDeliveryLedgerPath(options);
-  return withLedgerLock(ledgerPath, () => readDeliveryLedgerUnlocked(ledgerPath, options));
+  return withLedgerLock(ledgerPath, async () => {
+    const events = await readDeliveryLedgerUnlocked(ledgerPath, options);
+    if (options.transaction?.reconcile) {
+      await options.transaction.reconcile(events);
+    } else if (options.reconcileOutbox !== false) {
+      const { reconcileDeliveryTransactionsForEvents } = await import('./delivery-outbox.js');
+      await reconcileDeliveryTransactionsForEvents(events, options);
+    }
+    return events;
+  });
 }
 
 export async function appendDeliveryEvent(event, options = {}) {
@@ -456,9 +465,25 @@ export async function appendDeliveryEvents(events, options = {}) {
   const limits = resolveLimits(options.limits);
   for (const event of events) validateDeliveryEvent(event, { limits });
   const ledgerPath = resolveDeliveryLedgerPath(options);
-  return withLedgerLock(ledgerPath, () => appendDeliveryEventsUnlocked(
-    ledgerPath, events, limits,
-  ));
+  return withLedgerLock(ledgerPath, async () => {
+    const existingEvents = await readDeliveryLedgerUnlocked(ledgerPath, { limits });
+    await options.transaction?.reconcile?.(existingEvents);
+    let prepared;
+    let ledgerAppended = false;
+    try {
+      prepared = await options.transaction?.prepare?.();
+      const state = await appendDeliveryEventsUnlocked(
+        ledgerPath, events, limits, existingEvents,
+      );
+      ledgerAppended = true;
+      await options.transaction?.ledgerAppended?.(prepared);
+      await options.transaction?.commit?.(prepared);
+      return state;
+    } catch (error) {
+      try { await options.transaction?.rollback?.(prepared, { ledgerAppended }); } catch { /* recovery owns cleanup */ }
+      throw error;
+    }
+  });
 }
 
 export async function reservePendingAttempt(event, options = {}) {
@@ -470,17 +495,21 @@ export async function reservePendingAttempt(event, options = {}) {
   const ledgerPath = resolveDeliveryLedgerPath(options);
   return withLedgerLock(ledgerPath, async () => {
     let prepared;
+    let ledgerAppended = false;
     try {
       const existingEvents = await readDeliveryLedgerUnlocked(ledgerPath, { limits });
+      await options.transaction?.reconcile?.(existingEvents);
       const combined = [...existingEvents, event];
       deriveDeliveryState(combined, { limits });
       assertPendingReservations(existingEvents, [event], { limits });
       prepared = await options.transaction?.prepare?.();
       const state = await appendDeliveryEventsUnlocked(ledgerPath, [event], limits, existingEvents);
+      ledgerAppended = true;
+      await options.transaction?.ledgerAppended?.(prepared);
       await options.transaction?.commit?.(prepared);
       return state;
     } catch (error) {
-      await options.transaction?.rollback?.(prepared).catch(() => {});
+      try { await options.transaction?.rollback?.(prepared, { ledgerAppended }); } catch { /* recovery owns cleanup */ }
       throw error;
     }
   });

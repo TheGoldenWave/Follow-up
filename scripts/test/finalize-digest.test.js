@@ -257,6 +257,8 @@ test('finalize writes a plain-text user message rather than delivering artifact 
     eventClusterIds: [
       'ec811d9a4a78bcbaca36363ed9cce4348e7ef3a3f12533603af3b268d4311e69',
     ],
+    artifactHash: '3a76bee2490701d957173fe279ddf273819342fad39cc054c267354a6fa4f854',
+    messageHash: '3e52f62499f0467b5f1b2972c4dda8a0f8d737271266a97248bf96c062726eb9',
     artifact: 'artifact.json', message: 'message.txt',
   });
   assert.equal(await loadActiveDigestMessage(join(outputDir, 'active.json')), text);

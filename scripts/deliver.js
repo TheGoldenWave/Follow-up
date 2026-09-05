@@ -21,11 +21,14 @@ export async function loadActiveDigestMessage(activePath, options = {}) {
 
 function parseOptions(argv) {
   return parseCommandLine(argv, {
-    options: { active: { type: 'string' } },
+    options: { active: { type: 'string' }, destination: { type: 'string' } },
     validate({ values, positionals }) {
       if (positionals.length) throw new CommandLineUsageError('unexpected positional arguments');
       if (!values.active) throw new CommandLineUsageError('--active is required');
       if (!isAbsolute(values.active)) throw new CommandLineUsageError('--active must be absolute');
+      if (values.destination && !['stdout', 'telegram', 'email'].includes(values.destination)) {
+        throw new CommandLineUsageError('--destination must be stdout, telegram, or email');
+      }
     },
   }).values;
 }
@@ -60,7 +63,8 @@ function timestamp(now) {
 
 export async function deliverActiveDigest({
   activePath, destination, credentials = process.env,
-  ledgerPath, outboxDir, transport, providerStdout = process.stderr,
+  ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout = process.stderr,
+  timeoutMs = 15_000,
   logger = () => {}, randomUUID = systemRandomUUID, now = () => new Date().toISOString(),
   reserveAttempt = reserveOutboxAttempt, resolveAttempt = resolveOutboxAttempt,
 } = {}) {
@@ -81,11 +85,22 @@ export async function deliverActiveDigest({
     destinationType: validated.method,
     messageHash: createHash('sha256').update(loaded.message).digest('hex'),
   };
-  await reserveAttempt(attempt, { ledgerPath, outboxDir, randomUUID });
+  try {
+    await reserveAttempt(attempt, { ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID });
+  } catch (error) {
+    if (error?.code === 'DELIVERY_RESERVATION_UNCERTAIN') {
+      return {
+        status: 'delivery-uncertain', reason: 'reservation-uncertain',
+        method: validated.method, attemptId, digestId: loaded.digestId,
+      };
+    }
+    throw error;
+  }
   let outcome;
   try {
     outcome = await deliverWithProvider(loaded.message, validated, {
       transport, providerStdout, logger,
+      timeoutMs,
     });
   } catch {
     return {
@@ -104,7 +119,7 @@ export async function deliverActiveDigest({
     try {
       await resolveAttempt(attemptId, {
         status: 'failed', occurredAt: resolvedAt, reasonCode: outcome.reasonCode,
-      }, { ledgerPath, outboxDir, randomUUID });
+      }, { ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID });
     } catch {
       return {
         status: 'delivery-uncertain', method: validated.method,
@@ -119,7 +134,7 @@ export async function deliverActiveDigest({
   try {
     await resolveAttempt(attemptId, {
       status: 'delivered', occurredAt: resolvedAt, receipt: outcome.receipt,
-    }, { ledgerPath, outboxDir, randomUUID });
+    }, { ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID });
   } catch {
     return {
       status: 'delivery-uncertain', method: validated.method,
@@ -132,7 +147,8 @@ export async function deliverActiveDigest({
 export async function main({
   argv = process.argv.slice(2), stdout = process.stdout, stderr = process.stderr,
   configPath = join(DEFAULT_USER_DIR, 'config.json'), envPath = join(DEFAULT_USER_DIR, '.env'),
-  env = process.env, ledgerPath, outboxDir, transport, providerStdout = stderr,
+  env = process.env, ledgerPath, outboxDir, transactionDir, fsImpl,
+  transport, providerStdout = stderr,
   randomUUID = systemRandomUUID, now,
 } = {}) {
   let options;
@@ -145,8 +161,11 @@ export async function main({
     const config = await loadConfig(configPath);
     const credentials = await loadCredentials(envPath, env);
     const result = await deliverActiveDigest({
-      activePath: options.active, destination: config.delivery ?? { method: 'stdout' }, credentials,
-      ledgerPath, outboxDir, transport, providerStdout, randomUUID, now,
+      activePath: options.active,
+      destination: { ...(config.delivery ?? {}), method: options.destination ?? config.delivery?.method ?? 'stdout' },
+      credentials,
+      ledgerPath, outboxDir, transactionDir, fsImpl,
+      transport, providerStdout, randomUUID, now,
     });
     stdout.write(`${JSON.stringify(result)}\n`);
     return result.status === 'delivered' || result.status === 'skipped' ? 0 : 1;

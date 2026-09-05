@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import test from 'node:test';
 
 import {
@@ -68,6 +69,18 @@ test('stdout write failure is an uncertain handoff result', async () => {
   }), { status: 'uncertain', reasonCode: 'provider-result-unknown' });
 });
 
+test('stdout waits for callback and drain and treats asynchronous EPIPE as uncertain', async () => {
+  const stream = new EventEmitter();
+  stream.write = (_message, callback) => {
+    queueMicrotask(() => stream.emit('error', Object.assign(new Error('broken pipe'), { code: 'EPIPE' })));
+    queueMicrotask(() => callback());
+    return false;
+  };
+  assert.deepEqual(await deliverStdout('digest body', stream), {
+    status: 'uncertain', reasonCode: 'provider-result-unknown',
+  });
+});
+
 test('email distinguishes success, explicit rejection, and unknown provider results', async () => {
   const common = { apiKey: 'test-only-key', to: 'reader@example.com' };
   assert.deepEqual(await deliverEmail('digest', {
@@ -88,4 +101,23 @@ test('destination configuration is validated locally before provider handoff', (
   assert.throws(() => validateDestination({ method: 'telegram', chatId: '1' }, {}), /credential/i);
   assert.throws(() => validateDestination({ method: 'email', email: 'bad\r\nBcc:x' }, { RESEND_API_KEY: 'x' }), /email/i);
   assert.doesNotThrow(() => validateDestination({ method: 'stdout' }, {}));
+});
+
+test('Telegram and Resend abort transport and response parsing timeouts', async () => {
+  for (const operation of [
+    () => deliverTelegram('digest', {
+      botToken: 'test-only-token', chatId: '123', timeoutMs: 5,
+      transport: async (_url, { signal }) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+      }),
+    }),
+    () => deliverEmail('digest', {
+      apiKey: 'test-only-key', to: 'reader@example.com', timeoutMs: 5,
+      transport: async () => ({ ok: true, status: 200, json: async () => new Promise(() => {}) }),
+    }),
+  ]) {
+    assert.deepEqual(await operation(), {
+      status: 'uncertain', reasonCode: 'provider-result-unknown',
+    });
+  }
 });

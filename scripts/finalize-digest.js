@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
-import { randomUUID as systemRandomUUID } from 'node:crypto';
+import { createHash, randomUUID as systemRandomUUID } from 'node:crypto';
 import * as systemFs from 'node:fs/promises';
 import { basename, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
+import { renderDigestMessage } from './delivery-message.js';
 import { validateSelectionAgainstRequest } from './digest-selection.js';
 import {
   AtomicWriteCommittedError,
@@ -26,25 +27,7 @@ function safeSourceName(value, fallback) {
   return Array.from(sanitized || fallback).slice(0, 80).join('');
 }
 
-function safePlainText(value) {
-  return sanitizeDiagnostic(value ?? '')
-    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
-    .replace(/\s+/gu, ' ')
-    .trim()
-    .replace(/@/gu, '＠')
-    .replace(/([\\_*[\]()`])/gu, '\\$1');
-}
-
-export function renderDigestMessage(artifact) {
-  const lines = [safePlainText(artifact.message)];
-  for (const [index, item] of artifact.items.entries()) {
-    lines.push('', `${index + 1}. ${safePlainText(item.title)}`);
-    lines.push(`来源: ${safePlainText(item.sourceId)} | 评分: ${item.scores.totalScore}`);
-    lines.push(`理由: ${safePlainText(item.reason)}`);
-    lines.push(item.link);
-  }
-  return `${lines.join('\n')}\n`;
-}
+export { renderDigestMessage } from './delivery-message.js';
 
 function messageFor(status, frequency, itemCount, incompleteSources) {
   const period = periodLabel(frequency);
@@ -199,9 +182,8 @@ export async function activateDigestGeneration(outputDir, artifact, message, {
       }
     }
 
-    await writeDurableFile(
-      join(stagingDir, 'artifact.json'), `${JSON.stringify(artifact, null, 2)}\n`, fsImpl,
-    );
+    const artifactText = `${JSON.stringify(artifact, null, 2)}\n`;
+    await writeDurableFile(join(stagingDir, 'artifact.json'), artifactText, fsImpl);
     await writeDurableFile(join(stagingDir, 'message.txt'), message, fsImpl);
     const manifest = {
       schemaVersion: '1.0',
@@ -210,6 +192,8 @@ export async function activateDigestGeneration(outputDir, artifact, message, {
       requestHash: artifact.requestHash,
       candidateIds,
       eventClusterIds,
+      artifactHash: createHash('sha256').update(artifactText).digest('hex'),
+      messageHash: createHash('sha256').update(message).digest('hex'),
       artifact: 'artifact.json',
       message: 'message.txt',
     };

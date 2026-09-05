@@ -7,6 +7,7 @@ import test from 'node:test';
 
 import { deliverActiveDigest, main } from '../deliver.js';
 import { readDeliveryLedger } from '../delivery-ledger.js';
+import { renderDigestMessage } from '../finalize-digest.js';
 
 const id = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -21,11 +22,32 @@ async function fixture(t, { status = 'ready', items } = {}) {
   const artifact = {
     schemaVersion: '1.0', status, digestId: 'digest-1', requestHash: id('request'),
     frequency: 'daily', generatedAt: '2026-09-06T08:00:00.000Z',
+    coverage: {
+      frequency: 'daily', status: 'complete', complete: true,
+      requestedInterval: { start: '2026-09-05T00:00:00.000Z', end: '2026-09-06T08:00:00.000Z' },
+      actualInterval: { start: '2026-09-05T00:00:00.000Z', end: '2026-09-06T08:00:00.000Z' },
+      bounds: { startInclusive: true, endInclusive: true }, reasons: [],
+    },
+    sourceCompleteness: {
+      status: 'complete', complete: true, feedFresh: true, expectedSourceCount: 1,
+      reportedSourceCount: 1, totalSourceCount: 1, okSourceCount: 1,
+      noResultsSourceCount: 0, partialSourceCount: 0, errorSourceCount: 0,
+      missingSourceCount: 0,
+    },
+    incompleteSources: [],
     contentStats: { candidateCount: selected.length, eligibleCount: selected.length, excludedCount: 0, selectedCount: selected.length },
-    items: selected,
+    items: selected.map((item) => ({
+      channel: 'blogs', sourceId: 'blog:test', title: 'Important update', author: 'Author',
+      publishedAt: '2026-09-06T07:00:00.000Z', link: 'https://example.com/update',
+      scores: { impact: 20, relevance: 20, evidence: 20, novelty: 10, corroboration: 0, totalScore: 70 },
+      reason: 'Relevant verified update.', corroborating: [], ...item,
+    })),
+    message: status === 'no-important-updates' ? '今日无重要更新' : '今日重要更新',
   };
-  const candidateIds = selected.map(({ candidateId }) => candidateId);
-  const eventClusterIds = selected.map(({ eventClusterId }) => eventClusterId);
+  const artifactText = `${JSON.stringify(artifact)}\n`;
+  const message = renderDigestMessage(artifact);
+  const candidateIds = artifact.items.map(({ candidateId }) => candidateId);
+  const eventClusterIds = artifact.items.map(({ eventClusterId }) => eventClusterId);
   const active = {
     schemaVersion: '1.0', generation, digestId: 'digest-1', requestHash: artifact.requestHash,
     candidateIds, eventClusterIds, artifact: 'artifact.json', message: 'message.txt',
@@ -33,10 +55,11 @@ async function fixture(t, { status = 'ready', items } = {}) {
   const manifest = {
     schemaVersion: '1.0', generation, digestId: 'digest-1', requestHash: artifact.requestHash,
     candidateIds, eventClusterIds, artifact: 'artifact.json', message: 'message.txt',
+    artifactHash: id(artifactText), messageHash: id(message),
   };
   await writeFile(join(outputDir, 'active.json'), `${JSON.stringify(active)}\n`);
-  await writeFile(join(generationDir, 'artifact.json'), `${JSON.stringify(artifact)}\n`);
-  await writeFile(join(generationDir, 'message.txt'), status === 'no-important-updates' ? '今日无重要更新\n' : 'digest body\n');
+  await writeFile(join(generationDir, 'artifact.json'), artifactText);
+  await writeFile(join(generationDir, 'message.txt'), message);
   await writeFile(join(generationDir, 'manifest.json'), `${JSON.stringify(manifest)}\n`);
   return {
     activePath: join(outputDir, 'active.json'),
@@ -103,6 +126,25 @@ test('a terminal persistence error after provider confirmation reports delivery-
   assert.deepEqual((await readDeliveryLedger(paths)).map(({ type }) => type), ['pending']);
 });
 
+test('reservation uncertainty never starts provider handoff', async (t) => {
+  const paths = await fixture(t);
+  let wrote = false;
+  const result = await deliverActiveDigest({
+    ...paths, destination: { method: 'stdout' }, randomUUID: () => 'attempt-reservation-error',
+    providerStdout: { write() { wrote = true; } },
+    reserveAttempt: async () => {
+      throw Object.assign(new Error('outbox commit failed'), {
+        code: 'DELIVERY_RESERVATION_UNCERTAIN',
+      });
+    },
+  });
+  assert.deepEqual(result, {
+    status: 'delivery-uncertain', reason: 'reservation-uncertain', method: 'stdout',
+    attemptId: 'attempt-reservation-error', digestId: 'digest-1',
+  });
+  assert.equal(wrote, false);
+});
+
 test('no-update delivery records an empty-ID run without changing candidate state', async (t) => {
   const paths = await fixture(t, { status: 'no-important-updates', items: [] });
   const result = await deliverActiveDigest({
@@ -115,23 +157,12 @@ test('no-update delivery records an empty-ID run without changing candidate stat
   assert.deepEqual(pending.eventClusterIds, []);
 });
 
-test('an empty rendered message is skipped without reserving an attempt', async (t) => {
-  const paths = await fixture(t);
-  const generationDir = join(paths.activePath.slice(0, -'active.json'.length), 'generations', 'generation-1');
-  await writeFile(join(generationDir, 'message.txt'), '   \n');
-  const result = await deliverActiveDigest({
-    ...paths, destination: { method: 'stdout' }, randomUUID: () => 'unused-attempt',
-    providerStdout: { write() { throw new Error('must not write'); } },
-  });
-  assert.deepEqual(result, { status: 'skipped', reason: 'no-content', digestId: 'digest-1' });
-  await assert.rejects(readFile(paths.ledgerPath), /ENOENT/);
-});
-
 test('CLI is strict, emits one machine JSON result, and never reserves on local config failure', async (t) => {
   const paths = await fixture(t);
   const stdout = { value: '', write(value) { this.value += value; } };
   const stderr = { value: '', write(value) { this.value += value; } };
   assert.equal(await main({ argv: [], stdout, stderr }), 64);
+  assert.equal(await main({ argv: ['--active', paths.activePath, '--destination', 'fax'], stdout, stderr }), 64);
 
   const configPath = join(dirname(paths.ledgerPath), '..', 'config.json');
   await writeFile(configPath, JSON.stringify({ delivery: { method: 'telegram', chatId: '1' } }));
@@ -143,4 +174,12 @@ test('CLI is strict, emits one machine JSON result, and never reserves on local 
   assert.equal(code, 1);
   assert.equal(JSON.parse(stdout.value).status, 'delivery-failed');
   await assert.rejects(readFile(paths.ledgerPath), /ENOENT/);
+});
+
+test('SKILL routes every destination through the transaction and forbids automatic fallback', async () => {
+  const skill = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
+  assert.match(skill, /deliver\.js --active .*--destination stdout/);
+  assert.match(skill, /deliver\.js --active .*--destination (?:telegram\|email|<stdout\|telegram\|email>)/);
+  assert.doesNotMatch(skill, /show the digest in the terminal as fallback/i);
+  assert.match(skill, /delivery-uncertain[^]*不得自动.*fallback|delivery-uncertain[^]*禁止自动.*回退/i);
 });
