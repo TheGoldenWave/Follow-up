@@ -5,10 +5,9 @@ import addFormats from 'ajv-formats';
 
 export const DIGEST_CURATION_REQUEST_SCHEMA_VERSION = '1.0';
 export const DIGEST_SELECTION_SCHEMA_VERSION = '1.0';
+export const CURATION_CANDIDATE_LIMIT = 1000;
+export const CURATION_SUMMARY_CHARACTER_LIMIT = 12_000;
 
-const candidateSchema = JSON.parse(readFileSync(
-  new URL('../contracts/candidate-feed.schema.json', import.meta.url), 'utf8',
-));
 const requestSchema = JSON.parse(readFileSync(
   new URL('../contracts/digest-curation-request.schema.json', import.meta.url), 'utf8',
 ));
@@ -18,7 +17,6 @@ const selectionSchema = JSON.parse(readFileSync(
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv, { mode: 'full' });
-ajv.addSchema(candidateSchema);
 const validateRequestSchema = ajv.compile(requestSchema);
 const validateSelectionSchema = ajv.compile(selectionSchema);
 

@@ -23,9 +23,7 @@
     "eligibleCandidates": {
       "type": "array",
       "maxItems": 1000,
-      "items": {
-        "$ref": "https://github.com/TheGoldenWave/Follow-up/contracts/candidate-feed.schema.json#/$defs/candidate"
-      }
+      "items": { "$ref": "#/$defs/curationCandidate" }
     },
     "interests": {
       "type": "array",
@@ -35,16 +33,23 @@
     },
     "sourceStatuses": {
       "type": "array",
-      "items": {
-        "$ref": "https://github.com/TheGoldenWave/Follow-up/contracts/candidate-feed.schema.json#/$defs/sourceStatus"
-      }
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/sourceStatus" }
     },
     "sourceCompleteness": { "$ref": "#/$defs/sourceCompleteness" },
     "selectionRules": { "$ref": "#/$defs/selectionRules" },
     "generatedAt": { "$ref": "#/$defs/dateTime" }
   },
   "$defs": {
-    "dateTime": { "type": "string", "format": "date-time" },
+    "dateTime": { "type": "string", "format": "date-time", "maxLength": 35 },
+    "channel": {
+      "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
+    },
+    "sourceId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$"
+    },
     "stableId": {
       "type": "string",
       "anyOf": [
@@ -86,6 +91,7 @@
         },
         "reasons": {
           "type": "array",
+          "maxItems": 20,
           "uniqueItems": true,
           "items": { "type": "string", "minLength": 1, "maxLength": 100 }
         }
@@ -98,8 +104,8 @@
       "properties": {
         "status": { "enum": ["complete", "incomplete"] },
         "complete": { "type": "boolean" },
-        "expectedSourceCount": { "type": "integer", "minimum": 0 },
-        "reportedSourceCount": { "type": "integer", "minimum": 0 }
+        "expectedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "reportedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 }
       }
     },
     "selectionRules": {
@@ -121,6 +127,59 @@
         },
         "sourceDiversityFirst": { "const": true }
       }
+    },
+    "curationCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateId", "channel", "sourceId", "canonicalUrl", "title", "author",
+        "publishedAt", "firstSeenAt", "lastSeenAt", "contentFingerprint",
+        "summarizationContent", "contentTruncated"
+      ],
+      "properties": {
+        "candidateId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "channel": { "$ref": "#/$defs/channel" },
+        "sourceId": { "$ref": "#/$defs/sourceId" },
+        "sourceNativeId": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "canonicalUrl": {
+          "type": "string", "format": "uri", "pattern": "^https?://", "maxLength": 2048
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "author": { "type": "string", "maxLength": 200 },
+        "publishedAt": {
+          "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }]
+        },
+        "firstSeenAt": { "$ref": "#/$defs/dateTime" },
+        "lastSeenAt": { "$ref": "#/$defs/dateTime" },
+        "contentFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "summarizationContent": { "type": "string", "maxLength": 12000 },
+        "contentTruncated": { "type": "boolean" }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "channel", "sourceName", "status", "candidateCount"],
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/sourceId" },
+        "channel": { "$ref": "#/$defs/channel" },
+        "sourceName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "status": { "enum": ["ok", "no-results", "partial", "error"] },
+        "candidateCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "failedCandidateCount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "warnings": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "errorSummary": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["partial", "error"] } } },
+          "then": { "required": ["errorSummary"] }
+        }
+      ]
     }
   }
 }

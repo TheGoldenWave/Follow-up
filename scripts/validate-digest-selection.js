@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID as systemRandomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import * as systemFs from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,11 +9,32 @@ import { pathToFileURL } from 'node:url';
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
 import { validateSelectionAgainstRequest } from './digest-selection.js';
 
-export const INPUT_BYTE_LIMITS = Object.freeze({
-  requestBytes: 16 * 1024 * 1024,
-  selectionBytes: 8 * 1024 * 1024,
-  exclusionBytes: 4 * 1024 * 1024,
+const JSON_WORST_CASE_BYTES_PER_CHARACTER = 6;
+export const TRANSPORT_SCHEMA_MAX_BYTES = Object.freeze({
+  requestBytes: (
+    1000 * (
+      JSON_WORST_CASE_BYTES_PER_CHARACTER * (512 + 2048 + 500 + 200 + 12_000)
+      + 2048
+    )
+    + 1000 * (
+      JSON_WORST_CASE_BYTES_PER_CHARACTER * (128 + 200 + 10 * 200 + 500)
+      + 2048
+    )
+    + 1024 * 1024
+  ),
+  selectionBytes: 1000 * (
+    999 * 67 + JSON_WORST_CASE_BYTES_PER_CHARACTER * 280 + 2048
+  ),
+  exclusionBytes: 1000 * 67 + 128,
 });
+export const INPUT_BYTE_LIMITS = Object.freeze({
+  requestBytes: 128 * 1024 * 1024,
+  selectionBytes: 96 * 1024 * 1024,
+  exclusionBytes: 128 * 1024,
+});
+const READ_CHUNK_BYTES = 64 * 1024;
+const READ_FLAGS = fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0);
+const HASH_ID = /^[a-f0-9]{64}$/;
 
 class SafeIoError extends Error {
   constructor(message, options) {
@@ -38,16 +60,39 @@ function parseOptions(argv) {
   }).values;
 }
 
-async function readJson(path, label, maxBytes, fsImpl) {
+export async function readJsonLimited(
+  path,
+  label,
+  maxBytes,
+  fsImpl = systemFs,
+) {
+  let handle;
   try {
-    const metadata = await fsImpl.stat(path);
+    handle = await fsImpl.open(path, READ_FLAGS);
+    const metadata = await handle.stat();
     if (!metadata.isFile()) throw new SafeIoError(`${label}: input is not a regular file`);
     if (metadata.size > maxBytes) throw new SafeIoError(`${label}: input exceeds byte limit`);
-    return JSON.parse(await fsImpl.readFile(path, 'utf8'));
+    const chunks = [];
+    let total = 0;
+    while (total <= maxBytes) {
+      const buffer = Buffer.allocUnsafe(Math.min(READ_CHUNK_BYTES, maxBytes - total + 1));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      total += bytesRead;
+      if (total > maxBytes) throw new SafeIoError(`${label}: input exceeds byte limit`);
+      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    }
+    const finalMetadata = await handle.stat();
+    if (finalMetadata.size !== metadata.size || total !== metadata.size) {
+      throw new SafeIoError(`${label}: input changed while reading`);
+    }
+    return JSON.parse(Buffer.concat(chunks, total).toString('utf8'));
   } catch (error) {
     if (error instanceof SafeIoError) throw error;
     if (error instanceof SyntaxError) throw new Error(`${label}: invalid JSON`);
     throw new SafeIoError(`${label}: could not be read`, { cause: error });
+  } finally {
+    await closeQuietly(handle);
   }
 }
 
@@ -136,21 +181,27 @@ export async function main({
 
   try {
     const effectiveLimits = { ...INPUT_BYTE_LIMITS, ...limits };
-    const request = await readJson(options.request, 'request', effectiveLimits.requestBytes, fsImpl);
-    const selection = await readJson(
+    const request = await readJsonLimited(
+      options.request, 'request', effectiveLimits.requestBytes, fsImpl,
+    );
+    const selection = await readJsonLimited(
       options.selection, 'selection', effectiveLimits.selectionBytes, fsImpl,
     );
     let excludedCandidateIds = [];
     if (options['excluded-candidate-ids']) {
-      const exclusionDocument = await readJson(
+      const exclusionDocument = await readJsonLimited(
         options['excluded-candidate-ids'], 'excluded candidate IDs',
         effectiveLimits.exclusionBytes, fsImpl,
       );
       excludedCandidateIds = Array.isArray(exclusionDocument)
         ? exclusionDocument : exclusionDocument?.excludedCandidateIds;
       if (!Array.isArray(excludedCandidateIds)
-          || excludedCandidateIds.some((candidateId) => typeof candidateId !== 'string')) {
-        throw new Error('excluded candidate IDs: expected a string array');
+          || excludedCandidateIds.length > 1000
+          || new Set(excludedCandidateIds).size !== excludedCandidateIds.length
+          || excludedCandidateIds.some((candidateId) => (
+            typeof candidateId !== 'string' || !HASH_ID.test(candidateId)
+          ))) {
+        throw new Error('excluded candidate IDs: expected at most 1000 unique SHA-256 IDs');
       }
     }
     const result = validateSelectionAgainstRequest(request, selection, { excludedCandidateIds });

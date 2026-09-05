@@ -217,3 +217,81 @@ test('mkdir and rename failures use fixed labels and preserve old output', async
     assert.equal(await readFile(output, 'utf8'), 'old-output');
   }
 });
+
+test('input replacement after open cannot switch the document being validated', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'digest-selection-replacement-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const request = join(root, 'request.json');
+  const replacement = join(root, 'replacement.json');
+  const selection = join(root, 'selection.json');
+  const output = join(root, 'validated.json');
+  await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
+  await writeFile(replacement, '{"interests":["private replacement"]}');
+  await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
+  let replaced = false;
+  const fsImpl = {
+    ...fs,
+    async stat(path) {
+      const metadata = await fs.stat(path);
+      if (path === request && !replaced) {
+        replaced = true;
+        await fs.rename(replacement, request);
+      }
+      return metadata;
+    },
+    async open(path, flags, mode) {
+      const handle = await fs.open(path, flags, mode);
+      if (path === request && !replaced) {
+        replaced = true;
+        await fs.rename(replacement, request);
+      }
+      return handle;
+    },
+  };
+  const stderr = sink();
+  assert.equal(await main({ argv: ['--request', request, '--selection', selection,
+    '--output', output], fsImpl, stdout: sink(), stderr }), 0, stderr.text());
+  assert.doesNotMatch(stderr.text(), /private replacement/);
+});
+
+test('input growth during chunked reading is rejected with a stable label', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'digest-selection-growth-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const request = join(root, 'request.json');
+  const selection = join(root, 'selection.json');
+  const output = join(root, 'validated.json');
+  await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
+  await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
+  let grew = false;
+  const fsImpl = {
+    ...fs,
+    async stat(path) {
+      const metadata = await fs.stat(path);
+      if (path === request && !grew) {
+        grew = true;
+        await fs.appendFile(request, ' ');
+      }
+      return metadata;
+    },
+    async open(path, flags, mode) {
+      const handle = await fs.open(path, flags, mode);
+      if (path !== request) return handle;
+      return {
+        stat: (...args) => handle.stat(...args),
+        async read(...args) {
+          const result = await handle.read(...args);
+          if (!grew) {
+            grew = true;
+            await fs.appendFile(request, ' ');
+          }
+          return result;
+        },
+        close: (...args) => handle.close(...args),
+      };
+    },
+  };
+  const stderr = sink();
+  assert.equal(await main({ argv: ['--request', request, '--selection', selection,
+    '--output', output], fsImpl, stdout: sink(), stderr }), 1);
+  assert.equal(stderr.text(), 'request: input changed while reading\n');
+});
