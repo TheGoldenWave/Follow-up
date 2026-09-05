@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/digest-curation-request.schema.json",
+  "title": "Follow-up Digest Curation Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "digestId",
+    "frequency",
+    "coverage",
+    "eligibleCandidates",
+    "sourceStatuses",
+    "sourceCompleteness",
+    "selectionRules",
+    "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "digestId": { "$ref": "#/$defs/stableId" },
+    "frequency": { "$ref": "#/$defs/frequency" },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "eligibleCandidates": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "https://github.com/TheGoldenWave/Follow-up/contracts/candidate-feed.schema.json#/$defs/candidate"
+      }
+    },
+    "interests": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "sourceStatuses": {
+      "type": "array",
+      "items": {
+        "$ref": "https://github.com/TheGoldenWave/Follow-up/contracts/candidate-feed.schema.json#/$defs/sourceStatus"
+      }
+    },
+    "sourceCompleteness": { "$ref": "#/$defs/sourceCompleteness" },
+    "selectionRules": { "$ref": "#/$defs/selectionRules" },
+    "generatedAt": { "$ref": "#/$defs/dateTime" }
+  },
+  "$defs": {
+    "dateTime": { "type": "string", "format": "date-time" },
+    "stableId": {
+      "type": "string",
+      "anyOf": [
+        { "pattern": "^[a-f0-9]{64}$" },
+        { "format": "uuid" }
+      ]
+    },
+    "frequency": { "enum": ["daily", "weekly"] },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/$defs/dateTime" },
+        "end": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frequency", "status", "complete", "requestedInterval",
+        "actualInterval", "bounds", "reasons"
+      ],
+      "properties": {
+        "frequency": { "$ref": "#/$defs/frequency" },
+        "status": { "enum": ["complete", "incomplete-history"] },
+        "complete": { "type": "boolean" },
+        "requestedInterval": { "$ref": "#/$defs/interval" },
+        "actualInterval": { "$ref": "#/$defs/interval" },
+        "bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["startInclusive", "endInclusive"],
+          "properties": {
+            "startInclusive": { "const": true },
+            "endInclusive": { "type": "boolean" }
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+        }
+      }
+    },
+    "sourceCompleteness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "complete", "expectedSourceCount", "reportedSourceCount"],
+      "properties": {
+        "status": { "enum": ["complete", "incomplete"] },
+        "complete": { "type": "boolean" },
+        "expectedSourceCount": { "type": "integer", "minimum": 0 },
+        "reportedSourceCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "selectionRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "qualificationThreshold", "maxSelected", "maxLeadsPerSource",
+        "channelPositionLimit", "channelLimitAppliesAtQualifyingChannelCount",
+        "ordering", "sourceDiversityFirst"
+      ],
+      "properties": {
+        "qualificationThreshold": { "const": 60 },
+        "maxSelected": { "const": 10 },
+        "maxLeadsPerSource": { "const": 2 },
+        "channelPositionLimit": { "const": 4 },
+        "channelLimitAppliesAtQualifyingChannelCount": { "const": 3 },
+        "ordering": {
+          "const": "totalScore-desc,evidence-desc,publishedAt-desc,candidateId-asc"
+        },
+        "sourceDiversityFirst": { "const": true }
+      }
+    }
+  }
+}

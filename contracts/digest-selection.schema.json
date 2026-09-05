@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/digest-selection.schema.json",
+  "title": "Follow-up Digest Selection Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "digestId", "generatedAt", "clusters", "selectedEventClusterIds"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "digestId": { "$ref": "#/$defs/stableId" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "clusters": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/cluster" }
+    },
+    "selectedEventClusterIds": {
+      "type": "array",
+      "maxItems": 10,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/hashId" }
+    }
+  },
+  "$defs": {
+    "hashId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "stableId": {
+      "type": "string",
+      "anyOf": [
+        { "pattern": "^[a-f0-9]{64}$" },
+        { "format": "uuid" }
+      ]
+    },
+    "scores": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["impact", "relevance", "evidence", "novelty", "corroboration", "totalScore"],
+      "properties": {
+        "impact": { "type": "integer", "minimum": 0, "maximum": 30 },
+        "relevance": { "type": "integer", "minimum": 0, "maximum": 25 },
+        "evidence": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "novelty": { "type": "integer", "minimum": 0, "maximum": 15 },
+        "corroboration": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "totalScore": { "type": "integer", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "cluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventClusterId", "leadCandidateId", "corroboratingCandidateIds",
+        "scores", "selectionReason"
+      ],
+      "properties": {
+        "eventClusterId": { "$ref": "#/$defs/hashId" },
+        "leadCandidateId": { "$ref": "#/$defs/hashId" },
+        "corroboratingCandidateIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/hashId" }
+        },
+        "scores": { "$ref": "#/$defs/scores" },
+        "selectionReason": { "type": "string", "minLength": 1, "maxLength": 280 }
+      }
+    }
+  }
+}

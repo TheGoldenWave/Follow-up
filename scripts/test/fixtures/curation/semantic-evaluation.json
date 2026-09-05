@@ -1,0 +1,41 @@
+{
+  "fixtureType": "semantic-evaluation-only",
+  "description": "用于人工或模型评审，不应被描述为确定性单元测试。",
+  "cases": [
+    {
+      "name": "同一事件应聚为一组并优先官方来源作为 lead",
+      "candidates": [
+        {
+          "ref": "official-model-launch",
+          "sourceType": "official product blog",
+          "title": "Example Lab releases Model X",
+          "content": "Example Lab announces Model X and publishes its API documentation."
+        },
+        {
+          "ref": "independent-model-launch-report",
+          "sourceType": "independent reporting",
+          "title": "Example Lab launches Model X",
+          "content": "A reporter independently confirms the same Model X release and availability."
+        }
+      ],
+      "expectedReview": {
+        "sameEventCluster": true,
+        "preferredLead": "official-model-launch",
+        "reason": "官方公告是该发布事件的最强主证据，独立报道作为 corroboration。"
+      }
+    },
+    {
+      "name": "无 interests 时 relevance 只依据启用渠道与 Follow-up 通用范围",
+      "interestsPresent": false,
+      "enabledChannels": ["academic", "blogs"],
+      "candidate": {
+        "title": "New evaluation method for tool-using language models",
+        "content": "The paper introduces a reproducible evaluation method for agent tool use."
+      },
+      "expectedReview": {
+        "mustNotInventInterests": true,
+        "relevanceBasis": ["enabledChannels", "Follow-up product scope"]
+      }
+    }
+  ]
+}

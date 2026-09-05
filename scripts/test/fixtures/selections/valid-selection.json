@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "digestId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "generatedAt": "2026-09-06T08:01:00.000Z",
+  "clusters": [
+    {
+      "eventClusterId": "ec811d9a4a78bcbaca36363ed9cce4348e7ef3a3f12533603af3b268d4311e69",
+      "leadCandidateId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "corroboratingCandidateIds": [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "scores": {
+        "impact": 25,
+        "relevance": 20,
+        "evidence": 18,
+        "novelty": 10,
+        "corroboration": 7,
+        "totalScore": 80
+      },
+      "selectionReason": "官方发布提供主证据，独立来源完成交叉确认。"
+    }
+  ],
+  "selectedEventClusterIds": [
+    "ec811d9a4a78bcbaca36363ed9cce4348e7ef3a3f12533603af3b268d4311e69"
+  ]
+}
