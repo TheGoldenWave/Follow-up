@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 
-import { deliverActiveDigest, main } from '../deliver.js';
+import { deliverActiveDigest, main, resumeActiveDigestDelivery } from '../deliver.js';
+import { replaceOutboxAttempt, reserveOutboxAttempt } from '../delivery-outbox.js';
+import { loadActiveDigest } from '../delivery-message.js';
 import { readDeliveryLedger } from '../delivery-ledger.js';
 import { renderDigestMessage } from '../finalize-digest.js';
 import { AtomicWriteCommittedError } from '../prepare-digest.js';
@@ -118,6 +120,49 @@ test('unknown result remains pending and blocks an automatic duplicate', async (
     ...paths, destination: { method: 'stdout' }, randomUUID: () => 'attempt-duplicate',
     now: () => '2026-09-06T08:02:00.000Z', providerStdout: { write() {} },
   }), /already reserved|conflict/i);
+});
+
+test('resume handoff validates the active digest and does not create another reservation', async (t) => {
+  const paths = await fixture(t);
+  const loaded = await loadActiveDigest(paths.activePath);
+  const original = {
+    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-06T08:00:00.000Z',
+    attemptId: 'attempt-old', digestId: 'digest-1', frequency: 'daily',
+    candidateIds: [id('candidate')], eventClusterIds: [id('cluster')],
+    destinationType: 'stdout', messageHash: id(loaded.message),
+  };
+  await reserveOutboxAttempt(original, paths);
+  await replaceOutboxAttempt('attempt-old', {
+    ...original, attemptId: 'attempt-new', occurredAt: '2026-09-06T08:01:00.001Z',
+  }, { occurredAt: '2026-09-06T08:01:00.000Z' }, paths);
+  let reserved = false;
+  const result = await resumeActiveDigestDelivery({
+    ...paths, activePath: paths.activePath, attemptId: 'attempt-new',
+    destination: { method: 'stdout' }, providerStdout: { write() {} },
+    reserveAttempt: async () => { reserved = true; }, now: () => '2026-09-06T08:02:00.000Z',
+  });
+  assert.equal(result.status, 'delivered');
+  assert.equal(reserved, false);
+  assert.deepEqual((await readDeliveryLedger(paths)).map(({ type }) => type), [
+    'pending', 'superseded', 'pending', 'delivered',
+  ]);
+});
+
+test('resume rejects a mismatched active digest before provider handoff', async (t) => {
+  const paths = await fixture(t);
+  const loaded = await loadActiveDigest(paths.activePath);
+  await reserveOutboxAttempt({
+    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-06T08:00:00.000Z',
+    attemptId: 'attempt-resume', digestId: 'other-digest', frequency: 'daily',
+    candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
+    destinationType: 'stdout', messageHash: id(loaded.message),
+  }, paths);
+  let wrote = false;
+  await assert.rejects(resumeActiveDigestDelivery({
+    ...paths, activePath: paths.activePath, attemptId: 'attempt-resume',
+    destination: { method: 'stdout' }, providerStdout: { write() { wrote = true; } },
+  }), /does not match|digest/i);
+  assert.equal(wrote, false);
 });
 
 test('a terminal persistence error after provider confirmation reports delivery-uncertain', async (t) => {

@@ -364,6 +364,30 @@ stdout destination 的用户正文只写 stdout；machine status 只从 `--resul
 - `delivery-uncertain`：handoff 或本地事务结果无法确认，attempt 保持 pending。禁止自动重试、自动 fallback、自动回退或直接展示 `message.txt`，等待人工处置。
 - `skipped` / `no-content`：没有可投递内容，不创建外部 handoff。
 
+### 人工处置不确定投递
+
+用户可通过 `/follow-up resolve-delivery <attempt-id> delivered|retry|suppress` 处置仍为 unresolved pending 的 attempt。只接受 doctor 已能正常 reconcile 的现有 pending；不存在、已终止、已 superseded 或状态损坏时必须拒绝，且不得追加 ledger 事件。
+
+- `delivered`：仅在用户明确确认已经收到时使用。记录 `user-confirmed` receipt，不再次调用 provider。
+- `suppress`：用户选择不再发送时使用。记录 `assumed-delivered`，不声称 provider 成功，也不收集自由文本原因。
+- `retry`：会创建新的外部投递 attempt。必须传入 `--confirm-external-retry`，因为存在 duplicate risk；先向用户说明重复投递风险并取得明确确认。可在再次确认目标后用 `--destination` 改变目标。
+
+对应脚本命令：
+
+```bash
+cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> delivered
+cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> suppress
+cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> retry --confirm-external-retry [--destination stdout|telegram|email]
+```
+
+`retry` 只在同一 transaction 中将旧 attempt 标记为 `superseded` 并创建 replacement pending，不调用 provider。返回 `retry-ready` 后，从 machine JSON 读取 `replacementAttemptId`，然后使用同一个已激活 Digest 直接 resume：
+
+```bash
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> --result-out <absolute-delivery-result-path>
+```
+
+resume 会校验 `digestId`、`frequency`、candidate IDs、event cluster IDs、`messageHash` 和 destination 完全匹配，并且不会创建普通 reservation。若 resolve 返回非零、resume 返回 `delivery-failed` 或 `delivery-uncertain`，立即停止；不得再次 retry、fallback 或新建 attempt。stdout resume 仍遵守正文与 machine result 分离规则。
+
 不得直接读取未激活 generation，不得原样展示 JSON artifact，也不得展示 request 中未选择的候选。
 
 任一步失败都必须停止后续步骤。特别是 finalize 失败时，不得读取旧 output 并继续投递。若返回 `committed-but-uncertain`，文件内容已经完成 rename，但目录持久化无法确认；禁止自动重写或重试同一 digest，等待人工或后续恢复流程核对。

@@ -9,6 +9,7 @@ import {
   readDeliveryOutbox,
   readOutboxAttempt,
   reconcileDeliveryTransactions,
+  replaceOutboxAttempt,
   reserveOutboxAttempt,
   resolveOutboxAttempt,
 } from '../delivery-outbox.js';
@@ -75,6 +76,15 @@ test('terminal outbox state stores only bounded structured receipts', async (t) 
     type: 'telegram', messageCount: 2, firstMessageId: 101, lastMessageId: 102,
   });
   assert.doesNotMatch(await readFile(join(options.outboxDir, 'attempt-1.json'), 'utf8'), /token|@example\.com/i);
+});
+
+test('outbox resolution rejects unknown terminal statuses without appending', async (t) => {
+  const options = await paths(t);
+  await reserveOutboxAttempt(pending(), options);
+  await assert.rejects(resolveOutboxAttempt('attempt-1', {
+    status: 'mystery', occurredAt: '2026-09-06T08:01:00.000Z',
+  }, options), /status|resolution/i);
+  assert.deepEqual((await readDeliveryLedger(options)).map(({ type }) => type), ['pending']);
 });
 
 test('startup outbox index is deterministic and rejects corrupt or symlinked attempts', async (t) => {
@@ -215,4 +225,32 @@ test('reservation reports uncertain and recovers after partial write or full wri
       assert.equal((await readOutboxAttempt(event.attemptId, options)).status, 'pending');
     });
   }
+});
+
+test('retry transaction recovers both superseded and replacement outbox records after a crash', async (t) => {
+  const options = await paths(t);
+  await reserveOutboxAttempt(pending({ attemptId: 'attempt-old' }), options);
+  let failed = false;
+  const fsImpl = {
+    ...(await import('node:fs/promises')),
+    async rename(from, to) {
+      if (!failed && from.includes('.delivery-outbox-') && to.endsWith('attempt-new.json')) {
+        failed = true;
+        throw new Error('simulated replacement outbox crash');
+      }
+      return (await import('node:fs/promises')).rename(from, to);
+    },
+  };
+  await assert.rejects(replaceOutboxAttempt('attempt-old', pending({
+    attemptId: 'attempt-new', occurredAt: '2026-09-06T08:01:00.001Z',
+    destinationType: 'stdout',
+  }), {
+    occurredAt: '2026-09-06T08:01:00.000Z',
+  }, { ...options, fsImpl, randomUUID: () => 'retry-crash' }), /simulated replacement outbox crash/);
+  await reconcileDeliveryTransactions(options);
+  assert.equal((await readOutboxAttempt('attempt-old', options)).status, 'superseded');
+  assert.equal((await readOutboxAttempt('attempt-new', options)).status, 'pending');
+  assert.deepEqual((await readDeliveryLedger(options)).map(({ type }) => type), [
+    'pending', 'superseded', 'pending',
+  ]);
 });

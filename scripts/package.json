@@ -14,6 +14,7 @@
     "generate-feed": "node generate-feed.js",
     "prepare-digest": "node prepare-digest.js",
     "finalize-digest": "node finalize-digest.js",
+    "resolve-delivery": "node resolve-delivery.js",
     "test:release": "node --test test/release-manifest.test.js test/release-build.test.js",
     "validate-release": "node release/validate-release.js",
     "validate-release:archive-critical": "node release/validate-release.js --archive-critical-only",

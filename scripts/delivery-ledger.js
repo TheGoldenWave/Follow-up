@@ -46,6 +46,7 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 const REASON_CODE = /^[a-z][a-z0-9-]{0,63}$/u;
 const SHA256 = /^[a-f0-9]{64}$/u;
 const NO_FOLLOW = fsConstants.O_NOFOLLOW ?? 0;
+const LOCAL_LEDGER_LOCKS = new Map();
 
 export function resolveDeliveryLedgerPath(options = {}) {
   return options.ledgerPath
@@ -123,6 +124,10 @@ function validateProviderReceipt(receipt, limits) {
     if (Object.keys(receipt).sort().join(',') !== 'id,type'
       || typeof receipt.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(receipt.id)) {
       throw new TypeError('resend providerReceipt must contain a safe id');
+    }
+  } else if (receipt.type === 'user-confirmed') {
+    if (Object.keys(receipt).length !== 1) {
+      throw new TypeError('user-confirmed providerReceipt contains unsupported fields');
     }
   } else {
     throw new TypeError('Delivery event providerReceipt has an unknown receipt type');
@@ -358,20 +363,29 @@ async function ensureLedgerFile(ledgerPath) {
 
 async function withLedgerLock(ledgerPath, callback, options = {}) {
   const absolute = resolve(ledgerPath);
-  await ensureLedgerFile(absolute);
-  await requireSafeLedgerPath(`${absolute}.lock`, { allowMissing: true });
-  const release = await lockfile.lock(absolute, {
-    realpath: false,
-    retries: { retries: 20, factor: 1.25, minTimeout: 5, maxTimeout: 250 },
-  });
+  const previous = LOCAL_LEDGER_LOCKS.get(absolute) ?? Promise.resolve();
+  let releaseLocal;
+  const gate = new Promise((resolveGate) => { releaseLocal = resolveGate; });
+  const tail = previous.catch(() => {}).then(() => gate);
+  LOCAL_LEDGER_LOCKS.set(absolute, tail);
+  await previous.catch(() => {});
+  let release;
   try {
+    await ensureLedgerFile(absolute);
+    await requireSafeLedgerPath(`${absolute}.lock`, { allowMissing: true });
+    release = await lockfile.lock(absolute, {
+      realpath: false,
+      retries: { retries: 20, factor: 1.25, minTimeout: 5, maxTimeout: 250 },
+    });
     await requireSafeLedgerPath(absolute);
     await requireSafeLedgerPath(`${absolute}.lock`);
     const { recoverDeliveryLedgerBeforeRead } = await import('./delivery-outbox.js');
     await recoverDeliveryLedgerBeforeRead(absolute, options);
     return await callback();
   } finally {
-    await release();
+    if (release) await release();
+    releaseLocal();
+    if (LOCAL_LEDGER_LOCKS.get(absolute) === tail) LOCAL_LEDGER_LOCKS.delete(absolute);
   }
 }
 
@@ -512,6 +526,8 @@ export async function appendDeliveryEvents(events, options = {}) {
   return withLedgerLock(ledgerPath, async () => {
     const existingEvents = await readDeliveryLedgerUnlocked(ledgerPath, { limits });
     await options.transaction?.reconcile?.(existingEvents);
+    deriveDeliveryState([...existingEvents, ...events], { limits });
+    assertPendingReservations(existingEvents, events, { limits });
     let prepared;
     let ledgerAppended = false;
     let appendStarted = false;

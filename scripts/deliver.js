@@ -10,7 +10,7 @@ import { parse } from 'dotenv';
 
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
 import { loadActiveDigest } from './delivery-message.js';
-import { reserveOutboxAttempt, resolveOutboxAttempt } from './delivery-outbox.js';
+import { readOutboxAttempt, reserveOutboxAttempt, resolveOutboxAttempt } from './delivery-outbox.js';
 import { deliverWithProvider, validateDestination } from './delivery-providers.js';
 import { AtomicWriteCommittedError, writeJsonAtomic } from './prepare-digest.js';
 
@@ -25,6 +25,7 @@ function parseOptions(argv) {
     options: {
       active: { type: 'string' }, destination: { type: 'string' },
       'result-out': { type: 'string' },
+      'resume-attempt': { type: 'string' },
     },
     validate({ values, positionals }) {
       if (positionals.length) throw new CommandLineUsageError('unexpected positional arguments');
@@ -35,6 +36,10 @@ function parseOptions(argv) {
       }
       if (values['result-out'] && !isAbsolute(values['result-out'])) {
         throw new CommandLineUsageError('--result-out must be absolute');
+      }
+      if (values['resume-attempt']
+        && !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(values['resume-attempt'])) {
+        throw new CommandLineUsageError('--resume-attempt must be a safe identifier');
       }
     },
   }).values;
@@ -103,6 +108,17 @@ export async function deliverActiveDigest({
     }
     throw error;
   }
+  return handoffReservedDigest(loaded, validated, attemptId, {
+    ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout,
+    timeoutMs, logger, randomUUID, now, resolveAttempt,
+  });
+}
+
+async function handoffReservedDigest(loaded, validated, attemptId, {
+  ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout,
+  timeoutMs = 15_000, logger = () => {}, randomUUID = systemRandomUUID,
+  now = () => new Date().toISOString(), resolveAttempt = resolveOutboxAttempt,
+} = {}) {
   let outcome;
   try {
     outcome = await deliverWithProvider(loaded.message, validated, {
@@ -151,13 +167,44 @@ export async function deliverActiveDigest({
   return { status: 'delivered', method: validated.method, attemptId, digestId: loaded.digestId };
 }
 
+function sameValues(left, right) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+export async function resumeActiveDigestDelivery({
+  activePath, attemptId, destination, credentials = process.env,
+  ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout = process.stderr,
+  timeoutMs = 15_000, logger = () => {}, randomUUID = systemRandomUUID,
+  now = () => new Date().toISOString(), resolveAttempt = resolveOutboxAttempt,
+} = {}) {
+  const loaded = await loadActiveDigest(activePath);
+  const validated = validateDestination(destination, credentials);
+  const record = await readOutboxAttempt(attemptId, {
+    ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID,
+  });
+  if (record.status !== 'pending') throw new Error('Resume attempt is already terminal');
+  const attempt = record.attempt;
+  const matches = attempt.digestId === loaded.digestId
+    && attempt.frequency === loaded.frequency
+    && attempt.destinationType === validated.method
+    && attempt.messageHash === createHash('sha256').update(loaded.message).digest('hex')
+    && sameValues(attempt.candidateIds, loaded.candidateIds)
+    && sameValues(attempt.eventClusterIds, loaded.eventClusterIds);
+  if (!matches) throw new Error('Resume attempt does not match the active digest and destination');
+  return handoffReservedDigest(loaded, validated, attemptId, {
+    ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout,
+    timeoutMs, logger, randomUUID, now, resolveAttempt,
+  });
+}
+
 export async function main({
   argv = process.argv.slice(2), stdout = process.stdout, stderr = process.stderr,
   configPath = join(DEFAULT_USER_DIR, 'config.json'), envPath = join(DEFAULT_USER_DIR, '.env'),
   env = process.env, ledgerPath, outboxDir, transactionDir, fsImpl,
   transport, providerStdout,
   randomUUID = systemRandomUUID, now,
-  deliverImpl = deliverActiveDigest, writeResult = writeJsonAtomic,
+  deliverImpl = deliverActiveDigest, resumeImpl = resumeActiveDigestDelivery,
+  writeResult = writeJsonAtomic,
 } = {}) {
   let options;
   try { options = parseOptions(argv); }
@@ -176,8 +223,10 @@ export async function main({
       stderr.write('usage: --result-out is required for stdout delivery\n');
       return EX_USAGE;
     }
-    outcome = await deliverImpl({
+    const delivery = options['resume-attempt'] ? resumeImpl : deliverImpl;
+    outcome = await delivery({
       activePath: options.active,
+      attemptId: options['resume-attempt'],
       destination,
       credentials,
       ledgerPath, outboxDir, transactionDir, fsImpl,

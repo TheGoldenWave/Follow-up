@@ -5,6 +5,7 @@ import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 
 import {
   appendDeliveryEvent,
+  appendDeliveryEvents,
   deriveDeliveryState,
   readDeliveryLedger,
   reservePendingAttempt,
@@ -114,7 +115,8 @@ export function validateOutboxRecord(record) {
     : record.status === 'failed'
       ? ['schemaVersion', 'status', 'attempt', 'updatedAt', 'reasonCode']
       : ['schemaVersion', 'status', 'attempt', 'updatedAt'];
-  if (record.schemaVersion !== '1.0' || !['pending', 'delivered', 'failed'].includes(record.status)
+  if (record.schemaVersion !== '1.0'
+    || !['pending', 'delivered', 'failed', 'assumed-delivered', 'superseded'].includes(record.status)
     || Object.keys(record).some((field) => !allowed.includes(field))
     || allowed.some((field) => !Object.hasOwn(record, field))) {
     throw new TypeError('Invalid closed outbox record schema');
@@ -133,30 +135,47 @@ export function validateOutboxRecord(record) {
 }
 
 function validateJournal(journal) {
-  const fields = [
+  const legacyFields = [
     'schemaVersion', 'phase', 'operation', 'attemptId', 'event', 'record',
     'preAppendOffset', 'eventBytes', 'eventHash',
   ];
+  const batchFields = [
+    'schemaVersion', 'phase', 'operation', 'attemptId', 'events', 'records',
+    'preAppendOffset', 'eventBytes', 'eventHash',
+  ];
+  const fields = Object.hasOwn(journal ?? {}, 'events') ? batchFields : legacyFields;
   if (!journal || typeof journal !== 'object' || Array.isArray(journal)
     || Object.keys(journal).sort().join(',') !== fields.sort().join(',')
     || journal.schemaVersion !== '1.0' || !JOURNAL_PHASES.has(journal.phase)
-    || !['reservation', 'resolution'].includes(journal.operation)) {
+    || !['reservation', 'resolution', 'replacement'].includes(journal.operation)) {
     throw new Error('Invalid closed delivery transaction journal');
   }
   requireAttemptId(journal.attemptId);
-  validateDeliveryEvent(journal.event);
-  validateOutboxRecord(journal.record);
-  if (journal.event.attemptId !== journal.attemptId
-    || journal.record.attempt.attemptId !== journal.attemptId) {
+  const events = journal.events ?? [journal.event];
+  const records = journal.records ?? [journal.record];
+  if (!Array.isArray(events) || events.length === 0 || !Array.isArray(records) || records.length === 0) {
+    throw new Error('Invalid delivery transaction journal batch');
+  }
+  events.forEach((event) => validateDeliveryEvent(event));
+  records.forEach((record) => validateOutboxRecord(record));
+  if (events[0].attemptId !== journal.attemptId
+    || records[0].attempt.attemptId !== journal.attemptId) {
     throw new Error('Delivery transaction journal attemptId mismatch');
   }
   if (journal.operation === 'reservation'
-    && (journal.event.type !== 'pending' || journal.record.status !== 'pending')) {
+    && (events.length !== 1 || events[0].type !== 'pending' || records[0].status !== 'pending')) {
     throw new Error('Invalid reservation journal');
   }
   if (journal.operation === 'resolution'
-    && journal.event.type !== journal.record.status) {
+    && (events.length !== 1 || events[0].type !== records[0].status)) {
     throw new Error('Invalid resolution journal');
+  }
+  if (journal.operation === 'replacement'
+    && (events.length !== 2 || records.length !== 2
+      || events[0].type !== 'superseded' || events[1].type !== 'pending'
+      || records[0].status !== 'superseded' || records[1].status !== 'pending'
+      || events[0].replacementAttemptId !== events[1].attemptId)) {
+    throw new Error('Invalid replacement journal');
   }
   if (!Number.isSafeInteger(journal.preAppendOffset) || journal.preAppendOffset < 0
     || typeof journal.eventBytes !== 'string' || journal.eventBytes.length === 0
@@ -164,7 +183,7 @@ function validateJournal(journal) {
     throw new Error('Invalid delivery journal append authority');
   }
   const expected = Buffer.from(journal.eventBytes, 'base64');
-  const serialized = Buffer.from(`${JSON.stringify(journal.event)}\n`);
+  const serialized = Buffer.from(`${events.map((event) => JSON.stringify(event)).join('\n')}\n`);
   if (expected.length === 0 || expected.length > 1024 * 1024
     || expected.toString('base64') !== journal.eventBytes
     || !expected.equals(serialized)
@@ -227,6 +246,12 @@ function outboxRecordForAttempt(attempt) {
     return {
       schemaVersion: '1.0', status: 'failed', attempt: pending,
       updatedAt: resolution.occurredAt, reasonCode: resolution.reasonCode,
+    };
+  }
+  if (resolution.type === 'assumed-delivered' || resolution.type === 'superseded') {
+    return {
+      schemaVersion: '1.0', status: resolution.type, attempt: pending,
+      updatedAt: resolution.occurredAt,
     };
   }
   return null;
@@ -397,12 +422,16 @@ export async function reconcileDeliveryTransactions(options = {}) {
   });
 }
 
-function transactionFor(event, record, rawOptions) {
+function transactionForEvents(events, records, rawOptions) {
   const options = resolvedOptions(rawOptions);
-  const operation = event.type === 'pending' ? 'reservation' : 'resolution';
+  const operation = events.length === 2
+    ? 'replacement'
+    : events[0].type === 'pending' ? 'reservation' : 'resolution';
+  const attemptId = events[0].attemptId;
   let journal = {
     schemaVersion: '1.0', phase: 'prepared', operation,
-    attemptId: event.attemptId, event, record,
+    attemptId,
+    ...(events.length === 1 ? { event: events[0], record: records[0] } : { events, records }),
     preAppendOffset: 0, eventBytes: '', eventHash: '0'.repeat(64),
   };
   const transaction = {
@@ -433,19 +462,23 @@ function transactionFor(event, record, rawOptions) {
       await writeJournal(journal, options);
     },
     async commit() {
-      await writeOutboxRecord(record, options);
+      for (const record of records) await writeOutboxRecord(record, options);
       journal = { ...journal, phase: 'outbox-committed' };
       await writeJournal(journal, options);
-      await options.fsImpl.unlink(join(options.transactionDir, `${event.attemptId}.json`));
+      await options.fsImpl.unlink(join(options.transactionDir, `${attemptId}.json`));
       await fsyncDirectory(options.transactionDir, options.fsImpl);
     },
     async rollback(_prepared, { ledgerAppended, appendStarted }) {
       if (ledgerAppended || appendStarted) return;
-      await options.fsImpl.unlink(join(options.transactionDir, `${event.attemptId}.json`)).catch(() => {});
+      await options.fsImpl.unlink(join(options.transactionDir, `${attemptId}.json`)).catch(() => {});
       await fsyncDirectory(options.transactionDir, options.fsImpl);
     },
   };
   return transaction;
+}
+
+function transactionFor(event, record, rawOptions) {
+  return transactionForEvents([event], [record], rawOptions);
 }
 
 export async function readOutboxAttempt(attemptId, options = {}) {
@@ -490,6 +523,9 @@ export async function reserveOutboxAttempt(event, options = {}) {
 
 export async function resolveOutboxAttempt(attemptId, resolution, options = {}) {
   requireAttemptId(attemptId);
+  if (!['delivered', 'failed', 'assumed-delivered'].includes(resolution?.status)) {
+    throw new TypeError('Outbox resolution status is invalid');
+  }
   const existing = await readOutboxAttempt(attemptId, options);
   if (existing.status !== 'pending') throw new Error('Outbox attempt is already terminal');
   const event = resolution.status === 'delivered'
@@ -497,14 +533,44 @@ export async function resolveOutboxAttempt(attemptId, resolution, options = {}) 
       schemaVersion: '1.0', type: 'delivered', occurredAt: resolution.occurredAt,
       attemptId, providerReceipt: resolution.receipt,
     }
-    : {
+    : resolution.status === 'failed' ? {
       schemaVersion: '1.0', type: 'failed', occurredAt: resolution.occurredAt,
       attemptId, reasonCode: resolution.reasonCode,
+    } : {
+      schemaVersion: '1.0', type: 'assumed-delivered', occurredAt: resolution.occurredAt,
+      attemptId,
     };
   validateDeliveryEvent(event);
   const record = resolution.status === 'delivered'
     ? { ...existing, status: 'delivered', updatedAt: resolution.occurredAt, receipt: resolution.receipt }
-    : { ...existing, status: 'failed', updatedAt: resolution.occurredAt, reasonCode: resolution.reasonCode };
+    : resolution.status === 'failed'
+      ? { ...existing, status: 'failed', updatedAt: resolution.occurredAt, reasonCode: resolution.reasonCode }
+      : { ...existing, status: 'assumed-delivered', updatedAt: resolution.occurredAt };
   await appendDeliveryEvent(event, { ...options, transaction: transactionFor(event, record, options) });
   return record;
+}
+
+export async function replaceOutboxAttempt(attemptId, replacement, resolution, options = {}) {
+  requireAttemptId(attemptId);
+  validateDeliveryEvent(replacement);
+  if (replacement.type !== 'pending') throw new TypeError('Replacement attempt must be pending');
+  const existing = await readOutboxAttempt(attemptId, options);
+  if (existing.status !== 'pending') throw new Error('Outbox attempt is already terminal');
+  const superseded = {
+    schemaVersion: '1.0', type: 'superseded', occurredAt: resolution.occurredAt,
+    attemptId, replacementAttemptId: replacement.attemptId,
+  };
+  validateDeliveryEvent(superseded);
+  const records = [
+    { ...existing, status: 'superseded', updatedAt: resolution.occurredAt },
+    {
+      schemaVersion: '1.0', status: 'pending', attempt: replacement,
+      updatedAt: replacement.occurredAt,
+    },
+  ];
+  await appendDeliveryEvents([superseded, replacement], {
+    ...options,
+    transaction: transactionForEvents([superseded, replacement], records, options),
+  });
+  return records;
 }
