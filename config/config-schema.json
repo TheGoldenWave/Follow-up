@@ -36,6 +36,16 @@
       "default": "monday",
       "description": "Day of week for weekly digests (only used when frequency is weekly)"
     },
+    "enabledChannels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
+      },
+      "uniqueItems": true,
+      "default": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"],
+      "description": "Central Feed channels included in personal digest selection"
+    },
     "delivery": {
       "type": "object",
       "description": "How the digest is delivered to the user",

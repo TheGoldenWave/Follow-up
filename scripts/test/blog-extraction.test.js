@@ -23,7 +23,8 @@ async function candidateSources() {
 
 test('every approved source article fixture extracts valid source-matching content', async () => {
   for (const source of await candidateSources()) {
-    const html = await fixture(`${source.id}/article.html`);
+    const fixtureId = source.id.replace(/^blog:/, '');
+    const html = await fixture(`${fixtureId}/article.html`);
     const extraction = blogExtraction.extractBlogArticle(html, source.url, source);
 
     assert.ok(extraction?.title, source.id);

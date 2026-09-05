@@ -18,7 +18,8 @@ async function candidateConfig() {
 }
 
 async function candidateFixture(source, name) {
-  return readFile(new URL(`fixtures/blogs/${source.id}/${name}`, import.meta.url), 'utf8');
+  const fixtureId = source.id.replace(/^blog:/, '');
+  return readFile(new URL(`fixtures/blogs/${fixtureId}/${name}`, import.meta.url), 'utf8');
 }
 
 const expectedFixtureCandidates = {
@@ -89,7 +90,8 @@ test('every approved source fixture discovers a matching article with its first 
       },
     );
 
-    const [title, url, publishedAt] = expectedFixtureCandidates[configuredSource.id];
+    const fixtureId = configuredSource.id.replace(/^blog:/, '');
+    const [title, url, publishedAt] = expectedFixtureCandidates[fixtureId];
     assert.deepEqual(candidates[0], { title, url, publishedAt, description: '' });
     assert.ok(matchesBlogSource(candidates[0].url, configuredSource), configuredSource.id);
   }
@@ -97,7 +99,7 @@ test('every approved source fixture discovers a matching article with its first 
 
 test('MiniMax falls back from an empty sitemap to same-origin HTML with a relative article URL', async () => {
   const { sources } = await candidateConfig();
-  const configuredSource = sources.find(({ id }) => id === 'minimax-blog');
+  const configuredSource = sources.find(({ id }) => id === 'blog:minimax-blog');
   const fallback = await candidateFixture(configuredSource, 'discovery-fallback.html');
   const requested = [];
 

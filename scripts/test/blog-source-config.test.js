@@ -10,7 +10,7 @@ import {
 
 function validSource(overrides = {}) {
   return {
-    id: 'example-blog',
+    id: 'blog:example-blog',
     name: 'Example Blog',
     url: 'https://example.com/blog/',
     language: 'en',
@@ -32,86 +32,86 @@ function errorFor(result, sourceId, field) {
 }
 
 const approvedCandidateSources = [
-  ['anthropic-engineering', 'Anthropic Engineering'],
-  ['claude-blog', 'Claude Blog'],
-  ['anthropic-interpretability', 'Anthropic Interpretability'],
-  ['anthropic-science', 'Anthropic Science'],
-  ['openai-alignment', 'OpenAI Alignment Research Blog'],
-  ['google-antigravity', 'Google Antigravity Blog'],
-  ['google-deepmind', 'Google DeepMind Blog'],
-  ['google-research', 'Google Research Blog'],
-  ['microsoft-research', 'Microsoft Research Blog'],
-  ['amazon-science', 'Amazon Science Blog'],
-  ['ibm-research', 'IBM Research Blog'],
-  ['perplexity-research', 'Perplexity Research Articles'],
-  ['qwen-blog', 'Qwen Blog'],
-  ['kimi-blog', 'Kimi Research & Tech Blog'],
-  ['ernie-blog', 'ERNIE Blog'],
-  ['minimax-blog', 'MiniMax Blog'],
-  ['apple-ml-research', 'Apple Machine Learning Research'],
+  ['blog:anthropic-engineering', 'Anthropic Engineering'],
+  ['blog:claude-blog', 'Claude Blog'],
+  ['blog:anthropic-interpretability', 'Anthropic Interpretability'],
+  ['blog:anthropic-science', 'Anthropic Science'],
+  ['blog:openai-alignment', 'OpenAI Alignment Research Blog'],
+  ['blog:google-antigravity', 'Google Antigravity Blog'],
+  ['blog:google-deepmind', 'Google DeepMind Blog'],
+  ['blog:google-research', 'Google Research Blog'],
+  ['blog:microsoft-research', 'Microsoft Research Blog'],
+  ['blog:amazon-science', 'Amazon Science Blog'],
+  ['blog:ibm-research', 'IBM Research Blog'],
+  ['blog:perplexity-research', 'Perplexity Research Articles'],
+  ['blog:qwen-blog', 'Qwen Blog'],
+  ['blog:kimi-blog', 'Kimi Research & Tech Blog'],
+  ['blog:ernie-blog', 'ERNIE Blog'],
+  ['blog:minimax-blog', 'MiniMax Blog'],
+  ['blog:apple-ml-research', 'Apple Machine Learning Research'],
 ];
 
 const approvedSourceRoutes = {
-  'anthropic-engineering': ['https://www.anthropic.com/engineering', [
+  'blog:anthropic-engineering': ['https://www.anthropic.com/engineering', [
     ['sitemap', 'https://www.anthropic.com/sitemap.xml'],
     ['html', 'https://www.anthropic.com/engineering'],
   ]],
-  'claude-blog': ['https://claude.com/blog', [['html', 'https://claude.com/blog']]],
-  'anthropic-interpretability': ['https://www.anthropic.com/research/team/interpretability', [
+  'blog:claude-blog': ['https://claude.com/blog', [['html', 'https://claude.com/blog']]],
+  'blog:anthropic-interpretability': ['https://www.anthropic.com/research/team/interpretability', [
     ['html', 'https://www.anthropic.com/research/team/interpretability'],
   ]],
-  'anthropic-science': ['https://www.anthropic.com/science', [
+  'blog:anthropic-science': ['https://www.anthropic.com/science', [
     ['html', 'https://www.anthropic.com/science'],
   ]],
-  'openai-alignment': ['https://alignment.openai.com/', [
+  'blog:openai-alignment': ['https://alignment.openai.com/', [
     ['rss', 'https://alignment.openai.com/rss.xml'],
     ['html', 'https://alignment.openai.com/'],
   ]],
-  'google-antigravity': ['https://antigravity.google/blog', [
+  'blog:google-antigravity': ['https://antigravity.google/blog', [
     ['rss', 'https://antigravity.google/blog/rss.xml'],
     ['html', 'https://antigravity.google/blog'],
   ]],
-  'google-deepmind': ['https://deepmind.google/blog/', [
+  'blog:google-deepmind': ['https://deepmind.google/blog/', [
     ['sitemap', 'https://deepmind.google/sitemap.xml'],
     ['html', 'https://deepmind.google/blog/'],
   ]],
-  'google-research': ['https://research.google/blog/', [
+  'blog:google-research': ['https://research.google/blog/', [
     ['rss', 'https://research.google/blog/rss/'],
     ['html', 'https://research.google/blog/'],
   ]],
-  'microsoft-research': ['https://www.microsoft.com/en-us/research/blog/', [
+  'blog:microsoft-research': ['https://www.microsoft.com/en-us/research/blog/', [
     ['html', 'https://www.microsoft.com/en-us/research/blog/'],
     ['rss', 'https://www.microsoft.com/en-us/research/feed/'],
   ]],
-  'amazon-science': ['https://www.amazon.science/blog/', [
+  'blog:amazon-science': ['https://www.amazon.science/blog/', [
     ['rss', 'https://www.amazon.science/index.rss'],
     ['html', 'https://www.amazon.science/blog/'],
   ]],
-  'ibm-research': ['https://research.ibm.com/blog', [
+  'blog:ibm-research': ['https://research.ibm.com/blog', [
     ['rss', 'https://research.ibm.com/rss'],
     ['html', 'https://research.ibm.com/blog'],
   ]],
-  'perplexity-research': ['https://research.perplexity.ai/', [
+  'blog:perplexity-research': ['https://research.perplexity.ai/', [
     ['html', 'https://research.perplexity.ai/'],
     ['sitemap', 'https://research.perplexity.ai/sitemap.xml'],
   ]],
-  'qwen-blog': ['https://qwen.ai/blog/', [
+  'blog:qwen-blog': ['https://qwen.ai/blog/', [
     ['json', 'https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US'],
     ['html', 'https://qwen.ai/blog/'],
   ]],
-  'kimi-blog': ['https://www.kimi.ai/blog/', [
+  'blog:kimi-blog': ['https://www.kimi.ai/blog/', [
     ['html', 'https://www.kimi.ai/blog/'],
     ['sitemap', 'https://www.kimi.ai/sitemap.xml'],
   ]],
-  'ernie-blog': ['https://ernie.baidu.com/blog/zh/', [
+  'blog:ernie-blog': ['https://ernie.baidu.com/blog/zh/', [
     ['rss', 'https://ernie.baidu.com/blog/zh/index.xml'],
     ['html', 'https://ernie.baidu.com/blog/zh/'],
   ]],
-  'minimax-blog': ['https://www.minimax.cn/blog', [
+  'blog:minimax-blog': ['https://www.minimax.cn/blog', [
     ['sitemap', 'https://www.minimax.cn/sitemap.xml'],
     ['html', 'https://www.minimax.cn/blog'],
   ]],
-  'apple-ml-research': ['https://machinelearning.apple.com/', [
+  'blog:apple-ml-research': ['https://machinelearning.apple.com/', [
     ['rss', 'https://machinelearning.apple.com/rss.xml'],
     ['sitemap', 'https://machinelearning.apple.com/sitemap.xml'],
   ]],
@@ -130,6 +130,11 @@ test('candidate inventory contains the exact approved source IDs and names', asy
   );
   assert.equal(config.sources.length, 17);
   assert.deepEqual(validateBlogSources(config.sources), { valid: true, errors: [] });
+  const production = JSON.parse(await readFile(
+    new URL('../../config/feed-blogs.json', import.meta.url),
+    'utf8',
+  ));
+  assert.deepEqual(config, production);
 });
 
 test('candidate inventory pins approved origins and ordered discovery endpoints', async () => {
@@ -169,7 +174,7 @@ for (const field of ['id', 'name', 'language']) {
     const result = validateBlogSources([source]);
 
     assert.equal(result.valid, false);
-    assert.ok(errorFor(result, field === 'id' ? 'source[0]' : 'example-blog', field));
+    assert.ok(errorFor(result, field === 'id' ? 'source[0]' : 'blog:example-blog', field));
   });
 }
 
@@ -177,12 +182,12 @@ test('source URLs must use HTTPS', () => {
   const result = validateBlogSources([validSource({ url: 'http://example.com/blog/' })]);
 
   assert.equal(result.valid, false);
-  assert.ok(errorFor(result, 'example-blog', 'url'));
+  assert.ok(errorFor(result, 'blog:example-blog', 'url'));
 });
 
 test('discovery is required and preserves a nonempty ordered strategy list', () => {
   const empty = validateBlogSources([validSource({ discovery: [] })]);
-  assert.ok(errorFor(empty, 'example-blog', 'discovery'));
+  assert.ok(errorFor(empty, 'blog:example-blog', 'discovery'));
 
   const source = validSource();
   assert.deepEqual(source.discovery.map(({ type }) => type), ['rss', 'sitemap', 'html']);
@@ -197,8 +202,8 @@ test('discovery entries require a supported type and HTTPS URL', () => {
     discovery: [{ type: 'rss', url: 'http://example.com/feed' }],
   })]);
 
-  assert.ok(errorFor(unsupported, 'example-blog', 'discovery[0].type'));
-  assert.ok(errorFor(insecure, 'example-blog', 'discovery[0].url'));
+  assert.ok(errorFor(unsupported, 'blog:example-blog', 'discovery[0].type'));
+  assert.ok(errorFor(insecure, 'blog:example-blog', 'discovery[0].url'));
 });
 
 test('source IDs must be unique', () => {
@@ -208,22 +213,22 @@ test('source IDs must be unique', () => {
   ]);
 
   assert.equal(result.valid, false);
-  assert.ok(errorFor(result, 'example-blog', 'id'));
+  assert.ok(errorFor(result, 'blog:example-blog', 'id'));
 });
 
 test('articleUrlPatterns must be a nonempty allow list', () => {
   const result = validateBlogSources([validSource({ articleUrlPatterns: [] })]);
 
   assert.equal(result.valid, false);
-  assert.ok(errorFor(result, 'example-blog', 'articleUrlPatterns'));
+  assert.ok(errorFor(result, 'blog:example-blog', 'articleUrlPatterns'));
 });
 
 test('allow and exclude patterns must be valid JavaScript regular expressions', () => {
   const allow = validateBlogSources([validSource({ articleUrlPatterns: ['['] })]);
   const exclude = validateBlogSources([validSource({ excludeUrlPatterns: ['('] })]);
 
-  assert.ok(errorFor(allow, 'example-blog', 'articleUrlPatterns[0]'));
-  assert.ok(errorFor(exclude, 'example-blog', 'excludeUrlPatterns[0]'));
+  assert.ok(errorFor(allow, 'blog:example-blog', 'articleUrlPatterns[0]'));
+  assert.ok(errorFor(exclude, 'blog:example-blog', 'excludeUrlPatterns[0]'));
 });
 
 test('parser names are limited to implemented source parsers', () => {
@@ -232,7 +237,7 @@ test('parser names are limited to implemented source parsers', () => {
   }
 
   const result = validateBlogSources([validSource({ parser: 'made-up-parser' })]);
-  assert.ok(errorFor(result, 'example-blog', 'parser'));
+  assert.ok(errorFor(result, 'blog:example-blog', 'parser'));
 });
 
 test('JSON discovery requires matching same-origin public and detail URL templates', () => {
@@ -269,7 +274,7 @@ test('JSON discovery requires matching same-origin public and detail URL templat
       articleUrlPatterns: ['^https://example\\.com/blog\\?id=[A-Za-z0-9._-]+$'],
       fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
     })]);
-    assert.ok(errorFor(invalid, 'example-blog', `discovery[0].${field}`), `${field}: ${value}`);
+    assert.ok(errorFor(invalid, 'blog:example-blog', `discovery[0].${field}`), `${field}: ${value}`);
   }
 });
 
@@ -285,7 +290,7 @@ test('JSON discovery listing endpoint must use the exact source origin', () => {
     fetchUrlPatterns: ['^https://example\\.com/api/article\\?path=[A-Za-z0-9._-]+$'],
   })]);
 
-  assert.ok(errorFor(result, 'example-blog', 'discovery[0].url'));
+  assert.ok(errorFor(result, 'blog:example-blog', 'discovery[0].url'));
 });
 
 test('JSON discovery requires nonempty fetch URL patterns', () => {
@@ -297,7 +302,7 @@ test('JSON discovery requires nonempty fetch URL patterns', () => {
   }];
   for (const fetchUrlPatterns of [undefined, []]) {
     const result = validateBlogSources([validSource({ discovery: jsonDiscovery, fetchUrlPatterns })]);
-    assert.ok(errorFor(result, 'example-blog', 'fetchUrlPatterns'));
+    assert.ok(errorFor(result, 'blog:example-blog', 'fetchUrlPatterns'));
   }
 });
 
@@ -313,7 +318,7 @@ test('contentSelectorPriority is boolean and requires nonempty content selectors
     { contentSelectorPriority: true, contentSelectors: [] },
   ]) {
     const result = validateBlogSources([validSource(overrides)]);
-    assert.ok(errorFor(result, 'example-blog', 'contentSelectorPriority'));
+    assert.ok(errorFor(result, 'blog:example-blog', 'contentSelectorPriority'));
   }
 });
 
@@ -326,7 +331,7 @@ test('contentSelectors values must be strings', () => {
   })]);
 
   assert.equal(valid.valid, true);
-  assert.ok(errorFor(invalid, 'example-blog', 'contentSelectors[1]'));
+  assert.ok(errorFor(invalid, 'blog:example-blog', 'contentSelectors[1]'));
 });
 
 test('exclude URL patterns take precedence over allow patterns', () => {

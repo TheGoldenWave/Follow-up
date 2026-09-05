@@ -1,7 +1,7 @@
 {
   "sources": [
     {
-      "id": "anthropic-engineering",
+      "id": "blog:anthropic-engineering",
       "name": "Anthropic Engineering",
       "url": "https://www.anthropic.com/engineering",
       "language": "en",
@@ -14,7 +14,7 @@
       "parser": "anthropic-engineering"
     },
     {
-      "id": "claude-blog",
+      "id": "blog:claude-blog",
       "name": "Claude Blog",
       "url": "https://claude.com/blog",
       "language": "en",
@@ -26,7 +26,7 @@
       "parser": "claude-blog"
     },
     {
-      "id": "anthropic-interpretability",
+      "id": "blog:anthropic-interpretability",
       "name": "Anthropic Interpretability",
       "url": "https://www.anthropic.com/research/team/interpretability",
       "language": "en",
@@ -37,7 +37,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "anthropic-science",
+      "id": "blog:anthropic-science",
       "name": "Anthropic Science",
       "url": "https://www.anthropic.com/science",
       "language": "en",
@@ -48,7 +48,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "openai-alignment",
+      "id": "blog:openai-alignment",
       "name": "OpenAI Alignment Research Blog",
       "url": "https://alignment.openai.com/",
       "language": "en",
@@ -60,7 +60,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "google-antigravity",
+      "id": "blog:google-antigravity",
       "name": "Google Antigravity Blog",
       "url": "https://antigravity.google/blog",
       "language": "en",
@@ -72,7 +72,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "google-deepmind",
+      "id": "blog:google-deepmind",
       "name": "Google DeepMind Blog",
       "url": "https://deepmind.google/blog/",
       "language": "en",
@@ -84,7 +84,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "google-research",
+      "id": "blog:google-research",
       "name": "Google Research Blog",
       "url": "https://research.google/blog/",
       "language": "en",
@@ -96,7 +96,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "microsoft-research",
+      "id": "blog:microsoft-research",
       "name": "Microsoft Research Blog",
       "url": "https://www.microsoft.com/en-us/research/blog/",
       "language": "en",
@@ -108,7 +108,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "amazon-science",
+      "id": "blog:amazon-science",
       "name": "Amazon Science Blog",
       "url": "https://www.amazon.science/blog/",
       "language": "en",
@@ -120,7 +120,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "ibm-research",
+      "id": "blog:ibm-research",
       "name": "IBM Research Blog",
       "url": "https://research.ibm.com/blog",
       "language": "en",
@@ -134,7 +134,7 @@
       "contentSelectorPriority": true
     },
     {
-      "id": "perplexity-research",
+      "id": "blog:perplexity-research",
       "name": "Perplexity Research Articles",
       "url": "https://research.perplexity.ai/",
       "language": "en",
@@ -146,7 +146,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "qwen-blog",
+      "id": "blog:qwen-blog",
       "name": "Qwen Blog",
       "url": "https://qwen.ai/blog/",
       "language": "en",
@@ -167,7 +167,7 @@
       "parser": "qwen-blog"
     },
     {
-      "id": "kimi-blog",
+      "id": "blog:kimi-blog",
       "name": "Kimi Research & Tech Blog",
       "url": "https://www.kimi.ai/blog/",
       "language": "en",
@@ -179,7 +179,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "ernie-blog",
+      "id": "blog:ernie-blog",
       "name": "ERNIE Blog",
       "url": "https://ernie.baidu.com/blog/zh/",
       "language": "zh-CN",
@@ -191,7 +191,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "minimax-blog",
+      "id": "blog:minimax-blog",
       "name": "MiniMax Blog",
       "url": "https://www.minimax.cn/blog",
       "language": "zh-CN",
@@ -203,7 +203,7 @@
       "excludeUrlPatterns": []
     },
     {
-      "id": "apple-ml-research",
+      "id": "blog:apple-ml-research",
       "name": "Apple Machine Learning Research",
       "url": "https://machinelearning.apple.com/",
       "language": "en",
