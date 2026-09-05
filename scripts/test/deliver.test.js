@@ -11,6 +11,7 @@ import test from 'node:test';
 import { deliverActiveDigest, main } from '../deliver.js';
 import { readDeliveryLedger } from '../delivery-ledger.js';
 import { renderDigestMessage } from '../finalize-digest.js';
+import { AtomicWriteCommittedError } from '../prepare-digest.js';
 
 const id = (value) => createHash('sha256').update(value).digest('hex');
 const execFileAsync = promisify(execFile);
@@ -203,9 +204,80 @@ test('real stdout CLI keeps body visible and writes a parseable delivered result
   ], { env: { ...process.env, HOME: home } });
   assert.match(stdout, /Important update/);
   assert.equal(stderr, '');
-  assert.equal(JSON.parse(await readFile(resultPath, 'utf8')).status, 'delivered');
+  assert.deepEqual(
+    (({ status, resultPersistence }) => ({ status, resultPersistence }))(
+      JSON.parse(await readFile(resultPath, 'utf8')),
+    ),
+    { status: 'delivered', resultPersistence: 'durable' },
+  );
   const ledger = await readDeliveryLedger({
     ledgerPath: join(userDir, 'state', 'delivery-ledger.jsonl'),
   });
   assert.deepEqual(ledger.map(({ type }) => type), ['pending', 'delivered']);
+});
+
+async function resultFailureFixture(t, outcome, writeResult) {
+  const paths = await fixture(t);
+  const configPath = join(dirname(paths.ledgerPath), '..', 'config.json');
+  const resultPath = join(dirname(configPath), 'result.json');
+  await writeFile(configPath, JSON.stringify({ delivery: { method: 'stdout' } }));
+  const stdout = { value: '', write(value) { this.value += value; } };
+  const stderr = { value: '', write(value) { this.value += value; } };
+  const code = await main({
+    argv: [
+      '--active', paths.activePath, '--destination', 'stdout', '--result-out', resultPath,
+    ],
+    configPath, env: {}, stdout, stderr,
+    deliverImpl: async () => outcome,
+    writeResult,
+  });
+  return { code, stdout: stdout.value, stderr: stderr.value, resultPath };
+}
+
+test('precommit result failure preserves a delivered outcome on the fallback machine channel', async (t) => {
+  const outcome = {
+    status: 'delivered', method: 'stdout', attemptId: 'attempt-delivered', digestId: 'digest-1',
+  };
+  const result = await resultFailureFixture(t, outcome, async () => {
+    throw new Error('rename failed');
+  });
+  assert.equal(result.code, 1);
+  assert.deepEqual(JSON.parse(result.stderr), { ...outcome, resultPersistence: 'failed' });
+  assert.doesNotMatch(result.stderr, /delivery-not-started/);
+});
+
+test('postcommit result fsync uncertainty preserves committed result and delivery outcome', async (t) => {
+  const outcome = {
+    status: 'delivered', method: 'stdout', attemptId: 'attempt-committed', digestId: 'digest-1',
+  };
+  const result = await resultFailureFixture(t, outcome, async (path, document) => {
+    await writeFile(path, `${JSON.stringify(document)}\n`);
+    throw new AtomicWriteCommittedError('delivery result');
+  });
+  assert.equal(result.code, 1);
+  assert.deepEqual(
+    (({ status, resultPersistence }) => ({ status, resultPersistence }))(
+      JSON.parse(await readFile(result.resultPath, 'utf8')),
+    ),
+    { status: 'delivered', resultPersistence: 'durable' },
+  );
+  assert.deepEqual(JSON.parse(result.stderr), {
+    ...outcome, resultPersistence: 'committed-but-uncertain',
+  });
+});
+
+test('result failure does not rewrite failed or uncertain delivery outcomes', async (t) => {
+  for (const status of ['delivery-failed', 'delivery-uncertain']) {
+    await t.test(status, async (t) => {
+      const outcome = {
+        status, method: 'email', attemptId: `attempt-${status}`, digestId: 'digest-1',
+      };
+      const result = await resultFailureFixture(t, outcome, async () => {
+        throw new Error('result unavailable');
+      });
+      assert.equal(result.code, 1);
+      assert.deepEqual(JSON.parse(result.stderr), { ...outcome, resultPersistence: 'failed' });
+      assert.doesNotMatch(result.stderr, /delivery-not-started/);
+    });
+  }
 });

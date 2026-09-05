@@ -12,7 +12,7 @@ import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-lin
 import { loadActiveDigest } from './delivery-message.js';
 import { reserveOutboxAttempt, resolveOutboxAttempt } from './delivery-outbox.js';
 import { deliverWithProvider, validateDestination } from './delivery-providers.js';
-import { writeJsonAtomic } from './prepare-digest.js';
+import { AtomicWriteCommittedError, writeJsonAtomic } from './prepare-digest.js';
 
 const DEFAULT_USER_DIR = join(homedir(), '.follow-builders');
 
@@ -157,6 +157,7 @@ export async function main({
   env = process.env, ledgerPath, outboxDir, transactionDir, fsImpl,
   transport, providerStdout,
   randomUUID = systemRandomUUID, now,
+  deliverImpl = deliverActiveDigest, writeResult = writeJsonAtomic,
 } = {}) {
   let options;
   try { options = parseOptions(argv); }
@@ -164,6 +165,7 @@ export async function main({
     stderr.write(`usage: ${error.message}\n`);
     return error.exitCode ?? EX_USAGE;
   }
+  let outcome;
   try {
     const config = await loadConfig(configPath);
     const credentials = await loadCredentials(envPath, env);
@@ -174,7 +176,7 @@ export async function main({
       stderr.write('usage: --result-out is required for stdout delivery\n');
       return EX_USAGE;
     }
-    const result = await deliverActiveDigest({
+    outcome = await deliverImpl({
       activePath: options.active,
       destination,
       credentials,
@@ -182,27 +184,29 @@ export async function main({
       transport, providerStdout: providerStdout ?? (destination.method === 'stdout' ? stdout : stderr),
       randomUUID, now,
     });
-    if (options['result-out']) {
-      await writeJsonAtomic(options['result-out'], result, {
+  } catch {
+    outcome = { status: 'delivery-failed', reason: 'delivery-not-started' };
+  }
+
+  if (options['result-out']) {
+    const durableResult = { ...outcome, resultPersistence: 'durable' };
+    try {
+      await writeResult(options['result-out'], durableResult, {
         fsImpl, randomUUID, label: 'delivery result',
       });
-    } else {
-      stdout.write(`${JSON.stringify(result)}\n`);
+    } catch (error) {
+      const resultPersistence = error instanceof AtomicWriteCommittedError
+        ? 'committed-but-uncertain' : 'failed';
+      stderr.write(`${JSON.stringify({ ...outcome, resultPersistence })}\n`);
+      return 1;
     }
-    return result.status === 'delivered' || result.status === 'skipped' ? 0 : 1;
-  } catch {
-    const failure = { status: 'delivery-failed', reason: 'delivery-not-started' };
-    if (options['result-out']) {
-      try {
-        await writeJsonAtomic(options['result-out'], failure, {
-          fsImpl, randomUUID, label: 'delivery result',
-        });
-      } catch { stderr.write('delivery-failed: result could not be written\n'); }
-    } else {
-      stdout.write(`${JSON.stringify(failure)}\n`);
-    }
-    return 1;
+  } else {
+    stdout.write(`${JSON.stringify({ ...outcome, resultPersistence: 'durable' })}\n`);
   }
+  if (outcome.status === 'delivered' || outcome.status === 'skipped') {
+    return 0;
+  }
+  return 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
