@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -14,7 +14,7 @@ import {
 async function temporaryRoot(t) {
   const root = await mkdtemp(join(tmpdir(), 'follow-up-publication-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  return root;
+  return realpath(root);
 }
 
 async function contents(root, names) {
@@ -23,7 +23,7 @@ async function contents(root, names) {
 
 test('a new process recovers the complete old generation from a prepared journal', async (t) => {
   const root = await temporaryRoot(t);
-  const names = ['feed-a.json', 'feed-b.json'];
+  const names = ['feed-x.json', 'feed-blogs.json'];
   await Promise.all(names.map((name) => writeFile(join(root, name), `old-${name}`)));
   const fs = await import('node:fs/promises');
   let replacements = 0;
@@ -44,16 +44,16 @@ test('a new process recovers the complete old generation from a prepared journal
     fsImpl: crashingFs,
     validateStaged: async () => {},
   }), /simulated process failure/);
-  assert.deepEqual(await contents(root, names), ['new-feed-a.json', 'old-feed-b.json']);
+  assert.deepEqual(await contents(root, names), ['new-feed-x.json', 'old-feed-blogs.json']);
 
   await withFeedPublicationLock(root, async () => recoverFeedPublication(root));
-  assert.deepEqual(await contents(root, names), ['old-feed-a.json', 'old-feed-b.json']);
+  assert.deepEqual(await contents(root, names), ['old-feed-x.json', 'old-feed-blogs.json']);
   await assert.rejects(access(join(root, FEED_PUBLICATION_JOURNAL)));
 });
 
 test('a failed rollback leaves its journal and the next recovery finishes idempotently', async (t) => {
   const root = await temporaryRoot(t);
-  const names = ['feed-a.json', 'feed-b.json'];
+  const names = ['feed-x.json', 'feed-blogs.json'];
   await Promise.all(names.map((name) => writeFile(join(root, name), `old-${name}`)));
   const fs = await import('node:fs/promises');
   let replacements = 0;
@@ -87,7 +87,7 @@ test('a failed rollback leaves its journal and the next recovery finishes idempo
   await access(join(root, FEED_PUBLICATION_JOURNAL));
 
   await recoverFeedPublication(root);
-  assert.deepEqual(await contents(root, names), ['old-feed-a.json', 'old-feed-b.json']);
+  assert.deepEqual(await contents(root, names), ['old-feed-x.json', 'old-feed-blogs.json']);
   await assert.rejects(access(join(root, FEED_PUBLICATION_JOURNAL)));
 });
 
@@ -103,7 +103,7 @@ test('a concurrent publisher cannot enter while the cross-process lock is held',
 
 test('staging validation runs after every document is durable and before replacement', async (t) => {
   const root = await temporaryRoot(t);
-  const target = join(root, 'feed-a.json');
+  const target = join(root, 'feed-x.json');
   await writeFile(target, 'old');
   let validated = false;
   await publishFeedTransaction({
@@ -121,7 +121,7 @@ test('staging validation runs after every document is durable and before replace
 
 test('staging validation failure leaves the old target and removes the unjournaled transaction', async (t) => {
   const root = await temporaryRoot(t);
-  const target = join(root, 'feed-a.json');
+  const target = join(root, 'feed-x.json');
   await writeFile(target, 'old');
   await assert.rejects(publishFeedTransaction({
     rootDir: root,
@@ -136,7 +136,7 @@ test('staging validation failure leaves the old target and removes the unjournal
 
 test('recovery keeps the new generation when cleanup failed after the committed journal', async (t) => {
   const root = await temporaryRoot(t);
-  const target = join(root, 'feed-a.json');
+  const target = join(root, 'feed-x.json');
   await writeFile(target, 'old');
   const fs = await import('node:fs/promises');
   let cleanupFailed = false;
@@ -168,8 +168,88 @@ test('recovery removes orphan staging left before the first journal was durable'
   const orphan = join(root, '.feed-publication-staging', 'orphan', 'new');
   const fs = await import('node:fs/promises');
   await fs.mkdir(orphan, { recursive: true });
-  await writeFile(join(orphan, 'feed-a.json'), 'staged');
+  await writeFile(join(orphan, 'feed-x.json'), 'staged');
 
   assert.equal(await recoverFeedPublication(root), false);
   await assert.rejects(access(join(root, '.feed-publication-staging')));
+});
+
+test('publication rejects symlinked roots, targets, and staging components', async (t) => {
+  const parent = await temporaryRoot(t);
+  const realRoot = join(parent, 'real');
+  const linkedRoot = join(parent, 'linked');
+  const outside = join(parent, 'outside');
+  await mkdir(realRoot);
+  await mkdir(outside);
+  await symlink(realRoot, linkedRoot);
+  await assert.rejects(publishFeedTransaction({
+    rootDir: linkedRoot,
+    documents: [[join(linkedRoot, 'feed-x.json'), 'new']],
+  }), /symbolic link/i);
+
+  const target = join(realRoot, 'feed-x.json');
+  await writeFile(join(outside, 'target.json'), 'outside');
+  await symlink(join(outside, 'target.json'), target);
+  await assert.rejects(publishFeedTransaction({
+    rootDir: realRoot,
+    documents: [[target, 'new']],
+  }), /symbolic link/i);
+  await rm(target);
+
+  await symlink(outside, join(realRoot, '.feed-publication-staging'));
+  await assert.rejects(publishFeedTransaction({
+    rootDir: realRoot,
+    documents: [[target, 'new']],
+  }), /symbolic link/i);
+  assert.equal(await readFile(join(outside, 'target.json'), 'utf8'), 'outside');
+});
+
+test('publication rejects a root reached through a symlinked parent component', async (t) => {
+  const parent = await temporaryRoot(t);
+  const actualParent = join(parent, 'actual-parent');
+  const linkedParent = join(parent, 'linked-parent');
+  await mkdir(join(actualParent, 'root'), { recursive: true });
+  await symlink(actualParent, linkedParent);
+  const root = join(linkedParent, 'root');
+
+  await assert.rejects(publishFeedTransaction({
+    rootDir: root,
+    documents: [[join(root, 'feed-x.json'), 'new']],
+  }), /symbolic link/i);
+});
+
+test('publication rejects a symlinked temporary journal path', async (t) => {
+  const root = await temporaryRoot(t);
+  const outside = join(root, 'outside.txt');
+  const temporaryJournal = join(root, `${FEED_PUBLICATION_JOURNAL}.tmp-fixed`);
+  await writeFile(outside, 'outside');
+  await symlink(outside, temporaryJournal);
+
+  await assert.rejects(publishFeedTransaction({
+    rootDir: root,
+    transactionId: 'fixed',
+    documents: [[join(root, 'feed-x.json'), 'new']],
+  }), /symbolic link/i);
+  assert.equal(await readFile(outside, 'utf8'), 'outside');
+});
+
+test('recovery rejects journal targets outside the exact feed artifact whitelist', async (t) => {
+  const root = await temporaryRoot(t);
+  const transactionDir = join(root, '.feed-publication-staging', 'tampered');
+  const backupDir = join(transactionDir, 'old');
+  await mkdir(backupDir, { recursive: true });
+  const backupPath = join(backupDir, '00-evil.json');
+  await writeFile(backupPath, 'old');
+  const evil = join(root, 'evil.json');
+  await writeFile(evil, 'do-not-touch');
+  await writeFile(join(root, FEED_PUBLICATION_JOURNAL), JSON.stringify({
+    version: 1,
+    transactionId: 'tampered',
+    phase: 'replacing',
+    transactionDir,
+    targets: [{ target: evil, stagedPath: join(transactionDir, 'new', '00-evil.json'), backupPath, existed: true }],
+  }));
+
+  await assert.rejects(recoverFeedPublication(root), /whitelist|artifact|target/i);
+  assert.equal(await readFile(evil, 'utf8'), 'do-not-touch');
 });

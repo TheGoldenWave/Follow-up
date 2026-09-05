@@ -22,6 +22,12 @@ function retentionTimestamp(candidate) {
   return Date.parse(candidate.publishedAt ?? candidate.firstSeenAt);
 }
 
+function utcRetentionCutoff(collectionStart, days) {
+  const date = new Date(collectionStart);
+  const utcDayStart = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return utcDayStart - days * DAY_MS;
+}
+
 function compareNewest(first, second) {
   const firstPublished = first.publishedAt ? Date.parse(first.publishedAt) : Number.NEGATIVE_INFINITY;
   const secondPublished = second.publishedAt ? Date.parse(second.publishedAt) : Number.NEGATIVE_INFINITY;
@@ -61,7 +67,6 @@ function mergeCandidates(previousCandidates, currentCandidates) {
 }
 
 function applyRetention(candidates, collectionStart, retention) {
-  const now = Date.parse(collectionStart);
   const bySource = new Map();
   for (const candidate of candidates) {
     const values = bySource.get(candidate.sourceId) ?? [];
@@ -75,7 +80,9 @@ function applyRetention(candidates, collectionStart, retention) {
     const guaranteed = new Set(values.slice(0, retention.minimumPerSource).map(({ candidateId }) => candidateId));
     for (const candidate of values) {
       const days = candidate.channel === 'podcasts' ? retention.podcastDays : retention.defaultDays;
-      if (retentionTimestamp(candidate) >= now - days * DAY_MS || guaranteed.has(candidate.candidateId)) {
+      // Central Feed retention uses complete UTC calendar days, independent of user timezone.
+      if (retentionTimestamp(candidate) >= utcRetentionCutoff(collectionStart, days)
+        || guaranteed.has(candidate.candidateId)) {
         eligible.push(candidate);
       }
     }
@@ -88,13 +95,12 @@ function applyRetention(candidates, collectionStart, retention) {
 
 function activePriorTruncation(previous, registry, collectionStart) {
   if (!previous?.historyTruncated || !previous.truncation?.oldestRetainedAt) return null;
-  const now = Date.parse(collectionStart);
   const channels = new Map(registry.map(({ id, sourceId, channel }) => [id ?? sourceId, channel]));
   const stillRelevant = previous.truncation.affectedSourceIds.some((sourceId) => {
     const days = channels.get(sourceId) === 'podcasts'
       ? CANDIDATE_RETENTION.podcastDays
       : CANDIDATE_RETENTION.defaultDays;
-    return Date.parse(previous.truncation.oldestRetainedAt) >= now - days * DAY_MS;
+    return Date.parse(previous.truncation.oldestRetainedAt) >= utcRetentionCutoff(collectionStart, days);
   });
   return stillRelevant ? previous.truncation : null;
 }

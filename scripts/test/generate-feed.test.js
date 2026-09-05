@@ -5,11 +5,23 @@ import { buildStatuses, fetchPodcastContent, fetchRssFeeds, main, parseRssFeed }
 
 function memoryRuntime(initial = {}, { failRenameAt = Infinity } = {}) {
   const files = new Map(Object.entries(initial));
+  const directories = new Set(['/repo']);
   let renameCount = 0;
   return {
     files,
     fs: {
-      async mkdir() {},
+      async lstat(path) {
+        const key = String(path);
+        if (files.has(key)) return { isSymbolicLink: () => false, isDirectory: () => false };
+        if (directories.has(key)) return { isSymbolicLink: () => false, isDirectory: () => true };
+        const error = new Error('missing'); error.code = 'ENOENT'; throw error;
+      },
+      async realpath(path) { return String(path); },
+      async mkdir(path) {
+        const parts = String(path).split('/').filter(Boolean);
+        let current = '';
+        for (const part of parts) { current += `/${part}`; directories.add(current); }
+      },
       async open() { return { async sync() {}, async close() {} }; },
       async readFile(path) {
         if (!files.has(String(path))) { const error = new Error('missing'); error.code = 'ENOENT'; throw error; }
@@ -27,6 +39,9 @@ function memoryRuntime(initial = {}, { failRenameAt = Infinity } = {}) {
         const prefix = `${String(path)}/`;
         for (const key of files.keys()) {
           if (key === String(path) || key.startsWith(prefix)) files.delete(key);
+        }
+        for (const key of directories) {
+          if (key === String(path) || key.startsWith(prefix)) directories.delete(key);
         }
       },
     },
@@ -121,6 +136,27 @@ test('podcast statuses distinguish partial, error, and proven no-results sources
   ]);
 });
 
+test('podcast retries a transient transcript failure because failed candidates are not marked seen', async () => {
+  const state = { seenVideos: {} };
+  const podcast = { id: 'podcast:retry', name: 'Retry', rssUrl: 'https://rss.example/retry', url: 'https://video.example/retry' };
+  const options = {
+    fetchImpl: async () => rssResponse([{ guid: 'retry-me', title: 'Retry me', publishedAt: 'Sat, 05 Sep 2026 08:00:00 GMT' }]),
+    findYouTubeImpl: async () => null,
+    now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+  };
+  const first = await fetchPodcastContent([podcast], 'key', state, [], {
+    ...options, statuses: [], fetchTranscriptImpl: async () => ({ error: 'temporary failure' }),
+  });
+  assert.deepEqual(first, []);
+  assert.deepEqual(state.seenVideos, {});
+
+  const second = await fetchPodcastContent([podcast], 'key', state, [], {
+    ...options, statuses: [], fetchTranscriptImpl: async () => ({ transcript: 'Recovered' }),
+  });
+  assert.equal(second.length, 1);
+  assert.equal(typeof state.seenVideos['retry-me'], 'number');
+});
+
 test('podcast rejects HTML and truncated XML but accepts valid empty RSS and Atom', async () => {
   for (const [body, expectedStatus] of [
     ['<html>not rss</html>', 'error'],
@@ -178,6 +214,29 @@ test('parseRssFeed rejects non-feed and structurally truncated XML', () => {
   assert.deepEqual(parseRssFeed('<feed xmlns="http://www.w3.org/2005/Atom"></feed>'), []);
 });
 
+test('parseRssFeed uses XML semantics for entities, namespaces, hierarchy, and Atom alternate links', () => {
+  const rss = parseRssFeed(`<?xml version="1.0"?>
+    <rss version="2.0"><channel><item>
+      <title>A &amp; B</title><guid>rss-1</guid><link>https://example.com/rss-1</link>
+    </item></channel></rss>`);
+  assert.equal(rss[0].title, 'A & B');
+
+  const atom = parseRssFeed(`<atom:feed xmlns:atom="http://www.w3.org/2005/Atom">
+    <atom:entry><atom:title>Namespaced &amp; decoded</atom:title><atom:id>atom-1</atom:id>
+      <atom:link rel="self" href="https://example.com/feed"/>
+      <atom:link rel="alternate" href="https://example.com/article"/>
+      <atom:updated>2026-09-05T08:00:00Z</atom:updated>
+    </atom:entry></atom:feed>`);
+  assert.deepEqual(atom, [{
+    title: 'Namespaced & decoded', guid: 'atom-1',
+    publishedAt: '2026-09-05T08:00:00.000Z', link: 'https://example.com/article',
+  }]);
+  assert.throws(
+    () => parseRssFeed('<rss><item><guid>wrong-level</guid></item></rss>'),
+    /channel/i,
+  );
+});
+
 test('podcast and generic RSS mark a mixed valid and identity-less feed partial', async () => {
   const body = `<rss><channel>
     <item><title>Valid</title><guid>valid</guid><link>https://example.com/valid</link></item>
@@ -226,15 +285,23 @@ test('podcast and generic RSS sanitize source-specific upstream diagnostics', as
   assert.doesNotMatch(podcastErrors[0], /secret|private\.example/);
 
   const rssErrors = [];
-  await fetchRssFeeds(
-    [{ id: 'newsletter:safe', name: 'Safe Newsletter', rss: 'https://rss.example/safe', url: 'https://newsletter.example' }],
-    72, 1, { seenArticles: {} }, rssErrors, undefined, undefined, {
-      fetchImpl: async () => { throw new Error('api_key=secret https://private.example/path'); },
-      namespace: 'newsletters', channel: 'newsletters', statuses: [],
-    },
-  );
+  const diagnostics = [];
+  const originalConsoleError = console.error;
+  console.error = (...values) => diagnostics.push(values.join(' '));
+  try {
+    await fetchRssFeeds(
+      [{ id: 'newsletter:safe', name: 'Safe Newsletter', rss: 'https://rss.example/safe', url: 'https://newsletter.example' }],
+      72, 1, { seenArticles: {} }, rssErrors, undefined, undefined, {
+        fetchImpl: async () => { throw new Error('api_key=secret https://private.example/path'); },
+        namespace: 'newsletters', channel: 'newsletters', statuses: [],
+      },
+    );
+  } finally {
+    console.error = originalConsoleError;
+  }
   assert.match(rssErrors[0], /Safe Newsletter/);
   assert.doesNotMatch(rssErrors[0], /secret|private\.example/);
+  assert.doesNotMatch(diagnostics.join('\n'), /secret|private\.example/);
 });
 
 test('ordinary full generation rejects a missing candidate artifact before collection or publication', async () => {

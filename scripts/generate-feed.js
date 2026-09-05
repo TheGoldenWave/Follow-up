@@ -17,6 +17,7 @@ import { readFile, rename, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
 import { basename, join } from "path";
 import { pathToFileURL } from "url";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 
 import { createFeedEnvelope, validateFeed, validateFeedFiles } from "./feed-contract.js";
 import { fetchBlogContent } from "./blog-collector.js";
@@ -127,73 +128,54 @@ async function loadSources() {
 
 // Parses an RSS feed XML string and returns episode objects with
 // title, publishedAt, guid, and link. RSS feeds list newest first.
-function validateFeedXml(xml) {
-  if (typeof xml !== 'string' || xml.trim() === '') throw new Error('Invalid feed XML: empty payload');
-  const structural = xml
-    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<\?[\s\S]*?\?>/g, '')
-    .replace(/<!DOCTYPE[^>]*>/gi, '');
-  const tags = [...structural.matchAll(/<\s*(\/?)\s*([A-Za-z_][\w:.-]*)\b[^>]*(\/?)\s*>/g)];
-  const leftover = structural.replace(/<\s*(\/?)\s*([A-Za-z_][\w:.-]*)\b[^>]*(\/?)\s*>/g, '');
-  if (leftover.includes('<') || tags.length === 0) throw new Error('Invalid feed XML: malformed markup');
-  const stack = [];
-  let root = null;
-  let rootCount = 0;
-  let hasChannel = false;
-  for (const match of tags) {
-    const closing = match[1] === '/';
-    const selfClosing = match[3] === '/' || /\/\s*>$/.test(match[0]);
-    const name = match[2];
-    const localName = name.split(':').pop().toLowerCase();
-    if (!closing && stack.length === 0) {
-      rootCount += 1;
-      if (!root) root = localName;
-    }
-    if (localName === 'channel') hasChannel = true;
-    if (closing) {
-      const expected = stack.pop();
-      if (expected !== name) throw new Error(`Invalid feed XML: mismatched closing tag ${name}`);
-    } else if (!selfClosing) {
-      stack.push(name);
-    }
-  }
-  if (stack.length > 0) throw new Error(`Invalid feed XML: unclosed tag ${stack.at(-1)}`);
-  if (rootCount !== 1) throw new Error('Invalid feed XML: exactly one root element is required');
-  if (root !== 'rss' && root !== 'feed') throw new Error(`Invalid feed XML: unsupported root ${root ?? '<none>'}`);
-  if (root === 'rss' && !hasChannel) throw new Error('Invalid feed XML: RSS channel is required');
-  return root;
-}
-
-function extractElement(block, name) {
-  const match = block.match(new RegExp(`<${name}\\b[^>]*><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${name}>`, 'i'))
-    || block.match(new RegExp(`<${name}\\b[^>]*>([\\s\\S]*?)<\\/${name}>`, 'i'));
-  return match?.[1]?.trim() ?? null;
-}
-
 function rssDiagnostic(message) {
   return sanitizeDiagnostic(message);
+}
+
+const feedXmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  removeNSPrefix: true,
+  parseTagValue: false,
+  trimValues: true,
+  processEntities: true,
+  isArray: (_name, path) => ['rss.channel.item', 'feed.entry', 'feed.entry.link'].includes(path),
+});
+
+function textValue(value) {
+  if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+  return typeof value?.['#text'] === 'string' ? value['#text'].trim() : null;
 }
 
 function parseRssFeed(xml) {
   const episodes = [];
   let failedItemCount = 0;
-  const root = validateFeedXml(xml);
-  const itemRegex = root === 'rss'
-    ? /<item\b[^>]*>([\s\S]*?)<\/item>/gi
-    : /<entry\b[^>]*>([\s\S]*?)<\/entry>/gi;
-  let itemMatch;
-  while ((itemMatch = itemRegex.exec(xml)) !== null) {
-    const block = itemMatch[1];
-    const title = extractElement(block, 'title') || "Untitled";
-    let guid = extractElement(block, root === 'rss' ? 'guid' : 'id');
+  if (typeof xml !== 'string' || xml.trim() === '') throw new Error('Invalid feed XML: empty payload');
+  const validation = XMLValidator.validate(xml);
+  if (validation !== true) {
+    throw new Error(`Invalid feed XML: ${validation.err.msg} at line ${validation.err.line}`);
+  }
+  const document = feedXmlParser.parse(xml);
+  const isRss = document && Object.hasOwn(document, 'rss');
+  const isAtom = document && Object.hasOwn(document, 'feed');
+  if (!isRss && !isAtom) throw new Error('Invalid feed XML: root must be rss or feed');
+  if (isRss && (!document.rss || !Object.hasOwn(document.rss, 'channel'))) {
+    throw new Error('Invalid feed XML: RSS channel is required');
+  }
+  const items = isRss
+    ? (typeof document.rss.channel === 'object' ? document.rss.channel.item ?? [] : [])
+    : (typeof document.feed === 'object' ? document.feed.entry ?? [] : []);
+  for (const item of items) {
+    const title = textValue(item.title) || 'Untitled';
+    let guid = textValue(isRss ? item.guid : item.id);
     const publishedAt = normalizePublishedAt(
-      extractElement(block, root === 'rss' ? 'pubDate' : 'published')
-        ?? extractElement(block, 'updated'),
+      textValue(isRss ? item.pubDate : item.published) ?? textValue(item.updated),
     );
-    const link = root === 'rss'
-      ? extractElement(block, 'link')
-      : block.match(/<link\b[^>]*\bhref=["']([^"']+)["'][^>]*\/?\s*>/i)?.[1] ?? null;
+    const atomLinks = isAtom ? item.link ?? [] : [];
+    const alternate = atomLinks.find((link) => link?.['@_rel'] === 'alternate')
+      ?? atomLinks.find((link) => !link?.['@_rel'])
+      ?? atomLinks[0];
+    const link = isRss ? textValue(item.link) : alternate?.['@_href'] ?? null;
 
     // Use link as GUID fallback when GUID is missing
     // Some RSS feeds (e.g. 少数派, 36kr) don't include GUID elements
@@ -506,7 +488,6 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}
 
           for (const episode of candidates) {
             const transcriptResult = await fetchTranscriptImpl(podcast.rssUrl, episode.guid, apiKey);
-            state.seenVideos[episode.guid] = now();
             if (transcriptResult.error || !transcriptResult.transcript) {
               failedCandidateCount += 1;
               sourceErrors.push(rssDiagnostic(transcriptResult.error
@@ -533,6 +514,7 @@ async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}
               publishedAt: episode.publishedAt,
               transcript: transcriptResult.transcript,
             });
+            state.seenVideos[episode.guid] = now();
             statuses?.push(createSourceStatus({
               sourceId: podcast.id,
               channel: 'podcasts',
@@ -854,7 +836,7 @@ async function fetchRssFeeds(
         candidateCount: 0, failedCandidateCount,
         errors: sourceErrors, discoveryComplete: false,
       }));
-      console.error(`  ${source.name}: ${err.message}`);
+      console.error(`  ${source.name}: ${rssDiagnostic(err.message)}`);
     }
   }
 

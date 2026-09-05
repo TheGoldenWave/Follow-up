@@ -217,3 +217,50 @@ test('keeps prior cap truncation visible while the missing interval remains in r
   assert.equal(merged.historyTruncated, true);
   assert.deepEqual(merged.truncation, previous.truncation);
 });
+
+test('retention uses complete UTC calendar days rather than elapsed local or DST hours', () => {
+  const utcCollection = '2026-09-16T23:59:59.000Z';
+  const recent = Array.from({ length: 50 }, (_, index) => candidate({
+    nativeId: `recent-${index}`,
+    publishedAt: new Date(Date.parse(utcCollection) - index * 1000).toISOString(),
+    firstSeenAt: new Date(Date.parse(utcCollection) - index * 1000).toISOString(),
+    lastSeenAt: utcCollection,
+  }));
+  const boundary = candidate({
+    nativeId: 'utc-boundary', publishedAt: '2026-09-01T00:00:00.000Z',
+    firstSeenAt: '2026-09-01T00:00:00.000Z', lastSeenAt: utcCollection,
+  });
+  const expired = candidate({
+    nativeId: 'before-utc-boundary', publishedAt: '2026-08-31T23:59:59.999Z',
+    firstSeenAt: '2026-08-31T23:59:59.999Z', lastSeenAt: utcCollection,
+  });
+  const podcastBoundary = candidate({
+    sourceId: 'podcast:a', channel: 'podcasts', nativeId: 'podcast-boundary',
+    publishedAt: '2026-08-17T00:00:00.000Z', firstSeenAt: '2026-08-17T00:00:00.000Z',
+    lastSeenAt: utcCollection,
+  });
+  const recentPodcasts = Array.from({ length: 50 }, (_, index) => candidate({
+    sourceId: 'podcast:a', channel: 'podcasts', nativeId: `recent-podcast-${index}`,
+    publishedAt: new Date(Date.parse(utcCollection) - index * 1000).toISOString(),
+    firstSeenAt: new Date(Date.parse(utcCollection) - index * 1000).toISOString(),
+    lastSeenAt: utcCollection,
+  }));
+  const expiredPodcast = candidate({
+    sourceId: 'podcast:a', channel: 'podcasts', nativeId: 'before-podcast-boundary',
+    publishedAt: '2026-08-16T23:59:59.999Z', firstSeenAt: '2026-08-16T23:59:59.999Z',
+    lastSeenAt: utcCollection,
+  });
+
+  const merged = mergeCandidateFeed(prior([
+    ...recent, boundary, expired, ...recentPodcasts, podcastBoundary, expiredPodcast,
+  ], {
+    generatedAt: utcCollection,
+  }), {
+    currentCandidates: [], statuses: registry.map((source) => status(source)), registry,
+    collectionStart: utcCollection,
+  });
+  assert.ok(merged.candidates.some(({ sourceNativeId }) => sourceNativeId === 'utc-boundary'));
+  assert.ok(!merged.candidates.some(({ sourceNativeId }) => sourceNativeId === 'before-utc-boundary'));
+  assert.ok(merged.candidates.some(({ sourceNativeId }) => sourceNativeId === 'podcast-boundary'));
+  assert.ok(!merged.candidates.some(({ sourceNativeId }) => sourceNativeId === 'before-podcast-boundary'));
+});
