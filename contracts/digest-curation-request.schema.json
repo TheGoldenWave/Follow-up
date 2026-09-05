@@ -37,6 +37,7 @@
       "items": { "$ref": "#/$defs/sourceStatus" }
     },
     "sourceCompleteness": { "$ref": "#/$defs/sourceCompleteness" },
+    "contentStats": { "$ref": "#/$defs/contentStats" },
     "selectionRules": { "$ref": "#/$defs/selectionRules" },
     "generatedAt": { "$ref": "#/$defs/dateTime" }
   },
@@ -106,6 +107,17 @@
         "complete": { "type": "boolean" },
         "expectedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
         "reportedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      }
+    },
+    "contentStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateCount", "eligibleCount", "excludedCount", "selectedCount"],
+      "properties": {
+        "candidateCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "eligibleCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "excludedCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "selectedCount": { "const": 0 }
       }
     },
     "selectionRules": {

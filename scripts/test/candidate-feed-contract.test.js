@@ -5,6 +5,8 @@ import {
   CANDIDATE_FEED_SCHEMA_VERSION,
   createCandidateFeed,
   validateCandidateFeed,
+  validateCandidateFeedCompleteness,
+  validateCandidateFeedStructure,
 } from '../candidate-feed-contract.js';
 import {
   createCandidateId,
@@ -241,4 +243,28 @@ test('requires exactly one status for every configured source', () => {
   assert.equal(extraResult.valid, false);
   assert.ok(extraResult.errors.some((error) => error.includes('blog:extra')));
   assert.equal(validateCandidateFeed({ schemaVersion: '1.0', ...validFields() }).valid, false);
+});
+
+test('structural validation permits missing expected statuses but rejects unknown or mismatched identities', () => {
+  const configured = [
+    ...expectedRegistry,
+    { id: 'x:builder', channel: 'x', name: 'Builder' },
+  ];
+  const incomplete = { schemaVersion: '1.0', ...validFields() };
+  assert.equal(validateCandidateFeedStructure(incomplete, { expectedRegistry: configured }).valid, true);
+  assert.deepEqual(validateCandidateFeedCompleteness(incomplete, { expectedRegistry: configured }), {
+    complete: false,
+    missingSources: [{ sourceId: 'x:builder', channel: 'x', sourceName: 'Builder' }],
+  });
+
+  const unknown = structuredClone(incomplete);
+  unknown.registry.push({
+    sourceId: 'x:unknown', channel: 'x', sourceName: 'Unknown',
+    status: 'no-results', candidateCount: 0,
+  });
+  assert.equal(validateCandidateFeedStructure(unknown, { expectedRegistry: configured }).valid, false);
+
+  const mismatched = structuredClone(incomplete);
+  mismatched.registry[0].channel = 'x';
+  assert.equal(validateCandidateFeedStructure(mismatched, { expectedRegistry: configured }).valid, false);
 });

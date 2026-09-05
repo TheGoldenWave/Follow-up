@@ -212,7 +212,49 @@ test('empty enabledChannels returns no-channels without loading the rolling Feed
     loadCandidateFeed: async () => { fetched = true; throw new Error('must not fetch'); },
   });
   assert.equal(fetched, false);
-  assert.deepEqual(result, { status: 'no-channels', message: '未启用任何内容渠道。' });
+  assert.deepEqual(result, {
+    status: 'no-channels',
+    message: '未启用任何内容渠道，请在设置中至少启用一个渠道。',
+    contentStats: { candidateCount: 0, eligibleCount: 0, excludedCount: 0, selectedCount: 0 },
+  });
+});
+
+test('missing expected source status becomes a synthetic error while valid candidates continue', async () => {
+  const incompleteFeed = feed([candidate('blog-item')], {
+    registry: [{
+      sourceId: 'blog:official', channel: 'blogs', sourceName: 'Official',
+      status: 'ok', candidateCount: 1,
+    }],
+  });
+  const result = await prepareDigest({
+    config: { enabledChannels: ['blogs', 'x'] }, frequency: 'daily',
+    now: '2026-09-06T08:00:00.000Z', registry, deliveryEvents: [],
+    loadCandidateFeed: async () => incompleteFeed,
+    loadCurationPrompt: async () => 'curate',
+    randomUUID: () => '77777777-7777-4777-8777-777777777777',
+  });
+  assert.equal(result.contextStatus, 'partial');
+  assert.deepEqual(result.request.eligibleCandidates.map(({ title }) => title), ['blog-item']);
+  assert.deepEqual(result.request.sourceStatuses[1], {
+    sourceId: 'x:builder', channel: 'x', sourceName: 'Builder', status: 'error',
+    candidateCount: 0, errorSummary: 'Source status was not reported.',
+  });
+  assert.deepEqual(result.contentStats, {
+    candidateCount: 1, eligibleCount: 1, excludedCount: 0, selectedCount: 0,
+  });
+});
+
+test('unknown source status remains structural corruption and stops preparation', async () => {
+  const corrupt = feed([candidate('blog-item')]);
+  corrupt.registry.push({
+    sourceId: 'x:unknown', channel: 'x', sourceName: 'Unknown',
+    status: 'no-results', candidateCount: 0,
+  });
+  await assert.rejects(prepareDigest({
+    config: { enabledChannels: ['blogs'] }, frequency: 'daily',
+    now: '2026-09-06T08:00:00.000Z', registry, deliveryEvents: [],
+    loadCandidateFeed: async () => corrupt,
+  }), /candidate Feed is invalid/);
 });
 
 test('prepare creates a schema-valid bounded request from only the rolling candidate Feed', async () => {

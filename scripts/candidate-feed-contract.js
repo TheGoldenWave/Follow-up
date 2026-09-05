@@ -201,9 +201,9 @@ function truncationErrors(feed) {
   return errors;
 }
 
-function registryCoverageErrors(feed, expectedRegistry) {
+function normalizedExpectedRegistry(expectedRegistry) {
   if (!Array.isArray(expectedRegistry)) {
-    return ['/registry requires an expectedRegistry array for completeness validation'];
+    return { errors: ['/registry requires an expectedRegistry array for completeness validation'] };
   }
   const expected = new Map();
   const errors = [];
@@ -217,18 +217,26 @@ function registryCoverageErrors(feed, expectedRegistry) {
       errors.push(`/expectedRegistry contains duplicate source ${sourceId}`);
       continue;
     }
-    expected.set(sourceId, source.channel);
+    expected.set(sourceId, {
+      channel: source.channel,
+      sourceName: typeof source.name === 'string' && source.name.length > 0
+        ? source.name : sourceId,
+    });
   }
+  return { expected, errors };
+}
+
+function registryIdentityErrors(feed, expectedRegistry) {
+  const { expected, errors } = normalizedExpectedRegistry(expectedRegistry);
+  if (!expected) return errors;
 
   const actual = Array.isArray(feed.registry)
     ? new Map(feed.registry
       .filter((source) => source && typeof source === 'object')
       .map((source) => [source.sourceId, source.channel]))
     : new Map();
-  for (const [sourceId, channel] of expected) {
-    if (!actual.has(sourceId)) {
-      errors.push(`/registry is missing configured source ${sourceId}`);
-    } else if (actual.get(sourceId) !== channel) {
+  for (const [sourceId, { channel }] of expected) {
+    if (actual.has(sourceId) && actual.get(sourceId) !== channel) {
       errors.push(`/registry source ${sourceId} must use configured channel ${channel}`);
     }
   }
@@ -238,7 +246,18 @@ function registryCoverageErrors(feed, expectedRegistry) {
   return errors;
 }
 
-export function validateCandidateFeed(feed, { expectedRegistry } = {}) {
+function registryCoverageErrors(feed, expectedRegistry) {
+  const { expected, errors } = normalizedExpectedRegistry(expectedRegistry);
+  if (!expected) return errors;
+  const actualIds = new Set(Array.isArray(feed.registry)
+    ? feed.registry.map((source) => source?.sourceId) : []);
+  for (const sourceId of expected.keys()) {
+    if (!actualIds.has(sourceId)) errors.push(`/registry is missing configured source ${sourceId}`);
+  }
+  return errors;
+}
+
+export function validateCandidateFeedStructure(feed, { expectedRegistry } = {}) {
   const schemaValid = validateSchema(feed);
   const errors = schemaValid ? [] : formatErrors(validateSchema.errors);
   if (feed && typeof feed === 'object' && !Array.isArray(feed)) {
@@ -246,7 +265,30 @@ export function validateCandidateFeed(feed, { expectedRegistry } = {}) {
     errors.push(...semanticErrors(feed));
     errors.push(...timestampErrors(feed));
     errors.push(...truncationErrors(feed));
-    errors.push(...registryCoverageErrors(feed, expectedRegistry));
+    errors.push(...registryIdentityErrors(feed, expectedRegistry));
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+export function validateCandidateFeedCompleteness(feed, { expectedRegistry } = {}) {
+  const { expected, errors } = normalizedExpectedRegistry(expectedRegistry);
+  if (!expected || errors.length > 0) {
+    throw new TypeError('expectedRegistry must contain unique source identities');
+  }
+  const actualIds = new Set(Array.isArray(feed?.registry)
+    ? feed.registry.map((source) => source?.sourceId) : []);
+  const missingSources = [];
+  for (const [sourceId, source] of expected) {
+    if (!actualIds.has(sourceId)) missingSources.push({ sourceId, ...source });
+  }
+  return { complete: missingSources.length === 0, missingSources };
+}
+
+export function validateCandidateFeed(feed, options = {}) {
+  const structure = validateCandidateFeedStructure(feed, options);
+  const errors = [...structure.errors];
+  if (feed && typeof feed === 'object' && !Array.isArray(feed)) {
+    errors.push(...registryCoverageErrors(feed, options.expectedRegistry));
   }
   return { valid: errors.length === 0, errors };
 }

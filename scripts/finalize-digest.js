@@ -8,24 +8,38 @@ import { pathToFileURL } from 'node:url';
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
 import { validateSelectionAgainstRequest } from './digest-selection.js';
 import { writeJsonAtomic } from './prepare-digest.js';
+import { sanitizeDiagnostic } from './source-status.js';
 import { INPUT_BYTE_LIMITS, readJsonLimited } from './validate-digest-selection.js';
 
 function periodLabel(frequency) {
   return frequency === 'weekly' ? '本周' : '今日';
 }
 
-function messageFor(status, frequency, itemCount) {
+function safeSourceName(value, fallback) {
+  const sanitized = sanitizeDiagnostic(value || fallback)
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return Array.from(sanitized || fallback).slice(0, 80).join('');
+}
+
+function messageFor(status, frequency, itemCount, incompleteSources) {
   const period = periodLabel(frequency);
+  const sourceNames = incompleteSources.slice(0, 3).map(({ sourceName }) => sourceName);
+  const moreCount = Math.max(0, incompleteSources.length - sourceNames.length);
+  const sourceLabel = sourceNames.length > 0
+    ? `（${sourceNames.join('、')}${moreCount > 0 ? `等 ${incompleteSources.length} 个来源` : ''}）`
+    : '';
   if (status === 'no-important-updates') return `${period}无重要更新`;
   if (status === 'incomplete-history') {
     return itemCount > 0
-      ? `历史覆盖不完整，以下为${period}可确认的重要更新。`
-      : `历史覆盖不完整，无法完成${period}重要性确认。`;
+      ? `历史覆盖不完整${sourceLabel}，以下为${period}可确认的重要更新。`
+      : `历史覆盖不完整${sourceLabel}，无法完成${period}重要性确认。`;
   }
   if (status === 'partial') {
     return itemCount > 0
-      ? `部分来源检查不完整，以下为${period}已确认的重要更新。`
-      : `部分来源检查不完整，无法完成${period}重要性确认。`;
+      ? `部分来源检查不完整${sourceLabel}，以下为${period}已确认的重要更新。`
+      : `部分来源检查不完整${sourceLabel}，无法完成${period}重要性确认。`;
   }
   return `${period}重要更新`;
 }
@@ -66,11 +80,29 @@ export function finalizeDigest(request, selection) {
     : !request.sourceCompleteness.complete
       ? 'partial'
       : items.length > 0 ? 'ready' : 'no-important-updates';
+  const incompleteSources = request.sourceStatuses
+    .filter(({ status: sourceStatus }) => sourceStatus === 'partial' || sourceStatus === 'error')
+    .slice(0, 20)
+    .map(({ sourceId, channel, sourceName, status: sourceStatus }) => ({
+      sourceId,
+      channel,
+      sourceName: safeSourceName(sourceName, sourceId),
+      status: sourceStatus,
+    }));
+  const baseStats = request.contentStats ?? {
+    candidateCount: request.eligibleCandidates.length,
+    eligibleCount: request.eligibleCandidates.length,
+    excludedCount: 0,
+    selectedCount: 0,
+  };
+  const contentStats = { ...baseStats, selectedCount: items.length };
   return {
     schemaVersion: '1.0', status, digestId: request.digestId,
     frequency: request.frequency, generatedAt: selection.generatedAt,
     coverage: request.coverage, sourceCompleteness: request.sourceCompleteness,
-    items, message: messageFor(status, request.frequency, items.length),
+    incompleteSources,
+    contentStats,
+    items, message: messageFor(status, request.frequency, items.length, incompleteSources),
   };
 }
 

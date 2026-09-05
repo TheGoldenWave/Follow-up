@@ -6,7 +6,10 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { validateCandidateFeed } from './candidate-feed-contract.js';
+import {
+  validateCandidateFeedCompleteness,
+  validateCandidateFeedStructure,
+} from './candidate-feed-contract.js';
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
 import { normalizeConfig } from './config-contract.js';
 import { readDeliveryLedger } from './delivery-ledger.js';
@@ -18,6 +21,7 @@ import {
 } from './digest-selection-contract.js';
 import { resolveRuntimePaths } from './lib/paths.js';
 import { loadSourceRegistry } from './source-registry.js';
+import { sanitizeDiagnostic } from './source-status.js';
 import { readJsonLimited } from './validate-digest-selection.js';
 import { validateFeed } from './feed-contract.js';
 
@@ -137,7 +141,17 @@ export async function loadCurationPrompt(options = {}) {
 }
 
 function expectedRegistry(registry) {
-  return registry.map(({ id, sourceId, channel }) => ({ id: id ?? sourceId, channel }));
+  return registry.map(({ id, sourceId, channel, name }) => ({
+    id: id ?? sourceId, channel, name,
+  }));
+}
+
+function safeSourceName(value, fallback) {
+  const sanitized = sanitizeDiagnostic(value || fallback)
+    .replace(/[\u0000-\u001f\u007f]/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return Array.from(sanitized || fallback).slice(0, 200).join('');
 }
 
 function boundedCandidates(candidates) {
@@ -242,19 +256,50 @@ export async function prepareDigest({
     throw new Error('scheduled run is not authorized');
   }
   if (normalizedConfig.enabledChannels.length === 0) {
-    return { status: 'no-channels', message: '未启用任何内容渠道。' };
+    return {
+      status: 'no-channels',
+      message: '未启用任何内容渠道，请在设置中至少启用一个渠道。',
+      contentStats: {
+        candidateCount: 0, eligibleCount: 0, excludedCount: 0, selectedCount: 0,
+      },
+    };
   }
   if (!['daily', 'weekly'].includes(frequency)) throw new TypeError('frequency must be daily or weekly');
   if (!Array.isArray(registry)) throw new TypeError('source registry is unavailable');
   if (typeof loadCandidateFeed !== 'function') throw new TypeError('candidate Feed loader is unavailable');
 
   const feed = await loadCandidateFeed();
-  const feedValidation = validateCandidateFeed(feed, { expectedRegistry: expectedRegistry(registry) });
+  const expected = expectedRegistry(registry);
+  const feedValidation = validateCandidateFeedStructure(feed, { expectedRegistry: expected });
   if (!feedValidation.valid) throw new Error('candidate Feed is invalid');
+  const completeness = validateCandidateFeedCompleteness(feed, { expectedRegistry: expected });
   const resolved = await resolveDigestCandidates({
     config: normalizedConfig, frequency, now, deliveryEvents, loadCandidateFeed: async () => feed,
   });
   const enabledRegistry = registry.filter(({ channel }) => normalizedConfig.enabledChannels.includes(channel));
+  const enabledMissingSources = completeness.missingSources.filter(({ channel }) => (
+    normalizedConfig.enabledChannels.includes(channel)
+  ));
+  const sourceStatuses = [
+    ...resolved.sourceStatuses.map((status) => ({ ...status })),
+    ...enabledMissingSources.map(({ sourceId, channel, sourceName }) => ({
+      sourceId,
+      channel,
+      sourceName: safeSourceName(sourceName, sourceId),
+      status: 'error',
+      candidateCount: 0,
+      errorSummary: 'Source status was not reported.',
+    })),
+  ];
+  const disabledExclusions = resolved.excluded.counts['channel-disabled'] ?? 0;
+  const contentStats = {
+    candidateCount: feed.candidates.filter(({ channel }) => (
+      normalizedConfig.enabledChannels.includes(channel)
+    )).length,
+    eligibleCount: resolved.eligibleCandidates.length,
+    excludedCount: resolved.excluded.total - disabledExclusions,
+    selectedCount: 0,
+  };
   const request = {
     schemaVersion: DIGEST_CURATION_REQUEST_SCHEMA_VERSION,
     digestId: randomUUID(),
@@ -263,10 +308,11 @@ export async function prepareDigest({
     eligibleCandidates: boundedCandidates(resolved.eligibleCandidates),
     ...(Array.isArray(normalizedConfig.interests) && normalizedConfig.interests.length > 0
       ? { interests: [...normalizedConfig.interests] } : {}),
-    sourceStatuses: resolved.sourceStatuses.map((status) => ({ ...status })),
+    sourceStatuses,
     sourceCompleteness: sourceCompleteness(
-      resolved.sourceStatuses, enabledRegistry.length, feed, now,
+      sourceStatuses, enabledRegistry.length, feed, now,
     ),
+    contentStats,
     selectionRules: { ...SELECTION_RULES },
     generatedAt: now,
   };
@@ -281,6 +327,7 @@ export async function prepareDigest({
     request,
     prompt,
     excluded: resolved.excluded,
+    contentStats,
   };
 }
 

@@ -42,6 +42,9 @@ test('finalize renders only deterministically selected items for a ready digest'
   assert.equal(result.items[0].scores.totalScore, 80);
   assert.match(result.items[0].reason, /官方发布/);
   assert.equal(result.items.some(({ title }) => title === 'Independent launch report'), false);
+  assert.deepEqual(result.contentStats, {
+    candidateCount: 2, eligibleCount: 2, excludedCount: 0, selectedCount: 1,
+  });
 });
 
 test('complete empty daily and weekly runs use localized no-update wording', async () => {
@@ -82,6 +85,22 @@ test('a partial source can deliver available selected items without claiming com
   const result = finalizeDigest(request, selection);
   assert.equal(result.status, 'partial');
   assert.equal(result.items.length, 1);
+});
+
+test('partial artifact names bounded incomplete sources without leaking diagnostic details', async () => {
+  const request = await fixture('curation/valid-request.json');
+  const selection = await fixture('selections/valid-selection.json');
+  request.sourceStatuses[0] = {
+    ...request.sourceStatuses[0], status: 'partial', failedCandidateCount: 1,
+    errorSummary: 'Official Lab: token=super-secret https://private.example/path',
+  };
+  request.sourceCompleteness = { ...request.sourceCompleteness, status: 'incomplete', complete: false };
+  const result = finalizeDigest(request, selection);
+  assert.deepEqual(result.incompleteSources, [{
+    sourceId: 'blog:official', channel: 'blogs', sourceName: 'Official Lab', status: 'partial',
+  }]);
+  assert.match(result.message, /Official Lab/);
+  assert.doesNotMatch(JSON.stringify(result), /super-secret|private\.example|errorSummary/);
 });
 
 test('finalize CLI failures report preparation-failed and never create or overwrite delivery output', async (t) => {

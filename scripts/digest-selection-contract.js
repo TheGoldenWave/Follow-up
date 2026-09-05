@@ -79,6 +79,15 @@ function requestSemanticErrors(request) {
       errors.push(`/eligibleCandidates/${index}/channel must match its source status`);
     }
   }
+  if (request?.contentStats) {
+    if (request.contentStats.eligibleCount !== candidateIds.length) {
+      errors.push('/contentStats/eligibleCount must match /eligibleCandidates length');
+    }
+    if (request.contentStats.candidateCount
+        !== request.contentStats.eligibleCount + request.contentStats.excludedCount) {
+      errors.push('/contentStats candidateCount must equal eligibleCount plus excludedCount');
+    }
+  }
   return errors;
 }
 

@@ -309,7 +309,7 @@ Read `~/.follow-builders/config.json` for language, schedule, delivery, and prom
 cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js --request-out <absolute-request-path> [--frequency daily|weekly] [--scheduled] 2>/dev/null
 ```
 
-- `no-channels`：停止，不生成 selection，不投递 daily no-update。
+- `no-channels`：停止，不生成 selection，不投递 daily no-update；向用户展示全零 `contentStats` 和启用渠道的操作提示。
 - `preparation-failed`：停止；不得继续评分、finalize 或 deliver。
 - `request-ready`：继续。即使 `contextStatus` 为 `partial` 或 `incomplete-history`，仍可对已有候选评分，但后续必须披露覆盖状态。
 
@@ -338,6 +338,8 @@ finalize 会再次校验 request、manifest、`digestId` 和确定性选择，�
 - `partial`：来源不完整；可交付已有合格项，但不能声称没有重要更新。
 - `incomplete-history`：历史覆盖不足，优先于 `partial` 披露。
 - `preparation-failed`：request、selection、Schema、IO 或评分结果无效；停止且不得创建或覆盖可投递 output。
+
+最终 artifact 的 `contentStats` 记录候选、合格、排除和入选数量。`partial` 或 `incomplete-history` 还包含经过清理和数量限制的 `incompleteSources`；只展示 source ID、名称、channel 与状态，不复制 Feed 的 error details、URL 或凭据片段。
 
 ### Step 6: Deliver
 
