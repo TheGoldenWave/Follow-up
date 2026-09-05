@@ -97,6 +97,7 @@ export function deriveDigestWindow({
       );
     }
   }
+  actualStartMs = Math.min(actualStartMs, endMs);
 
   return {
     frequency,

@@ -180,11 +180,15 @@ test('weekly truncation intersects any removed first-seen point and respects boo
     truncation: {
       affectedSourceIds: ['blog:a'], oldestRetainedAt: '2025-01-01T00:00:00.000Z',
       oldestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-09T00:00:00.000Z' },
-      newestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-10T00:00:00.000Z' },
+      newestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-10T08:00:00.000Z' },
       removedCount: 2,
     },
   });
   assert.equal(affected.status, 'incomplete-history');
+  assert.deepEqual(affected.actualInterval, {
+    start: '2026-09-10T00:00:00.000Z',
+    end: '2026-09-10T00:00:00.000Z',
+  });
 
   const atExclusiveEnd = deriveDigestWindow({
     ...base,

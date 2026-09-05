@@ -197,3 +197,30 @@ test('weekly eligibility after a delivered digest includes a candidate first see
     [hashId('seen-at-now')],
   );
 });
+
+test('bootstrap truncation after the UTC end yields an empty non-reversed candidate interval', async () => {
+  const candidateFeed = feed([
+    candidate('before-end', 'x', 'x:a', '2026-09-09T00:00:00.000Z'),
+    candidate('after-end', 'x', 'x:a', '2026-09-10T08:00:00.000Z'),
+  ]);
+  candidateFeed.historyTruncated = true;
+  candidateFeed.truncation = {
+    affectedSourceIds: ['x:a'],
+    oldestRetainedAt: '2025-01-01T00:00:00.000Z',
+    oldestRemovedFirstSeenAtBySource: { 'x:a': '2026-09-09T00:00:00.000Z' },
+    newestRemovedFirstSeenAtBySource: { 'x:a': '2026-09-10T08:00:00.000Z' },
+    removedCount: 2,
+  };
+  const result = await resolveDigestCandidates({
+    config: { enabledChannels: ['x'] }, frequency: 'weekly',
+    now: '2026-09-10T08:00:00.000Z', deliveryEvents: [],
+    loadCandidateFeed: async () => candidateFeed,
+  });
+  assert.equal(result.status, 'incomplete-history');
+  assert.deepEqual(result.coverage.actualInterval, {
+    start: '2026-09-10T00:00:00.000Z',
+    end: '2026-09-10T00:00:00.000Z',
+  });
+  assert.deepEqual(result.eligibleCandidates, []);
+  assert.equal(result.excluded.counts['outside-coverage'], 2);
+});
