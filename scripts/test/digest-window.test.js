@@ -119,6 +119,8 @@ test('truncation only makes coverage incomplete for affected requested sources a
     truncation: {
       affectedSourceIds: ['blog:a'], oldestRetainedAt: '2026-09-05T00:00:00.000Z', removedCount: 2,
       oldestRetainedFirstSeenAtBySource: { 'blog:a': '2026-09-05T00:00:00.000Z' },
+      oldestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-04T00:00:00.000Z' },
+      newestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-05T00:00:00.000Z' },
     },
   };
   assert.equal(deriveDigestWindow({ ...base, enabledSourceIds: ['x:a'] }).status, 'complete');
@@ -158,9 +160,40 @@ test('weekly truncation completeness uses the affected source firstSeenAt bounda
       affectedSourceIds: ['blog:a'],
       oldestRetainedAt: '2025-01-01T00:00:00.000Z',
       oldestRetainedFirstSeenAtBySource: { 'blog:a': '2026-09-08T00:00:00.000Z' },
+      oldestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-07T00:00:00.000Z' },
+      newestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-08T00:00:00.000Z' },
       removedCount: 1,
     },
   });
   assert.equal(coverage.status, 'incomplete-history');
   assert.equal(coverage.actualInterval.start, '2026-09-08T00:00:00.000Z');
+});
+
+test('weekly truncation intersects any removed first-seen point and respects bootstrap half-open end', () => {
+  const base = {
+    frequency: 'weekly', now: '2026-09-10T08:00:00.000Z',
+    continuousHistorySince: '2026-09-01T00:00:00.000Z', deliveryEvents: [],
+    enabledSourceIds: ['blog:a'],
+  };
+  const affected = deriveDigestWindow({
+    ...base,
+    truncation: {
+      affectedSourceIds: ['blog:a'], oldestRetainedAt: '2025-01-01T00:00:00.000Z',
+      oldestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-09T00:00:00.000Z' },
+      newestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-10T00:00:00.000Z' },
+      removedCount: 2,
+    },
+  });
+  assert.equal(affected.status, 'incomplete-history');
+
+  const atExclusiveEnd = deriveDigestWindow({
+    ...base,
+    truncation: {
+      affectedSourceIds: ['blog:a'], oldestRetainedAt: '2025-01-01T00:00:00.000Z',
+      oldestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-10T00:00:00.000Z' },
+      newestRemovedFirstSeenAtBySource: { 'blog:a': '2026-09-10T00:00:00.000Z' },
+      removedCount: 1,
+    },
+  });
+  assert.equal(atExclusiveEnd.status, 'complete');
 });

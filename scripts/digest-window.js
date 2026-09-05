@@ -43,6 +43,7 @@ export function deriveDigestWindow({
   const prior = frequency === 'weekly'
     ? previousSuccess(deliveryEvents, frequency, nowMs)
     : null;
+  const endInclusive = frequency !== 'weekly' || Boolean(prior);
   const endMs = frequency === 'weekly' && !prior ? startOfUtcDay(nowMs) : nowMs;
   if (historyStartMs > endMs) {
     throw new RangeError('continuousHistorySince must not be later than the coverage end');
@@ -68,18 +69,32 @@ export function deriveDigestWindow({
   }
 
   if (truncation?.oldestRetainedAt && Array.isArray(truncation.affectedSourceIds)) {
-    const affectedBoundaries = truncation.affectedSourceIds
+    const intersectingRanges = truncation.affectedSourceIds
       .filter((sourceId) => enabledSourceIds.includes(sourceId))
-      .map((sourceId) => truncation.oldestRetainedFirstSeenAtBySource?.[sourceId]
-        ?? truncation.oldestRetainedAt)
-      .map((value) => timestamp(value, 'truncation firstSeenAt boundary'));
-    const oldestRetainedMs = affectedBoundaries.length > 0
-      ? Math.max(...affectedBoundaries)
-      : null;
-    if (oldestRetainedMs !== null
-      && requestedStartMs <= oldestRetainedMs && oldestRetainedMs <= endMs) {
+      .map((sourceId) => ({
+        oldest: timestamp(
+          truncation.oldestRemovedFirstSeenAtBySource?.[sourceId]
+            ?? truncation.oldestRetainedFirstSeenAtBySource?.[sourceId]
+            ?? truncation.oldestRetainedAt,
+          'truncation oldest removed firstSeenAt',
+        ),
+        newest: timestamp(
+          truncation.newestRemovedFirstSeenAtBySource?.[sourceId]
+            ?? truncation.oldestRetainedFirstSeenAtBySource?.[sourceId]
+            ?? truncation.oldestRetainedAt,
+          'truncation newest removed firstSeenAt',
+        ),
+      }))
+      .filter(({ oldest, newest }) => (
+        newest >= requestedStartMs
+        && (endInclusive ? oldest <= endMs : oldest < endMs)
+      ));
+    if (intersectingRanges.length > 0) {
       reasons.push('history-truncated');
-      actualStartMs = Math.max(actualStartMs, oldestRetainedMs);
+      actualStartMs = Math.max(
+        actualStartMs,
+        ...intersectingRanges.map(({ newest }) => newest),
+      );
     }
   }
 
@@ -89,7 +104,7 @@ export function deriveDigestWindow({
     complete: reasons.length === 0,
     requestedInterval: { start: iso(requestedStartMs), end: iso(endMs) },
     actualInterval: { start: iso(actualStartMs), end: iso(endMs) },
-    bounds: { startInclusive: true, endInclusive: frequency !== 'weekly' || Boolean(prior) },
+    bounds: { startInclusive: true, endInclusive },
     reasons,
   };
 }

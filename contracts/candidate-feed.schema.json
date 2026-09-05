@@ -43,6 +43,8 @@
               "affectedSourceIds": { "maxItems": 0 },
               "oldestRetainedAt": { "type": "null" },
               "oldestRetainedFirstSeenAtBySource": { "maxProperties": 0 },
+              "oldestRemovedFirstSeenAtBySource": { "maxProperties": 0 },
+              "newestRemovedFirstSeenAtBySource": { "maxProperties": 0 },
               "removedCount": { "const": 0 }
             }
           }
@@ -101,6 +103,16 @@
           ]
         },
         "oldestRetainedFirstSeenAtBySource": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/sourceId" },
+          "additionalProperties": { "$ref": "#/$defs/dateTime" }
+        },
+        "oldestRemovedFirstSeenAtBySource": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/sourceId" },
+          "additionalProperties": { "$ref": "#/$defs/dateTime" }
+        },
+        "newestRemovedFirstSeenAtBySource": {
           "type": "object",
           "propertyNames": { "$ref": "#/$defs/sourceId" },
           "additionalProperties": { "$ref": "#/$defs/dateTime" }

@@ -100,7 +100,8 @@ function activePriorTruncation(previous, registry, collectionStart) {
     const days = channels.get(sourceId) === 'podcasts'
       ? CANDIDATE_RETENTION.podcastDays
       : CANDIDATE_RETENTION.defaultDays;
-    const boundary = previous.truncation.oldestRetainedFirstSeenAtBySource?.[sourceId]
+    const boundary = previous.truncation.newestRemovedFirstSeenAtBySource?.[sourceId]
+      ?? previous.truncation.oldestRetainedFirstSeenAtBySource?.[sourceId]
       ?? previous.truncation.oldestRetainedAt;
     return Date.parse(boundary) >= utcRetentionCutoff(collectionStart, days);
   });
@@ -115,6 +116,8 @@ function truncation(retained, removedByCap, priorTruncation) {
         affectedSourceIds: [],
         oldestRetainedAt: null,
         oldestRetainedFirstSeenAtBySource: {},
+        oldestRemovedFirstSeenAtBySource: {},
+        newestRemovedFirstSeenAtBySource: {},
         removedCount: 0,
       },
     };
@@ -127,6 +130,15 @@ function truncation(retained, removedByCap, priorTruncation) {
     ...removedByCap.map(({ sourceId }) => sourceId),
   ])].sort();
   const previousBoundaries = priorTruncation?.oldestRetainedFirstSeenAtBySource ?? {};
+  const previousOldestRemoved = priorTruncation?.oldestRemovedFirstSeenAtBySource ?? {};
+  const previousNewestRemoved = priorTruncation?.newestRemovedFirstSeenAtBySource ?? {};
+  const previouslyAffected = new Set(priorTruncation?.affectedSourceIds ?? []);
+  const currentRemovedBySource = new Map();
+  for (const candidate of removedByCap) {
+    const values = currentRemovedBySource.get(candidate.sourceId) ?? [];
+    values.push(Date.parse(candidate.firstSeenAt));
+    currentRemovedBySource.set(candidate.sourceId, values);
+  }
   const oldestRetainedFirstSeenAtBySource = Object.fromEntries(affectedSourceIds.map((sourceId) => {
     const retainedForSource = retained.filter((candidate) => candidate.sourceId === sourceId);
     const removedForSource = removedByCap.filter((candidate) => candidate.sourceId === sourceId);
@@ -138,7 +150,9 @@ function truncation(retained, removedByCap, priorTruncation) {
       : Number.NEGATIVE_INFINITY;
     const currentBoundary = Math.max(retainedBoundary, removedBoundary);
     const previousBoundary = Date.parse(previousBoundaries[sourceId]);
-    const fallbackBoundary = Date.parse(priorTruncation?.oldestRetainedAt);
+    const fallbackBoundary = previouslyAffected.has(sourceId)
+      ? Date.parse(priorTruncation?.oldestRetainedAt)
+      : Number.NaN;
     const boundary = Math.max(
       currentBoundary,
       Number.isFinite(previousBoundary) ? previousBoundary : Number.NEGATIVE_INFINITY,
@@ -146,12 +160,38 @@ function truncation(retained, removedByCap, priorTruncation) {
     );
     return [sourceId, new Date(boundary).toISOString()];
   }));
+  const oldestRemovedFirstSeenAtBySource = Object.fromEntries(affectedSourceIds.map((sourceId) => {
+    const current = currentRemovedBySource.get(sourceId) ?? [];
+    const prior = Date.parse(previousOldestRemoved[sourceId]);
+    const fallbackPriorBoundary = previouslyAffected.has(sourceId)
+      ? Date.parse(priorTruncation?.oldestRetainedAt)
+      : Number.NaN;
+    const values = [
+      ...current,
+      Number.isFinite(prior) ? prior : fallbackPriorBoundary,
+    ].filter(Number.isFinite);
+    return [sourceId, new Date(Math.min(...values)).toISOString()];
+  }));
+  const newestRemovedFirstSeenAtBySource = Object.fromEntries(affectedSourceIds.map((sourceId) => {
+    const current = currentRemovedBySource.get(sourceId) ?? [];
+    const prior = Date.parse(previousNewestRemoved[sourceId]);
+    const fallbackPriorBoundary = previouslyAffected.has(sourceId)
+      ? Date.parse(priorTruncation?.oldestRetainedAt)
+      : Number.NaN;
+    const values = [
+      ...current,
+      Number.isFinite(prior) ? prior : fallbackPriorBoundary,
+    ].filter(Number.isFinite);
+    return [sourceId, new Date(Math.max(...values)).toISOString()];
+  }));
   return {
     historyTruncated: true,
     truncation: {
       affectedSourceIds,
       oldestRetainedAt: new Date(Math.min(...retained.map(retentionTimestamp))).toISOString(),
       oldestRetainedFirstSeenAtBySource,
+      oldestRemovedFirstSeenAtBySource,
+      newestRemovedFirstSeenAtBySource,
       removedCount: (priorTruncation?.removedCount ?? 0) + removedByCap.length,
     },
   };

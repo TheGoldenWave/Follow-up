@@ -197,6 +197,14 @@ test('global cap records only otherwise-retained removals and deterministic trun
     'x:a': candidates[999].firstSeenAt,
     'x:b': candidates[998].firstSeenAt,
   });
+  assert.deepEqual(merged.truncation.oldestRemovedFirstSeenAtBySource, {
+    'x:a': candidates[1003].firstSeenAt,
+    'x:b': candidates[1004].firstSeenAt,
+  });
+  assert.deepEqual(merged.truncation.newestRemovedFirstSeenAtBySource, {
+    'x:a': candidates[1001].firstSeenAt,
+    'x:b': candidates[1000].firstSeenAt,
+  });
 });
 
 test('cap truncation records first-seen boundaries even when publication dates are old', () => {
@@ -275,6 +283,8 @@ test('keeps prior truncation while an affected first-seen boundary remains recen
       affectedSourceIds: ['x:a'],
       oldestRetainedAt: '2026-08-01T00:00:00.000Z',
       oldestRetainedFirstSeenAtBySource: { 'x:a': '2026-09-19T00:00:00.000Z' },
+      oldestRemovedFirstSeenAtBySource: { 'x:a': '2026-09-18T00:00:00.000Z' },
+      newestRemovedFirstSeenAtBySource: { 'x:a': '2026-09-19T00:00:00.000Z' },
       removedCount: 1,
     },
   });
@@ -284,6 +294,39 @@ test('keeps prior truncation while an affected first-seen boundary remains recen
   });
   assert.equal(merged.historyTruncated, true);
   assert.deepEqual(merged.truncation, previous.truncation);
+});
+
+test('merging prior truncation conservatively expands each source removed first-seen range', () => {
+  const nowMs = Date.parse(collectionStart);
+  const candidates = Array.from({ length: 1005 }, (_, index) => candidate({
+    sourceId: index % 2 ? 'x:a' : 'x:b', nativeId: `range-${index}`,
+    publishedAt: new Date(nowMs - index * 1000).toISOString(),
+    firstSeenAt: new Date(nowMs - index * 1000).toISOString(),
+  }));
+  const previous = prior(candidates.slice(0, 1000), {
+    historyTruncated: true,
+    truncation: {
+      affectedSourceIds: ['x:a'],
+      oldestRetainedAt: '2026-09-01T00:00:00.000Z',
+      oldestRetainedFirstSeenAtBySource: { 'x:a': '2026-09-02T00:00:00.000Z' },
+      oldestRemovedFirstSeenAtBySource: { 'x:a': '2026-09-01T00:00:00.000Z' },
+      newestRemovedFirstSeenAtBySource: { 'x:a': '2026-09-06T07:59:30.000Z' },
+      removedCount: 2,
+    },
+  });
+  const merged = mergeCandidateFeed(previous, {
+    currentCandidates: candidates.slice(1000),
+    statuses: registry.map((source) => status(source)), registry, collectionStart,
+  });
+  assert.equal(merged.truncation.oldestRemovedFirstSeenAtBySource['x:a'], '2026-09-01T00:00:00.000Z');
+  assert.equal(
+    merged.truncation.newestRemovedFirstSeenAtBySource['x:a'],
+    '2026-09-06T07:59:30.000Z',
+  );
+  assert.equal(
+    merged.truncation.oldestRemovedFirstSeenAtBySource['x:b'],
+    candidates[1004].firstSeenAt,
+  );
 });
 
 test('retention uses complete UTC calendar days rather than elapsed local or DST hours', () => {

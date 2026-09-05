@@ -200,6 +200,25 @@ test('enforces feed and candidate timestamp ordering invariants', () => {
   }
 });
 
+test('truncation first-seen ranges are paired, source-complete, and ordered', () => {
+  const fields = validFields();
+  fields.historyTruncated = true;
+  fields.truncation = {
+    affectedSourceIds: ['blog:lab'],
+    oldestRetainedAt: '2026-09-05T00:00:00.000Z',
+    oldestRemovedFirstSeenAtBySource: { 'blog:lab': '2026-09-04T00:00:00.000Z' },
+    newestRemovedFirstSeenAtBySource: { 'blog:lab': '2026-09-05T00:00:00.000Z' },
+    removedCount: 1,
+  };
+  assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, true);
+
+  delete fields.truncation.newestRemovedFirstSeenAtBySource['blog:lab'];
+  assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, false);
+
+  fields.truncation.newestRemovedFirstSeenAtBySource['blog:lab'] = '2026-09-03T00:00:00.000Z';
+  assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, false);
+});
+
 test('requires exactly one status for every configured source', () => {
   const configured = [
     { id: 'blog:lab', channel: 'blogs', name: 'Renamed Lab' },

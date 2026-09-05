@@ -161,6 +161,29 @@ function timestampErrors(feed) {
 function truncationErrors(feed) {
   const errors = [];
   const boundaries = feed?.truncation?.oldestRetainedFirstSeenAtBySource;
+  const oldestRemoved = feed?.truncation?.oldestRemovedFirstSeenAtBySource;
+  const newestRemoved = feed?.truncation?.newestRemovedFirstSeenAtBySource;
+  if (oldestRemoved || newestRemoved) {
+    if (!oldestRemoved || !newestRemoved) {
+      errors.push('/truncation removed firstSeenAt range maps must be provided together');
+    } else {
+      const affected = new Set(feed.truncation.affectedSourceIds ?? []);
+      for (const sourceId of affected) {
+        if (!Object.hasOwn(oldestRemoved, sourceId) || !Object.hasOwn(newestRemoved, sourceId)) {
+          errors.push(`/truncation removed firstSeenAt ranges are missing affected source ${sourceId}`);
+          continue;
+        }
+        if (Date.parse(oldestRemoved[sourceId]) > Date.parse(newestRemoved[sourceId])) {
+          errors.push(`/truncation removed firstSeenAt range is reversed for source ${sourceId}`);
+        }
+      }
+      for (const sourceId of [...Object.keys(oldestRemoved), ...Object.keys(newestRemoved)]) {
+        if (!affected.has(sourceId)) {
+          errors.push(`/truncation removed firstSeenAt ranges contain unaffected source ${sourceId}`);
+        }
+      }
+    }
+  }
   if (!boundaries || typeof boundaries !== 'object' || Array.isArray(boundaries)) return errors;
   const affected = new Set(feed.truncation.affectedSourceIds ?? []);
   for (const sourceId of Object.keys(boundaries)) {
