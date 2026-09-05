@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildStatuses, main } from '../generate-feed.js';
+import { buildStatuses, fetchPodcastContent, main } from '../generate-feed.js';
 
 function memoryRuntime(initial = {}, { failRenameAt = Infinity } = {}) {
   const files = new Map(Object.entries(initial));
@@ -9,6 +9,8 @@ function memoryRuntime(initial = {}, { failRenameAt = Infinity } = {}) {
   return {
     files,
     fs: {
+      async mkdir() {},
+      async open() { return { async sync() {}, async close() {} }; },
       async readFile(path) {
         if (!files.has(String(path))) { const error = new Error('missing'); error.code = 'ENOENT'; throw error; }
         return files.get(String(path));
@@ -21,6 +23,12 @@ function memoryRuntime(initial = {}, { failRenameAt = Infinity } = {}) {
         files.delete(String(from));
       },
       async unlink(path) { files.delete(String(path)); },
+      async rm(path) {
+        const prefix = `${String(path)}/`;
+        for (const key of files.keys()) {
+          if (key === String(path) || key.startsWith(prefix)) files.delete(key);
+        }
+      },
     },
   };
 }
@@ -29,6 +37,89 @@ const sources = {
   x_accounts: [], podcasts: [], blogs: [], newsletters: [],
   academic: { sources: [], filters: {} }, zhTech: [],
 };
+
+function rssResponse(items) {
+  return {
+    ok: true,
+    status: 200,
+    async text() {
+      return `<rss><channel>${items.map(({ guid, title, publishedAt }) => `<item><guid>${guid}</guid><title>${title}</title><pubDate>${publishedAt}</pubDate><link>https://episodes.example/${guid}</link></item>`).join('')}</channel></rss>`;
+    },
+  };
+}
+
+test('podcast collection attempts every enabled source after the first transcript succeeds', async () => {
+  const podcasts = [
+    { id: 'podcast:first', name: 'First', rssUrl: 'https://rss.example/first', url: 'https://video.example/first' },
+    { id: 'podcast:second', name: 'Second', rssUrl: 'https://rss.example/second', url: 'https://video.example/second' },
+  ];
+  const transcriptCalls = [];
+  const statuses = [];
+  const results = await fetchPodcastContent(
+    podcasts,
+    'key',
+    { seenVideos: {} },
+    [],
+    {
+      now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+      fetchImpl: async (url) => rssResponse([{
+        guid: url.endsWith('/first') ? 'first-episode' : 'second-episode',
+        title: url.endsWith('/first') ? 'First episode' : 'Second episode',
+        publishedAt: 'Sat, 05 Sep 2026 08:00:00 GMT',
+      }]),
+      fetchTranscriptImpl: async (_rssUrl, guid) => {
+        transcriptCalls.push(guid);
+        return { transcript: `Transcript for ${guid}` };
+      },
+      findYouTubeImpl: async () => null,
+      statuses,
+    },
+  );
+
+  assert.deepEqual(transcriptCalls, ['first-episode', 'second-episode']);
+  assert.deepEqual(results.map(({ sourceId }) => sourceId), ['podcast:first', 'podcast:second']);
+  assert.deepEqual(statuses.map(({ sourceId, status }) => ({ sourceId, status })), [
+    { sourceId: 'podcast:first', status: 'ok' },
+    { sourceId: 'podcast:second', status: 'ok' },
+  ]);
+});
+
+test('podcast statuses distinguish partial, error, and proven no-results sources', async () => {
+  const podcasts = [
+    { id: 'podcast:partial', name: 'Partial', rssUrl: 'https://rss.example/partial', url: 'https://video.example/partial' },
+    { id: 'podcast:error', name: 'Error', rssUrl: 'https://rss.example/error', url: 'https://video.example/error' },
+    { id: 'podcast:empty', name: 'Empty', rssUrl: 'https://rss.example/empty', url: 'https://video.example/empty' },
+  ];
+  const statuses = [];
+  const errors = [];
+  const results = await fetchPodcastContent(
+    podcasts,
+    'key',
+    { seenVideos: {} },
+    errors,
+    {
+      now: () => Date.parse('2026-09-06T08:00:00.000Z'),
+      fetchImpl: async (url) => rssResponse(url.endsWith('/empty') ? [] : url.endsWith('/partial') ? [
+        { guid: 'partial-bad', title: 'Bad', publishedAt: 'Sat, 05 Sep 2026 09:00:00 GMT' },
+        { guid: 'partial-good', title: 'Good', publishedAt: 'Sat, 05 Sep 2026 08:00:00 GMT' },
+      ] : [{ guid: 'error-bad', title: 'Only bad', publishedAt: 'Sat, 05 Sep 2026 08:00:00 GMT' }]),
+      fetchTranscriptImpl: async (_rssUrl, guid) => guid === 'partial-good'
+        ? { transcript: 'usable transcript' }
+        : { error: 'transcript unavailable' },
+      findYouTubeImpl: async () => null,
+      statuses,
+    },
+  );
+
+  assert.deepEqual(results.map(({ guid }) => guid), ['partial-good']);
+  assert.deepEqual(statuses.map(({ sourceId, status, candidateCount, failedCandidateCount }) => ({
+    sourceId, status, candidateCount, failedCandidateCount,
+  })), [
+    { sourceId: 'podcast:partial', status: 'partial', candidateCount: 1, failedCandidateCount: 1 },
+    { sourceId: 'podcast:error', status: 'error', candidateCount: 0, failedCandidateCount: 1 },
+    { sourceId: 'podcast:empty', status: 'no-results', candidateCount: 0, failedCandidateCount: undefined },
+  ]);
+});
 
 test('ordinary full generation rejects a missing candidate artifact before collection or publication', async () => {
   const runtime = memoryRuntime();
@@ -41,6 +132,37 @@ test('ordinary full generation rejects a missing candidate artifact before colle
   }), /missing.*initialize/i);
   assert.equal(collected, false);
   assert.equal(runtime.files.size, 0);
+});
+
+test('generation acquires the publication lock and recovers before reading or collecting', async () => {
+  const events = [];
+  const runtime = memoryRuntime();
+  const originalRead = runtime.fs.readFile;
+  runtime.fs.readFile = async (...args) => {
+    events.push('read');
+    return originalRead(...args);
+  };
+  await main({
+    args: ['--tweets-only'], env: { X_BEARER_TOKEN: 'x' }, fsImpl: runtime.fs, rootDir: '/repo',
+    loadSourcesImpl: async () => sources,
+    withPublicationLockImpl: async (_root, operation) => {
+      events.push('lock');
+      return operation();
+    },
+    recoverPublicationImpl: async () => { events.push('recover'); },
+    collectAllImpl: async () => {
+      events.push('collect');
+      return {
+        feeds: { x: { schemaVersion: '1.0', generatedAt: '2026-09-06T08:00:00.000Z', lookbackHours: 24, stats: {}, x: [] } },
+        state: { seenTweets: {}, seenVideos: {}, seenArticles: {} },
+      };
+    },
+    publishTransactionImpl: async () => {},
+    now: () => Date.parse('2026-09-06T08:00:00.000Z'), stderr() {},
+  });
+  assert.deepEqual(events.slice(0, 2), ['lock', 'recover']);
+  assert.ok(events.indexOf('recover') < events.indexOf('read'));
+  assert.ok(events.indexOf('recover') < events.indexOf('collect'));
 });
 
 test('--initialize-candidate-feed refuses an existing artifact before collection', async () => {

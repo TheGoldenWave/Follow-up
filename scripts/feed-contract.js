@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { validateCandidateFeed } from './candidate-feed-contract.js';
+import { recoverFeedPublication, withFeedPublicationLock } from './feed-publication.js';
 import { loadSourceRegistry } from './source-registry.js';
 
 export const FEED_SCHEMA_VERSION = '1.0';
@@ -97,8 +98,21 @@ export async function validateFeedFiles({
   return errors;
 }
 
+export async function validateFeedFilesLocked({
+  rootDir = fileURLToPath(new URL('../', import.meta.url)),
+  withLockImpl = withFeedPublicationLock,
+  recoverImpl = recoverFeedPublication,
+  validateImpl = validateFeedFiles,
+  ...validateOptions
+} = {}) {
+  return withLockImpl(rootDir, async () => {
+    await recoverImpl(rootDir);
+    return validateImpl(validateOptions);
+  });
+}
+
 async function main() {
-  const errors = await validateFeedFiles();
+  const errors = await validateFeedFilesLocked();
   if (errors.length > 0) {
     for (const error of errors) console.error(error);
     process.exitCode = 1;

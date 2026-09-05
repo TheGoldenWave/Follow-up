@@ -15,10 +15,10 @@
 
 import { readFile, rename, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { pathToFileURL } from "url";
 
-import { createFeedEnvelope, validateFeed } from "./feed-contract.js";
+import { createFeedEnvelope, validateFeed, validateFeedFiles } from "./feed-contract.js";
 import { fetchBlogContent } from "./blog-collector.js";
 import { validateBlogSources } from "./blog-source-config.js";
 import {
@@ -29,6 +29,11 @@ import {
 } from "./candidate-feed-store.js";
 import { normalizeLegacyFeeds } from "./candidate-normalization.js";
 import { createSourceStatus } from "./source-status.js";
+import {
+  publishFeedTransaction,
+  recoverFeedPublication,
+  withFeedPublicationLock,
+} from "./feed-publication.js";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -419,150 +424,103 @@ async function fetchPod2txtTranscript(rssUrl, guid, apiKey) {
 // 1. Fetches the RSS feed to discover episodes
 // 2. Filters by lookback window and dedup
 // 3. Fetches transcript via pod2txt for the newest unseen episode
-async function fetchPodcastContent(podcasts, apiKey, state, errors, { now = Date.now } = {}) {
+async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}) {
+  const now = options.now ?? Date.now;
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const fetchTranscriptImpl = options.fetchTranscriptImpl ?? fetchPod2txtTranscript;
+  const findYouTubeImpl = options.findYouTubeImpl ?? findYouTubeEpisodeUrl;
+  const statuses = options.statuses;
   const cutoff = new Date(now() - PODCAST_LOOKBACK_HOURS * 60 * 60 * 1000);
-  const allCandidates = [];
+  const results = [];
 
-  // Step 1: Discover episodes from each podcast's RSS feed
   for (const podcast of podcasts) {
+    const sourceErrors = [];
+    let failedCandidateCount = 0;
     if (!podcast.rssUrl) {
-      errors.push(`Podcast: No rssUrl configured for ${podcast.name}`);
-      continue;
-    }
-
-    try {
-      console.error(`  Fetching RSS for ${podcast.name}...`);
-      const rssRes = await fetch(podcast.rssUrl, {
-        headers: {
-          "User-Agent": RSS_USER_AGENT,
-          Accept: "application/rss+xml, application/xml, text/xml, */*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-        signal: AbortSignal.timeout(30000), // 30 second timeout for large feeds
-      });
-
-      if (!rssRes.ok) {
-        console.error(
-          `  ${podcast.name}: RSS fetch failed — HTTP ${rssRes.status}`,
-        );
-        errors.push(
-          `Podcast: Failed to fetch RSS for ${podcast.name}: HTTP ${rssRes.status}`,
-        );
-        continue;
-      }
-
-      const rssXml = await rssRes.text();
-      const episodes = parseRssFeed(rssXml);
-      console.error(
-        `  ${podcast.name}: found ${episodes.length} episodes in RSS feed`,
-      );
-
-      // Check the 3 most recent episodes, skip already-seen ones
-      for (const episode of episodes.slice(0, 3)) {
-        if (state.seenVideos[episode.guid]) {
-          console.error(`    Skipping "${episode.title}" (already seen)`);
-          continue;
-        }
-
-        console.error(
-          `    Candidate: "${episode.title}" published=${episode.publishedAt || "unknown"}`,
-        );
-        allCandidates.push({ podcast, ...episode });
-      }
-    } catch (err) {
-      errors.push(`Podcast: Error processing ${podcast.name}: ${err.message}`);
-    }
-  }
-
-  console.error(
-    `  Total candidates: ${allCandidates.length}, cutoff: ${cutoff.toISOString()}`,
-  );
-
-  // Step 2: Filter by lookback window, sort newest first
-  const withinWindow = allCandidates
-    .filter((v) => !v.publishedAt || new Date(v.publishedAt) >= cutoff)
-    .sort((a, b) => {
-      // Newest first; dateless ones go to the end
-      if (a.publishedAt && b.publishedAt)
-        return new Date(b.publishedAt) - new Date(a.publishedAt);
-      if (a.publishedAt) return -1;
-      if (b.publishedAt) return 1;
-      return 0;
-    });
-
-  console.error(`  Within window: ${withinWindow.length} episode(s)`);
-  for (const v of withinWindow) {
-    console.error(`    - "${v.title}" published=${v.publishedAt || "unknown"}`);
-  }
-
-  // Step 3: Try each candidate until we get a transcript from pod2txt
-  for (const selected of withinWindow) {
-    console.error(`    Fetching transcript for "${selected.title}"...`);
-
-    const result = await fetchPod2txtTranscript(
-      selected.podcast.rssUrl,
-      selected.guid,
-      apiKey,
-    );
-
-    // Mark as seen regardless so we don't retry failed episodes daily
-    state.seenVideos[selected.guid] = now();
-
-    if (result.error) {
-      console.error(
-        `    Transcript error: ${result.error} — skipping to next candidate`,
-      );
-      errors.push(
-        `Podcast: Transcript error for ${selected.podcast.name} "${selected.title}": ${result.error}`,
-      );
-      continue;
-    }
-
-    if (!result.transcript) {
-      console.error(
-        `    Empty transcript for "${selected.title}" — skipping to next candidate`,
-      );
-      errors.push(`Podcast: Empty transcript for ${selected.podcast.name} "${selected.title}"`);
-      continue;
-    }
-
-    console.error(
-      `    Selected: "${selected.title}" (transcript: ${result.transcript.length} chars)`,
-    );
-
-    // Try to resolve the exact YouTube video URL for this episode. If the
-    // lookup fails (no YouTube channel configured, no title match, network
-    // error), fall back to the channel URL so the feed still works.
-    const youtubeUrl = await findYouTubeEpisodeUrl(
-      selected.podcast.url,
-      selected.title,
-    );
-    if (youtubeUrl) {
-      console.error(`    Matched YouTube episode URL: ${youtubeUrl}`);
+      sourceErrors.push(`Podcast: No rssUrl configured for ${podcast.name}`);
     } else {
-      console.error(
-        `    No YouTube episode match found — falling back to channel URL`,
-      );
+      try {
+        console.error(`  Fetching RSS for ${podcast.name}...`);
+        const rssRes = await fetchImpl(podcast.rssUrl, {
+          headers: {
+            "User-Agent": RSS_USER_AGENT,
+            Accept: "application/rss+xml, application/xml, text/xml, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!rssRes.ok) {
+          sourceErrors.push(`Podcast: Failed to fetch RSS for ${podcast.name}: HTTP ${rssRes.status}`);
+        } else {
+          const candidates = parseRssFeed(await rssRes.text())
+            .slice(0, 3)
+            .filter((episode) => !state.seenVideos[episode.guid])
+            .filter((episode) => !episode.publishedAt || new Date(episode.publishedAt) >= cutoff)
+            .sort((first, second) => Date.parse(second.publishedAt ?? 0) - Date.parse(first.publishedAt ?? 0));
+
+          for (const episode of candidates) {
+            const transcriptResult = await fetchTranscriptImpl(podcast.rssUrl, episode.guid, apiKey);
+            state.seenVideos[episode.guid] = now();
+            if (transcriptResult.error || !transcriptResult.transcript) {
+              failedCandidateCount += 1;
+              sourceErrors.push(transcriptResult.error
+                ? `Podcast: Transcript error for ${podcast.name} "${episode.title}": ${transcriptResult.error}`
+                : `Podcast: Empty transcript for ${podcast.name} "${episode.title}"`);
+              continue;
+            }
+
+            let youtubeUrl = null;
+            const warnings = [];
+            try {
+              youtubeUrl = await findYouTubeImpl(podcast.url, episode.title);
+              if (!youtubeUrl) warnings.push(`${podcast.name}: exact episode URL unavailable; used channel fallback`);
+            } catch (error) {
+              warnings.push(`${podcast.name}: episode URL enrichment failed; used channel fallback: ${error.message}`);
+            }
+            results.push({
+              source: "podcast",
+              sourceId: podcast.id,
+              name: podcast.name,
+              title: episode.title,
+              guid: episode.guid,
+              url: youtubeUrl || podcast.url,
+              publishedAt: episode.publishedAt,
+              transcript: transcriptResult.transcript,
+            });
+            statuses?.push(createSourceStatus({
+              sourceId: podcast.id,
+              channel: 'podcasts',
+              sourceName: podcast.name,
+              candidateCount: 1,
+              failedCandidateCount,
+              errors: sourceErrors,
+              warnings,
+            }));
+            break;
+          }
+        }
+      } catch (error) {
+        sourceErrors.push(`Podcast: Error processing ${podcast.name}: ${error.message}`);
+      }
     }
 
-    return [
-      {
-        source: "podcast",
-        sourceId: selected.podcast.id,
-        name: selected.podcast.name,
-        title: selected.title,
-        guid: selected.guid,
-        url: youtubeUrl || selected.podcast.url,
-        publishedAt: selected.publishedAt,
-        transcript: result.transcript,
-      },
-    ];
+    const produced = results.some(({ sourceId }) => sourceId === podcast.id);
+    if (!produced) {
+      statuses?.push(createSourceStatus({
+        sourceId: podcast.id,
+        channel: 'podcasts',
+        sourceName: podcast.name,
+        candidateCount: 0,
+        failedCandidateCount,
+        errors: sourceErrors,
+        discoveryComplete: sourceErrors.length === 0 || failedCandidateCount > 0,
+      }));
+    }
+    errors.push(...sourceErrors);
   }
-
-  console.error(`    No candidates had transcripts available`);
-  return [];
+  return results;
 }
 
 // -- X/Twitter Fetching (Official API v2) ------------------------------------
@@ -910,40 +868,30 @@ async function readState(path, fsImpl) {
   }
 }
 
-async function publishAtomically(documents, fsImpl, token) {
-  const snapshots = new Map();
-  const staged = [];
-  try {
-    for (const [path, document] of documents) {
-      try {
-        snapshots.set(path, await fsImpl.readFile(path, "utf8"));
-      } catch (error) {
-        if (error?.code !== "ENOENT") throw error;
-        snapshots.set(path, null);
-      }
-      const stagePath = `${path}.stage-${token}`;
-      await fsImpl.writeFile(stagePath, `${JSON.stringify(document, null, 2)}\n`);
-      staged.push([stagePath, path]);
-    }
-  } catch (error) {
-    for (const [stagePath] of staged) await fsImpl.unlink(stagePath).catch(() => {});
-    throw error;
-  }
+function validState(state) {
+  return state && typeof state === 'object' && !Array.isArray(state)
+    && state.seenTweets && typeof state.seenTweets === 'object' && !Array.isArray(state.seenTweets)
+    && state.seenVideos && typeof state.seenVideos === 'object' && !Array.isArray(state.seenVideos)
+    && state.seenArticles && typeof state.seenArticles === 'object' && !Array.isArray(state.seenArticles);
+}
 
-  const published = [];
-  try {
-    for (const [stagePath, path] of staged) {
-      await fsImpl.rename(stagePath, path);
-      published.push(path);
-    }
-  } catch (error) {
-    for (const path of published.reverse()) {
-      const snapshot = snapshots.get(path);
-      if (snapshot === null) await fsImpl.unlink(path).catch(() => {});
-      else await fsImpl.writeFile(path, snapshot);
-    }
-    for (const [stagePath] of staged) await fsImpl.unlink(stagePath).catch(() => {});
-    throw error;
+async function validateStagedDocuments({ targets }, { channels, registry, fsImpl, full }) {
+  const byFilename = new Map(targets.map(({ target, stagedPath }) => [basename(target), stagedPath]));
+  if (full) {
+    const errors = await validateFeedFiles({
+      readJson: async (filename) => JSON.parse(await fsImpl.readFile(byFilename.get(filename), 'utf8')),
+      expectedRegistry: registry,
+    });
+    if (errors.length > 0) throw new Error(`Staged Feed validation failed: ${errors.join('; ')}`);
+    const state = JSON.parse(await fsImpl.readFile(byFilename.get('state-feed.json'), 'utf8'));
+    if (!validState(state)) throw new Error('Staged state-feed.json is invalid');
+    return;
+  }
+  for (const channel of channels) {
+    const filename = CHANNEL_FILES[channel];
+    const feed = JSON.parse(await fsImpl.readFile(byFilename.get(filename), 'utf8'));
+    const result = validateFeed(feed, channel);
+    if (!result.valid) throw new Error(`${filename}: ${result.errors.join('; ')}`);
   }
 }
 
@@ -962,7 +910,9 @@ async function collectAll({ channels, sources, state, fetchImpl, now, env, stder
   }
   if (channels.includes("podcasts")) {
     stderr("Fetching podcast content (RSS + pod2txt)...");
-    const content = await fetchPodcastContent(sources.podcasts ?? [], env.POD2TXT_API_KEY, state, errors, { now });
+    const content = await fetchPodcastContent(sources.podcasts ?? [], env.POD2TXT_API_KEY, state, errors, {
+      now, fetchImpl, statuses: structuredStatuses,
+    });
     feeds.podcasts = createFeedEnvelope({ generatedAt, lookbackHours: PODCAST_LOOKBACK_HOURS, podcasts: content,
       stats: { podcastEpisodes: content.length },
       errors: errors.filter((error) => error.startsWith("Podcast")).length ? errors.filter((error) => error.startsWith("Podcast")) : undefined });
@@ -994,7 +944,7 @@ async function collectAll({ channels, sources, state, fetchImpl, now, env, stder
   return { feeds, state, errors, structuredStatuses };
 }
 
-async function main(options = {}) {
+async function runGeneration(options = {}) {
   const processImpl = options.processImpl ?? process;
   const args = options.args ?? processImpl.argv.slice(2);
   const env = options.env ?? processImpl.env;
@@ -1123,12 +1073,49 @@ async function main(options = {}) {
     documents.push([candidatePath, candidateFeed]);
     documents.push([join(rootDir, "state-feed.json"), pruneState(collected.state ?? state, collectionStartMs)]);
   }
-  await publishAtomically(documents, fsImpl, String(collectionStartMs));
+  // Multi-file publication is a lock-protected, journaled transaction. Recovery
+  // restores the prior generation after interruption; it is not a single rename.
+  const publishTransactionImpl = options.publishTransactionImpl ?? publishFeedTransaction;
+  const publicationOptions = {
+    rootDir,
+    documents,
+    transactionId: `${collectionStartMs}-${processImpl.pid ?? 'process'}`,
+    validateStaged: (context) => validateStagedDocuments(context, {
+      documents, channels, registry, fsImpl, full: !anyOnly,
+    }),
+  };
+  if (options.fsImpl) publicationOptions.fsImpl = fsImpl;
+  await publishTransactionImpl(publicationOptions);
   return Object.fromEntries(documents.map(([path, document]) => [path, document]));
+}
+
+async function main(options = {}) {
+  const rootDir = options.rootDir ?? join(SCRIPT_DIR, "..");
+  const fsImpl = options.fsImpl ?? { readFile, writeFile, rename, unlink };
+  const withLockImpl = options.withPublicationLockImpl
+    ?? (options.fsImpl ? async (_root, operation) => operation() : withFeedPublicationLock);
+  const recoverImpl = options.recoverPublicationImpl ?? recoverFeedPublication;
+  return withLockImpl(rootDir, async () => {
+    await recoverImpl(rootDir, options.fsImpl ? { fsImpl } : undefined);
+    try {
+      return await runGeneration({ ...options, rootDir });
+    } catch (error) {
+      try {
+        await recoverImpl(rootDir, options.fsImpl ? { fsImpl } : undefined);
+      } catch (recoveryError) {
+        throw new AggregateError(
+          [error, recoveryError],
+          `Feed generation failed and crash recovery remains pending: ${recoveryError.message}`,
+        );
+      }
+      throw error;
+    }
+  });
 }
 
 export {
   errorsSince,
+  fetchPodcastContent,
   fetchRssFeeds,
   buildStatuses,
   collectAll,

@@ -11,6 +11,7 @@ import {
   validateFeed,
   validateFeedFiles,
 } from '../feed-contract.js';
+import * as feedContract from '../feed-contract.js';
 import {
   errorsSince,
   fetchRssFeeds,
@@ -451,6 +452,22 @@ test('generated feed validation covers all six compatible feeds plus candidate f
     },
   });
   assert.ok(missingCandidateErrors.some((error) => error.includes('feed-candidates.json')));
+});
+
+test('local standard validation locks and recovers before reading feed files', async () => {
+  assert.equal(typeof feedContract.validateFeedFilesLocked, 'function');
+  const events = [];
+  const errors = await feedContract.validateFeedFilesLocked({
+    rootDir: '/repo',
+    withLockImpl: async (_root, operation) => {
+      events.push('lock');
+      return operation();
+    },
+    recoverImpl: async () => { events.push('recover'); },
+    validateImpl: async () => { events.push('validate'); return []; },
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(events, ['lock', 'recover', 'validate']);
 });
 
 test('generation workflow validates generated feeds before staging them', async () => {
