@@ -57,6 +57,12 @@ test('selection manifest v1.0 is closed and bounds every integer score and selec
   assert.equal(validateDigestSelection(verbose).valid, false);
 
   assert.equal(validateDigestSelection({ ...selection, hidden: true }).valid, false);
+
+  const tooManyCorroborating = structuredClone(selection);
+  tooManyCorroborating.clusters[0].corroboratingCandidateIds = Array.from(
+    { length: 1000 }, (_, index) => index.toString(16).padStart(64, '0'),
+  );
+  assert.equal(validateDigestSelection(tooManyCorroborating).valid, false);
 });
 
 test('semantic evaluation fixture labels official-lead and no-interests cases as review material', async () => {

@@ -118,6 +118,18 @@ test('tie order is total, evidence, publication time, then candidate ID', () => 
   ]);
 });
 
+test('null publication time sorts after valid times and then uses candidate ID', () => {
+  const candidates = [
+    candidate('b', 'blogs', 'blog:b', null),
+    candidate('a', 'blogs', 'blog:a', null),
+    candidate('c', 'blogs', 'blog:c', '2026-09-06T06:00:00.000Z'),
+  ];
+  const clusters = candidates.map((item) => cluster(item, 80, 18));
+  assert.deepEqual(selectEventClusters(request(candidates), clusters), [
+    clusters[2].eventClusterId, clusters[1].eventClusterId, clusters[0].eventClusterId,
+  ]);
+});
+
 test('validator enforces membership, arithmetic, threshold order, exclusions, and cross-source corroboration', () => {
   const candidates = [
     candidate('a', 'blogs', 'blog:a', '2026-09-06T07:00:00.000Z'),
@@ -213,4 +225,49 @@ test('validator permits empty clusters only when no candidates are eligible', ()
   assert.deepEqual(validateSelectionAgainstRequest(request([]), emptyManifest), {
     valid: true, errors: [],
   });
+});
+
+test('validator rejects wrong cluster identity and duplicate or unknown selected IDs', () => {
+  const candidates = [candidate('a', 'blogs', 'blog:a', '2026-09-06T07:00:00.000Z')];
+  const clusters = [cluster(candidates[0], 80, 18)];
+  const manifest = {
+    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z', clusters,
+    selectedEventClusterIds: [clusters[0].eventClusterId],
+  };
+
+  const wrongClusterId = structuredClone(manifest);
+  wrongClusterId.clusters[0].eventClusterId = 'f'.repeat(64);
+  wrongClusterId.selectedEventClusterIds = ['f'.repeat(64)];
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), wrongClusterId).errors.join('; '),
+    /eventClusterId does not match/i,
+  );
+
+  const duplicateSelected = structuredClone(manifest);
+  duplicateSelected.selectedEventClusterIds.push(clusters[0].eventClusterId);
+  assert.equal(validateSelectionAgainstRequest(request(candidates), duplicateSelected).valid, false);
+
+  const unknownSelected = structuredClone(manifest);
+  unknownSelected.selectedEventClusterIds = ['e'.repeat(64)];
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), unknownSelected).errors.join('; '),
+    /does not reference a cluster/i,
+  );
+});
+
+test('validator rejects manifests whose total candidate references exceed the request budget', () => {
+  const candidates = [
+    candidate('a', 'blogs', 'blog:a', '2026-09-06T07:00:00.000Z'),
+    candidate('b', 'x', 'x:b', '2026-09-06T07:01:00.000Z'),
+  ];
+  const first = cluster(candidates[0], 80, 18, [candidates[1].candidateId]);
+  const second = cluster(candidates[1], 70, 18);
+  const manifest = {
+    schemaVersion: '1.0', digestId, generatedAt: '2026-09-06T08:01:00.000Z',
+    clusters: [first, second], selectedEventClusterIds: [first.eventClusterId, second.eventClusterId],
+  };
+  assert.match(
+    validateSelectionAgainstRequest(request(candidates), manifest).errors.join('; '),
+    /candidate reference budget/i,
+  );
 });

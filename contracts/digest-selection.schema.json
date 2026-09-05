@@ -55,6 +55,7 @@
         "leadCandidateId": { "$ref": "#/$defs/hashId" },
         "corroboratingCandidateIds": {
           "type": "array",
+          "maxItems": 999,
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/hashId" }
         },

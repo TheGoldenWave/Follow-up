@@ -110,6 +110,13 @@ export function validateSelectionAgainstRequest(request, manifest, { excludedCan
   const excluded = new Set(excludedCandidateIds);
   const assigned = new Map();
   const clusterById = new Map();
+  const totalCandidateReferences = manifest.clusters.reduce(
+    (total, cluster) => total + 1 + cluster.corroboratingCandidateIds.length,
+    0,
+  );
+  if (totalCandidateReferences > Math.min(request.eligibleCandidates.length, 1000)) {
+    errors.push('/clusters exceed the candidate reference budget');
+  }
 
   for (const [index, cluster] of manifest.clusters.entries()) {
     const path = `/clusters/${index}`;
