@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import { ENABLED_CHANNELS } from '../config-contract.js';
 import { resolveDigestCandidates } from '../digest-candidates.js';
 
-function candidate(candidateId, channel, sourceId, publishedAt) {
-  return { candidateId, channel, sourceId, publishedAt, firstSeenAt: publishedAt };
+function hashId(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function candidate(label, channel, sourceId, publishedAt) {
+  return { candidateId: hashId(label), channel, sourceId, publishedAt, firstSeenAt: publishedAt };
 }
 
 function feed(candidates) {
@@ -25,7 +30,8 @@ function feed(candidates) {
 function pending(attemptId, candidateIds, overrides = {}) {
   return {
     schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-08T00:00:00.000Z',
-    attemptId, digestId: `digest-${attemptId}`, frequency: 'daily', candidateIds,
+    attemptId, digestId: `digest-${attemptId}`, frequency: 'daily',
+    candidateIds: candidateIds.map(hashId),
     eventClusterIds: [], destinationType: 'stdout', messageHash: 'a'.repeat(64),
     ...overrides,
   };
@@ -99,7 +105,7 @@ test('eligibility preserves Feed order and excludes disabled, pending, delivered
   assert.equal(result.status, 'ok');
   assert.deepEqual(
     result.eligibleCandidates.map(({ candidateId }) => candidateId),
-    ['eligible-first', 'failed', 'eligible-last'],
+    [hashId('eligible-first'), hashId('failed'), hashId('eligible-last')],
   );
   assert.deepEqual(result.excluded.counts, {
     'channel-disabled': 1,
@@ -124,7 +130,7 @@ test('candidates outside the actual interval are excluded and incomplete history
   assert.equal(result.status, 'incomplete-history');
   assert.deepEqual(
     result.eligibleCandidates.map(({ candidateId }) => candidateId),
-    ['inside'],
+    [hashId('inside')],
   );
   assert.equal(result.excluded.counts['outside-coverage'], 1);
 });
@@ -147,7 +153,7 @@ test('daily keeps older retained unpushed and failed candidates eligible after a
   });
   assert.deepEqual(
     result.eligibleCandidates.map(({ candidateId }) => candidateId),
-    ['older-unpushed', 'older-failed'],
+    [hashId('older-unpushed'), hashId('older-failed')],
   );
 });
 
@@ -167,7 +173,7 @@ test('weekly eligibility uses firstSeenAt and bootstrap has a half-open UTC end'
   });
   assert.deepEqual(
     result.eligibleCandidates.map(({ candidateId }) => candidateId),
-    ['old-publication-newly-seen'],
+    [hashId('old-publication-newly-seen')],
   );
   assert.deepEqual(result.excluded.counts, { 'outside-coverage': 1 });
 });
@@ -186,5 +192,8 @@ test('weekly eligibility after a delivered digest includes a candidate first see
       candidate('seen-at-now', 'x', 'x:a', now),
     ]),
   });
-  assert.deepEqual(result.eligibleCandidates.map(({ candidateId }) => candidateId), ['seen-at-now']);
+  assert.deepEqual(
+    result.eligibleCandidates.map(({ candidateId }) => candidateId),
+    [hashId('seen-at-now')],
+  );
 });

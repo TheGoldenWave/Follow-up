@@ -64,11 +64,13 @@ function validateTimestamp(value) {
   }
 }
 
-function validateIdArray(value, field) {
+function validateHashIdArray(value, field) {
   if (!Array.isArray(value)
-    || value.some((entry) => typeof entry !== 'string' || !SAFE_ID.test(entry))
+    || value.some((entry) => typeof entry !== 'string' || !SHA256.test(entry))
     || new Set(value).size !== value.length) {
-    throw new TypeError(`Delivery event ${field} must be an array of unique safe identifiers`);
+    throw new TypeError(
+      `Delivery event ${field} must be an array of unique lowercase SHA-256 identifiers`,
+    );
   }
 }
 
@@ -101,8 +103,8 @@ export function validateDeliveryEvent(event) {
     if (!['daily', 'weekly'].includes(event.frequency)) {
       throw new TypeError('Pending delivery event frequency must be daily or weekly');
     }
-    validateIdArray(event.candidateIds, 'candidateIds');
-    validateIdArray(event.eventClusterIds, 'eventClusterIds');
+    validateHashIdArray(event.candidateIds, 'candidateIds');
+    validateHashIdArray(event.eventClusterIds, 'eventClusterIds');
     if (!['stdout', 'telegram', 'email'].includes(event.destinationType)) {
       throw new TypeError('Pending delivery event destinationType must be stdout, telegram, or email');
     }
@@ -132,7 +134,12 @@ function buildAttemptState(events) {
       if (existing) {
         throw new Error(`Illegal transition at event ${index + 1}: attempt ${event.attemptId} already exists`);
       }
-      attempts.set(event.attemptId, { pending: event, resolution: null });
+      attempts.set(event.attemptId, {
+        pending: event,
+        pendingIndex: index,
+        resolution: null,
+        resolutionIndex: null,
+      });
       continue;
     }
     if (!existing) {
@@ -145,13 +152,46 @@ function buildAttemptState(events) {
       throw new Error(`Illegal transition at event ${index + 1}: resolution predates pending attempt ${event.attemptId}`);
     }
     existing.resolution = event;
+    existing.resolutionIndex = index;
   }
-  return attempts;
+
+  const unresolvedReplacementAttempts = [];
+  for (const [attemptId, attempt] of attempts) {
+    if (attempt.resolution?.type !== 'superseded') continue;
+    const replacementAttemptId = attempt.resolution.replacementAttemptId;
+    const replacement = attempts.get(replacementAttemptId);
+    if (!replacement) {
+      unresolvedReplacementAttempts.push({ attemptId, replacementAttemptId });
+      continue;
+    }
+    if (replacement.pendingIndex <= attempt.resolutionIndex
+      || Date.parse(replacement.pending.occurredAt) <= Date.parse(attempt.resolution.occurredAt)) {
+      throw new Error(
+        `Illegal replacement for attempt ${attemptId}: ${replacementAttemptId} must be a subsequent later pending attempt and cannot form a cycle`,
+      );
+    }
+    for (const field of ['digestId', 'candidateIds', 'eventClusterIds']) {
+      const original = attempt.pending[field];
+      const next = replacement.pending[field];
+      const matches = Array.isArray(original)
+        ? original.length === next.length && original.every((value, index) => value === next[index])
+        : original === next;
+      if (!matches) {
+        throw new Error(
+          `Illegal replacement for attempt ${attemptId}: replacement ${field} must match`,
+        );
+      }
+    }
+  }
+  return { attempts, unresolvedReplacementAttempts };
 }
 
 export function deriveDeliveryState(events) {
   if (!Array.isArray(events)) throw new TypeError('Delivery events must be an array');
-  const attempts = buildAttemptState(events);
+  const { attempts, unresolvedReplacementAttempts } = buildAttemptState(events);
+  const unresolvedAttemptIds = new Set(
+    unresolvedReplacementAttempts.map(({ attemptId }) => attemptId),
+  );
   const candidateStates = new Map();
   const successfulDeliveries = [];
 
@@ -170,7 +210,7 @@ export function deriveDeliveryState(events) {
       }
       continue;
     }
-    if (!resolution) {
+    if (!resolution || unresolvedAttemptIds.has(pending.attemptId)) {
       for (const candidateId of pending.candidateIds) {
         if (candidateStates.get(candidateId) !== 'pushed-unseen') {
           candidateStates.set(candidateId, 'delivery-uncertain');
@@ -185,7 +225,12 @@ export function deriveDeliveryState(events) {
   successfulDeliveries.sort((left, right) => (
     Date.parse(left.deliveredAt) - Date.parse(right.deliveredAt)
   ));
-  return { attempts, candidateStates, successfulDeliveries };
+  return {
+    attempts,
+    candidateStates,
+    successfulDeliveries,
+    unresolvedReplacementAttempts,
+  };
 }
 
 function parseLedger(content, ledgerPath) {
@@ -220,7 +265,14 @@ export async function readDeliveryLedger(options = {}) {
 }
 
 export async function appendDeliveryEvent(event, options = {}) {
-  validateDeliveryEvent(event);
+  return appendDeliveryEvents([event], options);
+}
+
+export async function appendDeliveryEvents(events, options = {}) {
+  if (!Array.isArray(events) || events.length === 0) {
+    throw new TypeError('Delivery events must be a non-empty array');
+  }
+  for (const event of events) validateDeliveryEvent(event);
   const ledgerPath = resolveDeliveryLedgerPath(options);
   await mkdir(dirname(ledgerPath), { recursive: true });
   const initial = await open(ledgerPath, 'a');
@@ -230,11 +282,11 @@ export async function appendDeliveryEvent(event, options = {}) {
     retries: { retries: 8, factor: 1.5, minTimeout: 10, maxTimeout: 250 },
   });
   try {
-    const events = await readDeliveryLedger({ ledgerPath });
-    deriveDeliveryState([...events, event]);
+    const existingEvents = await readDeliveryLedger({ ledgerPath });
+    deriveDeliveryState([...existingEvents, ...events]);
     const handle = await open(ledgerPath, 'a');
     try {
-      await handle.writeFile(`${JSON.stringify(event)}\n`, 'utf8');
+      await handle.writeFile(`${events.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8');
       await handle.sync();
     } finally {
       await handle.close();
@@ -253,10 +305,14 @@ export function selectRetainedDeliveryEvents(events, {
   }
   const nowMs = Date.parse(now);
   if (!Number.isFinite(nowMs)) throw new TypeError('now must be a valid timestamp');
-  const attempts = buildAttemptState(events);
+  const { attempts, unresolvedReplacementAttempts } = buildAttemptState(events);
+  const unresolvedAttemptIds = new Set(
+    unresolvedReplacementAttempts.map(({ attemptId }) => attemptId),
+  );
   const cutoff = nowMs - retentionDays * 24 * 60 * 60 * 1000;
   const removableAttempts = new Set();
   for (const [attemptId, attempt] of attempts) {
+    if (unresolvedAttemptIds.has(attemptId)) continue;
     if (!['failed', 'superseded'].includes(attempt.resolution?.type)) continue;
     if (Date.parse(attempt.pending.occurredAt) < cutoff
       && Date.parse(attempt.resolution.occurredAt) < cutoff) {
