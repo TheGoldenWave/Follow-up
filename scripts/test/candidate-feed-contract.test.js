@@ -54,11 +54,17 @@ function validFields() {
   };
 }
 
+const expectedRegistry = [{ id: 'blog:lab', channel: 'blogs', name: 'Current Lab Name' }];
+
+function validate(feed, registry = expectedRegistry) {
+  return validateCandidateFeed(feed, { expectedRegistry: registry });
+}
+
 test('creates and validates a strict candidate Feed v1.0 envelope', () => {
-  const feed = createCandidateFeed(validFields());
+  const feed = createCandidateFeed(validFields(), { expectedRegistry });
 
   assert.equal(feed.schemaVersion, CANDIDATE_FEED_SCHEMA_VERSION);
-  assert.equal(validateCandidateFeed(feed).valid, true);
+  assert.equal(validate(feed).valid, true);
   assert.equal(CANDIDATE_FEED_SCHEMA_VERSION, '1.0');
 });
 
@@ -69,7 +75,7 @@ test('requires initialization, history, retention, diagnostics, registry statuse
   ]) {
     const fields = validFields();
     delete fields[key];
-    const result = validateCandidateFeed({ schemaVersion: '1.0', ...fields });
+    const result = validate({ schemaVersion: '1.0', ...fields });
     assert.equal(result.valid, false, key);
     assert.ok(result.errors.some((error) => error.includes(key)), key);
   }
@@ -77,10 +83,10 @@ test('requires initialization, history, retention, diagnostics, registry statuse
 
 test('rejects unknown fields and invalid or non-strict dates', () => {
   const feed = { schemaVersion: '1.0', ...validFields(), unexpected: true };
-  assert.equal(validateCandidateFeed(feed).valid, false);
+  assert.equal(validate(feed).valid, false);
 
   for (const generatedAt of ['2026-09-06', '2026-02-30T00:00:00Z', 'not-a-date']) {
-    const result = validateCandidateFeed({ ...feed, unexpected: undefined, generatedAt });
+    const result = validate({ ...feed, unexpected: undefined, generatedAt });
     assert.equal(result.valid, false, generatedAt);
   }
 });
@@ -88,23 +94,23 @@ test('rejects unknown fields and invalid or non-strict dates', () => {
 test('registry contains one current status per source and candidate objects are closed', () => {
   const duplicate = validFields();
   duplicate.registry.push({ ...duplicate.registry[0], status: 'no-results', candidateCount: 0 });
-  assert.equal(validateCandidateFeed({ schemaVersion: '1.0', ...duplicate }).valid, false);
+  assert.equal(validate({ schemaVersion: '1.0', ...duplicate }).valid, false);
 
   const extraCandidateField = validFields();
   extraCandidateField.candidates[0].secret = 'must not pass';
-  assert.equal(validateCandidateFeed({ schemaVersion: '1.0', ...extraCandidateField }).valid, false);
+  assert.equal(validate({ schemaVersion: '1.0', ...extraCandidateField }).valid, false);
 });
 
 test('validation errors are actionable without echoing secret values', () => {
   const fields = validFields();
   fields.candidates[0].canonicalUrl = 'https://example.com/?token=super-secret';
   fields.candidates[0].channel = 'unknown';
-  const result = validateCandidateFeed({ schemaVersion: '1.0', ...fields });
+  const result = validate({ schemaVersion: '1.0', ...fields });
 
   assert.equal(result.valid, false);
   assert.ok(result.errors.some((error) => error.includes('/candidates/0/channel')));
   assert.doesNotMatch(result.errors.join(' '), /super-secret/);
-  assert.throws(() => createCandidateFeed({ ...fields, password: 'also-secret' }), (error) => (
+  assert.throws(() => createCandidateFeed({ ...fields, password: 'also-secret' }, { expectedRegistry }), (error) => (
     /Invalid candidate Feed/.test(error.message) && !/also-secret/.test(error.message)
   ));
 });
@@ -121,7 +127,7 @@ test('enforces source status semantics and source namespace/channel consistency'
   ]) {
     const fields = validFields();
     mutation(fields);
-    assert.equal(validateCandidateFeed({ schemaVersion: '1.0', ...fields }).valid, false);
+    assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, false);
   }
 });
 
@@ -135,8 +141,8 @@ test('returns validation errors rather than throwing for malformed collection fi
     ['candidates', [null]],
   ]) {
     const feed = { schemaVersion: '1.0', ...validFields(), [field]: value };
-    assert.doesNotThrow(() => validateCandidateFeed(feed));
-    assert.equal(validateCandidateFeed(feed).valid, false);
+    assert.doesNotThrow(() => validate(feed));
+    assert.equal(validate(feed).valid, false);
   }
 });
 
@@ -149,6 +155,30 @@ test('recomputes canonical identity and content hashes and enforces UTF-8 byte l
   ]) {
     const fields = validFields();
     mutation(fields.candidates[0]);
-    assert.equal(validateCandidateFeed({ schemaVersion: '1.0', ...fields }).valid, false);
+    assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, false);
   }
+});
+
+test('requires exactly one status for every configured source', () => {
+  const configured = [
+    { id: 'blog:lab', channel: 'blogs', name: 'Renamed Lab' },
+    { id: 'blog:second', channel: 'blogs', name: 'Second Blog' },
+  ];
+  const missing = validFields();
+  missing.registry[0].status = 'no-results';
+  missing.registry[0].candidateCount = 0;
+  missing.candidates = [];
+  const missingResult = validate({ schemaVersion: '1.0', ...missing }, configured);
+  assert.equal(missingResult.valid, false);
+  assert.ok(missingResult.errors.some((error) => error.includes('blog:second')));
+
+  const extra = validFields();
+  extra.registry.push({
+    sourceId: 'blog:extra', channel: 'blogs', sourceName: 'Extra',
+    status: 'no-results', candidateCount: 0,
+  });
+  const extraResult = validate({ schemaVersion: '1.0', ...extra }, expectedRegistry);
+  assert.equal(extraResult.valid, false);
+  assert.ok(extraResult.errors.some((error) => error.includes('blog:extra')));
+  assert.equal(validateCandidateFeed({ schemaVersion: '1.0', ...validFields() }).valid, false);
 });

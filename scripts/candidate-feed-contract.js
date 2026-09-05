@@ -133,19 +133,57 @@ function semanticErrors(feed) {
   return errors;
 }
 
-export function validateCandidateFeed(feed) {
+function registryCoverageErrors(feed, expectedRegistry) {
+  if (!Array.isArray(expectedRegistry)) {
+    return ['/registry requires an expectedRegistry array for completeness validation'];
+  }
+  const expected = new Map();
+  const errors = [];
+  for (const [index, source] of expectedRegistry.entries()) {
+    const sourceId = source?.id ?? source?.sourceId;
+    if (typeof sourceId !== 'string' || typeof source?.channel !== 'string') {
+      errors.push(`/expectedRegistry/${index} requires id and channel`);
+      continue;
+    }
+    if (expected.has(sourceId)) {
+      errors.push(`/expectedRegistry contains duplicate source ${sourceId}`);
+      continue;
+    }
+    expected.set(sourceId, source.channel);
+  }
+
+  const actual = Array.isArray(feed.registry)
+    ? new Map(feed.registry
+      .filter((source) => source && typeof source === 'object')
+      .map((source) => [source.sourceId, source.channel]))
+    : new Map();
+  for (const [sourceId, channel] of expected) {
+    if (!actual.has(sourceId)) {
+      errors.push(`/registry is missing configured source ${sourceId}`);
+    } else if (actual.get(sourceId) !== channel) {
+      errors.push(`/registry source ${sourceId} must use configured channel ${channel}`);
+    }
+  }
+  for (const sourceId of actual.keys()) {
+    if (!expected.has(sourceId)) errors.push(`/registry contains unconfigured source ${sourceId}`);
+  }
+  return errors;
+}
+
+export function validateCandidateFeed(feed, { expectedRegistry } = {}) {
   const schemaValid = validateSchema(feed);
   const errors = schemaValid ? [] : formatErrors(validateSchema.errors);
   if (feed && typeof feed === 'object' && !Array.isArray(feed)) {
     errors.push(...uniquenessErrors(feed));
     errors.push(...semanticErrors(feed));
+    errors.push(...registryCoverageErrors(feed, expectedRegistry));
   }
   return { valid: errors.length === 0, errors };
 }
 
-export function createCandidateFeed(fields) {
+export function createCandidateFeed(fields, options) {
   const feed = { ...fields, schemaVersion: CANDIDATE_FEED_SCHEMA_VERSION };
-  const result = validateCandidateFeed(feed);
+  const result = validateCandidateFeed(feed, options);
   if (!result.valid) {
     throw new Error(`Invalid candidate Feed: ${result.errors.join('; ')}`);
   }

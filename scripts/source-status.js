@@ -69,21 +69,54 @@ export function createSourceStatus({
   return result;
 }
 
-export function summarizeChannelCompleteness(statuses, channels) {
+function expectedNamespace(channel) {
+  if (channel === 'podcasts') return 'podcast';
+  if (channel === 'blogs') return 'blog';
+  if (channel === 'newsletters') return 'newsletter';
+  return channel;
+}
+
+function normalizeExpectedSource(source, index) {
+  const sourceId = source?.id ?? source?.sourceId;
+  if (typeof sourceId !== 'string' || sourceId.length === 0
+    || typeof source?.channel !== 'string') {
+    throw new TypeError(`expectedRegistry[${index}] requires id and channel`);
+  }
+  if (!ENABLED_CHANNELS.includes(source.channel)) {
+    throw new TypeError(`expectedRegistry[${index}] has unknown channel ${source.channel}`);
+  }
+  if (!sourceId.startsWith(`${expectedNamespace(source.channel)}:`)) {
+    throw new TypeError(`expectedRegistry[${index}] source namespace does not match channel`);
+  }
+  return { sourceId, channel: source.channel };
+}
+
+export function summarizeChannelCompleteness(statuses, expectedRegistry, channels) {
   if (!Array.isArray(statuses)) throw new TypeError('statuses must be an array');
+  if (!Array.isArray(expectedRegistry)) throw new TypeError('expectedRegistry must be an array');
+  const expectedSources = expectedRegistry.map(normalizeExpectedSource);
+  const expectedIds = expectedSources.map(({ sourceId }) => sourceId);
+  if (new Set(expectedIds).size !== expectedIds.length) {
+    throw new TypeError('expectedRegistry contains duplicate source IDs');
+  }
   const requestedChannels = channels ?? ENABLED_CHANNELS.filter((channel) => (
-    statuses.some((status) => status.channel === channel)
+    expectedSources.some((source) => source.channel === channel)
   ));
 
   return requestedChannels.map((channel) => {
-    const sourceStatuses = statuses.filter((status) => status.channel === channel);
-    const incompleteSourceIds = sourceStatuses
-      .filter(({ status }) => !COMPLETE_STATUSES.has(status))
+    const channelSources = expectedSources.filter((source) => source.channel === channel);
+    const incompleteSourceIds = channelSources
+      .filter(({ sourceId }) => {
+        const matches = statuses.filter((status) => status?.sourceId === sourceId);
+        return matches.length !== 1
+          || matches[0].channel !== channel
+          || !COMPLETE_STATUSES.has(matches[0].status);
+      })
       .map(({ sourceId }) => sourceId);
     return {
       channel,
-      complete: sourceStatuses.length > 0 && incompleteSourceIds.length === 0,
-      sourceCount: sourceStatuses.length,
+      complete: channelSources.length > 0 && incompleteSourceIds.length === 0,
+      sourceCount: channelSources.length,
       incompleteSourceIds,
     };
   });

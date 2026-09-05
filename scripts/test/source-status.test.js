@@ -61,8 +61,44 @@ test('summarizes completeness per channel and identifies incomplete sources', ()
       failedCandidateCount: 1, errors: ['one article failed'] }),
   ];
 
-  assert.deepEqual(summarizeChannelCompleteness(statuses), [
+  const expectedRegistry = [
+    { id: 'x:a', channel: 'x' },
+    { id: 'x:b', channel: 'x' },
+    { id: 'blog:a', channel: 'blogs' },
+  ];
+  assert.deepEqual(summarizeChannelCompleteness(statuses, expectedRegistry), [
     { channel: 'x', complete: true, sourceCount: 2, incompleteSourceIds: [] },
     { channel: 'blogs', complete: false, sourceCount: 1, incompleteSourceIds: ['blog:a'] },
   ]);
+});
+
+test('missing configured source status makes its channel incomplete', () => {
+  const statuses = [createSourceStatus({
+    sourceId: 'newsletter:a', channel: 'newsletters', sourceName: 'A', candidateCount: 0,
+  })];
+  const expectedRegistry = [
+    { id: 'newsletter:a', channel: 'newsletters' },
+    { id: 'newsletter:b', channel: 'newsletters' },
+  ];
+
+  assert.deepEqual(summarizeChannelCompleteness(statuses, expectedRegistry), [{
+    channel: 'newsletters',
+    complete: false,
+    sourceCount: 2,
+    incompleteSourceIds: ['newsletter:b'],
+  }]);
+});
+
+test('rejects malformed, unknown-channel, mismatched, and duplicate expected sources', () => {
+  for (const expectedRegistry of [
+    ['x:a'],
+    [{ id: 'x:a', channel: 'bogus' }],
+    [{ id: 'blog:a', channel: 'x' }],
+    [{ id: 'x:a', channel: 'x' }, { id: 'x:a', channel: 'x' }],
+  ]) {
+    assert.throws(
+      () => summarizeChannelCompleteness([], expectedRegistry),
+      /expectedRegistry|channel|namespace|duplicate/i,
+    );
+  }
 });

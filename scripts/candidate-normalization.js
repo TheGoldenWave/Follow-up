@@ -16,6 +16,104 @@ const CHANNEL_SPECS = [
   ['zh-tech', 'articles'],
 ];
 
+export const LEGACY_SOURCE_ID_MAP = Object.freeze({
+  x: Object.freeze({
+    karpathy: 'x:karpathy',
+    swyx: 'x:swyx',
+    joshwoodward: 'x:joshwoodward',
+    bcherny: 'x:bcherny',
+    thsottiaux: 'x:thsottiaux',
+    petergyang: 'x:petergyang',
+    thenanyu: 'x:thenanyu',
+    realmadhuguru: 'x:realmadhuguru',
+    AmandaAskell: 'x:amandaaskell',
+    _catwu: 'x:catwu',
+    trq212: 'x:trq212',
+    GoogleLabs: 'x:googlelabs',
+    amasad: 'x:amasad',
+    rauchg: 'x:rauchg',
+    alexalbert__: 'x:alexalbert',
+    levie: 'x:levie',
+    ryolu_: 'x:ryolu',
+    garrytan: 'x:garrytan',
+    mattturck: 'x:mattturck',
+    zarazhangrui: 'x:zarazhangrui',
+    nikunj: 'x:nikunj',
+    steipete: 'x:steipete',
+    danshipper: 'x:danshipper',
+    adityaag: 'x:adityaag',
+    sama: 'x:sama',
+    claudeai: 'x:claudeai',
+    dario_amodei_h: 'x:dario-amodei',
+    nathanlabenz: 'x:nathanlabenz',
+    jackclarksf: 'x:jackclarksf',
+    bentossell: 'x:bentossell',
+  }),
+  podcasts: Object.freeze({
+    'Latent Space': 'podcast:latent-space',
+    'Training Data': 'podcast:training-data',
+    'No Priors': 'podcast:no-priors',
+    'Unsupervised Learning': 'podcast:unsupervised-learning',
+    'The MAD Podcast with Matt Turck': 'podcast:mad-podcast',
+    'AI & I by Every': 'podcast:ai-and-i',
+    'Lex Fridman Podcast': 'podcast:lex-fridman',
+    'The Cognitive Revolution': 'podcast:cognitive-revolution',
+    'Lightcone (YC)': 'podcast:lightcone',
+    Acquired: 'podcast:acquired',
+  }),
+  blogs: Object.freeze({
+    'Anthropic Engineering': 'blog:anthropic-engineering',
+    'Claude Blog': 'blog:claude-blog',
+    'Anthropic Interpretability': 'blog:anthropic-interpretability',
+    'Anthropic Science': 'blog:anthropic-science',
+    'OpenAI Alignment Research Blog': 'blog:openai-alignment',
+    'Google Antigravity Blog': 'blog:google-antigravity',
+    'Google DeepMind Blog': 'blog:google-deepmind',
+    'Google Research Blog': 'blog:google-research',
+    'Microsoft Research Blog': 'blog:microsoft-research',
+    'Amazon Science Blog': 'blog:amazon-science',
+    'IBM Research Blog': 'blog:ibm-research',
+    'Perplexity Research Articles': 'blog:perplexity-research',
+    'Qwen Blog': 'blog:qwen-blog',
+    'Kimi Research & Tech Blog': 'blog:kimi-blog',
+    'ERNIE Blog': 'blog:ernie-blog',
+    'MiniMax Blog': 'blog:minimax-blog',
+    'Apple Machine Learning Research': 'blog:apple-ml-research',
+  }),
+  newsletters: Object.freeze({
+    'https://stratechery.com/': 'newsletter:stratechery',
+    'https://stratechery.com/feed/': 'newsletter:stratechery',
+    'https://oneusefulthing.org/': 'newsletter:one-useful-thing',
+    'https://oneusefulthing.org/feed': 'newsletter:one-useful-thing',
+    'https://thealgorithmicbridge.com/': 'newsletter:algorithmic-bridge',
+    'https://thealgorithmicbridge.com/feed': 'newsletter:algorithmic-bridge',
+    'https://aisnakeoil.substack.com/': 'newsletter:ai-snake-oil',
+    'https://aisnakeoil.substack.com/feed': 'newsletter:ai-snake-oil',
+  }),
+  academic: Object.freeze({
+    'https://arxiv.org/list/cs.AI/recent': 'academic:arxiv-cs-ai',
+    'https://rss.arxiv.org/rss/cs.AI': 'academic:arxiv-cs-ai',
+    'https://arxiv.org/list/cs.CL/recent': 'academic:arxiv-cs-cl',
+    'https://rss.arxiv.org/rss/cs.CL': 'academic:arxiv-cs-cl',
+    'https://arxiv.org/list/cs.CV/recent': 'academic:arxiv-cs-cv',
+    'https://rss.arxiv.org/rss/cs.CV': 'academic:arxiv-cs-cv',
+    'https://arxiv.org/list/cs.LG/recent': 'academic:arxiv-cs-lg',
+    'https://rss.arxiv.org/rss/cs.LG': 'academic:arxiv-cs-lg',
+    'https://arxiv.org/list/cs.RO/recent': 'academic:arxiv-cs-ro',
+    'https://rss.arxiv.org/rss/cs.RO': 'academic:arxiv-cs-ro',
+    'https://arxiv.org/list/cs.CR/recent': 'academic:arxiv-cs-cr',
+    'https://rss.arxiv.org/rss/cs.CR': 'academic:arxiv-cs-cr',
+  }),
+  'zh-tech': Object.freeze({
+    'https://36kr.com/': 'zh-tech:36kr',
+    'https://36kr.com/feed': 'zh-tech:36kr',
+    'https://sspai.com/': 'zh-tech:sspai',
+    'https://sspai.com/feed': 'zh-tech:sspai',
+    'https://www.qbitai.com/': 'zh-tech:qbitai',
+    'https://www.qbitai.com/rss': 'zh-tech:qbitai',
+  }),
+});
+
 export function truncateUtf8(value, maxBytes) {
   const text = typeof value === 'string' ? value : '';
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
@@ -43,26 +141,40 @@ function normalizeDate(value, fallback = null) {
   return new Date(time).toISOString();
 }
 
-function matchingRegistryEntries(registry, channel, identity) {
-  if (identity.sourceId) {
-    return registry.filter((source) => (
-      source.channel === channel && source.id === identity.sourceId
-    ));
-  }
-  return registry.filter((source) => {
-    if (source.channel !== channel) return false;
-    if (channel === 'x' && identity.handle && source.handle === identity.handle) return true;
-    return identity.name && source.name === identity.name;
-  });
+function legacyMigrationKeys(channel, identity) {
+  if (channel === 'x') return [identity.handle];
+  if (channel === 'podcasts' || channel === 'blogs') return [identity.name];
+  return [identity.rss, identity.rssUrl, identity.url];
 }
 
 function resolveSource(registry, channel, identity) {
-  const matches = matchingRegistryEntries(registry, channel, identity);
+  let sourceId;
+  if (Object.hasOwn(identity, 'sourceId')) {
+    if (typeof identity.sourceId !== 'string' || identity.sourceId.length === 0) {
+      throw new Error(`${channel} sourceId must be a non-empty string when present`);
+    }
+    sourceId = identity.sourceId;
+  } else {
+    const keys = legacyMigrationKeys(channel, identity)
+      .filter((key) => typeof key === 'string' && key.length > 0);
+    const mappedIds = keys.map((key) => LEGACY_SOURCE_ID_MAP[channel]?.[key]);
+    if (keys.length === 0 || mappedIds.some((mappedId) => !mappedId)) {
+      throw new Error(`No frozen legacy source mapping for ${channel} source`);
+    }
+    const uniqueIds = new Set(mappedIds);
+    if (uniqueIds.size !== 1) {
+      throw new Error(`Ambiguous frozen legacy source mapping for ${channel} source`);
+    }
+    [sourceId] = uniqueIds;
+  }
+  const matches = registry.filter((source) => (
+    source.channel === channel && source.id === sourceId
+  ));
   if (matches.length === 0) {
-    throw new Error(`No source registry entry for ${channel} source ${identity.name || identity.handle || identity.sourceId || '<unknown>'}`);
+    throw new Error(`No source registry entry for ${channel} source ${sourceId}`);
   }
   if (matches.length > 1) {
-    throw new Error(`Ambiguous source registry entry for ${channel} source ${identity.name || identity.handle || identity.sourceId}`);
+    throw new Error(`Ambiguous source registry entry for ${channel} source ${sourceId}`);
   }
   return matches[0];
 }
@@ -117,9 +229,14 @@ function normalizeGroupedItems(groups, channel, registry, seenAt) {
   const candidates = [];
   for (const group of groups) {
     const source = resolveSource(registry, channel, {
-      sourceId: group.sourceId || group.id,
+      ...(Object.hasOwn(group, 'sourceId')
+        ? { sourceId: group.sourceId }
+        : Object.hasOwn(group, 'id') ? { sourceId: group.id } : {}),
       handle: group.handle,
       name: group.name || group.source,
+      rss: group.rss,
+      rssUrl: group.rssUrl,
+      url: group.url,
     });
     const items = channel === 'x' ? group.tweets : group.items;
     if (!Array.isArray(items)) throw new TypeError(`${channel} source ${source.id} items must be an array`);
@@ -146,7 +263,7 @@ export function normalizeLegacyFeed(feed, channel, { registry, seenAt }) {
   if (channel === 'podcasts' || channel === 'blogs') {
     return payload.map((item) => {
       const source = resolveSource(registry, channel, {
-        sourceId: item.sourceId,
+        ...(Object.hasOwn(item, 'sourceId') ? { sourceId: item.sourceId } : {}),
         name: item.name,
       });
       return buildCandidate(item, { channel, source, seenAt: normalizedSeenAt, author: item.name });
