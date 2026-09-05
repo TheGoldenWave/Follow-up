@@ -1,0 +1,7 @@
+{
+  "platform": "other",
+  "language": "zh",
+  "frequency": "daily",
+  "delivery": { "method": "stdout" },
+  "onboardingComplete": true
+}

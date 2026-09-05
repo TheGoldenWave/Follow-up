@@ -83,8 +83,9 @@ digest generation does not authorize all of them together.
 
 Current capability truth: six live centralized Feeds are generated for X, podcasts,
 official blogs, newsletters, academic papers, and Chinese tech. Industry reports are
-a low-frequency source plan, not a stable live Feed. Per-user channel switches are
-also not enforced by the current config schema or `prepare-digest.js`.
+a low-frequency source plan, not a stable live Feed. Personal Digest preparation
+enforces `enabledChannels` against the rolling `feed-candidates.json`; legacy configs
+without that field keep all six live channels enabled.
 
 ## Detecting Platform
 
@@ -296,105 +297,47 @@ This workflow runs on cron schedule or when the user invokes `/ai`.
 
 Read `~/.follow-builders/config.json` for language, schedule, delivery, and prompt preferences.
 
-### Step 2: Run the prepare scripts
+### Step 2: 授权门禁
 
-This script handles ALL data fetching deterministically — feeds, prompts, config.
-You do NOT fetch anything yourself.
+手动请求可直接继续。计划任务必须先通过当前运行环境提供的授权门禁；没有明确授权时立即停止，不能生成、发送或补发 Digest。Task 9 会补齐统一入口和完整 schedule gate，本阶段不得用隐式授权替代。
 
-Feed data remains centrally published in `v0.1.0`, but every envelope is checked
-against the bundled compatible `1.x` Feed contract before use. Prompt defaults come
-from this installed release directory. The script checks the user's local Prompt
-override first and never downloads executable Prompt behavior from `main`.
+### Step 3: Prepare curation request
+
+创建绝对路径作为本次 request 输出。只运行 `prepare-digest.js`，它读取本地配置、delivery ledger 和中央 rolling `feed-candidates.json`，验证完整 source registry，并按渠道与投递历史筛选候选。不要自行拉取六个 snapshot Feed。
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js --request-out <absolute-request-path> [--frequency daily|weekly] [--scheduled] 2>/dev/null
 ```
 
-The script outputs a single JSON blob with everything you need:
-- `config` — user's language and delivery preferences
-- `x` — builders with their recent tweets (text, URLs, bios)
-- `podcasts` — podcast episodes with full transcripts
-- `blogs` — blog posts from official company blogs
-- `newsletters` — newsletter issues and content
-- `academic` — academic paper groups and items
-- `zhTech` — Chinese tech article groups and items
-- `prompts` — the remix instructions to follow
-- `stats` — counts across the six live Feed categories
-- `errors` — non-fatal issues (IGNORE these)
+- `no-channels`：停止，不生成 selection，不投递 daily no-update。
+- `preparation-failed`：停止；不得继续评分、finalize 或 deliver。
+- `request-ready`：继续。即使 `contextStatus` 为 `partial` 或 `incomplete-history`，仍可对已有候选评分，但后续必须披露覆盖状态。
 
-### Step 3: Check for content
+### Step 4: Agent 评分并写 selection manifest
 
-If all six live Feed categories have zero content, tell the user:
-"No new updates today. Check back tomorrow!" Then stop.
+读取 prepare 输出的 request，并严格按本地 `prompts/curate-digest.md` 执行。只处理 `eligibleCandidates`；不得访问网页、补充外部候选、恢复已排除候选或把全量 Feed 当作 fallback。
 
-### Step 4: Remix content
+只输出符合 `digest-selection` v1.0 的 JSON object，并写入：
 
-**Your ONLY job is to remix the content from the JSON.** Do NOT fetch anything
-from the web, visit any URLs, or call any APIs. Everything is in the JSON.
+```text
+~/.follow-builders/state/selections/<digest-id>.json
+```
 
-Read the prompts from the `prompts` field in the JSON:
-- `prompts.digest_intro` — overall framing rules
-- `prompts.summarize_tweets` — how to remix tweets
-- `prompts.summarize_podcast` — how to remix podcast transcripts
-- `prompts.summarize_blogs` — how to remix blog posts
-- `prompts.summarize_newsletter` — how to remix newsletter issues
-- `prompts.summarize_paper` — how to remix academic papers
-- `prompts.summarize_zh_sources` — how to remix Chinese tech articles
-- `prompts.translate` — how to translate to Chinese
+manifest 必须覆盖全部 eligible candidates 的 clustering，并让 `selectedEventClusterIds` 严格遵循 60 分门槛、最多 10 条以及确定性 source/channel portfolio 规则。Agent 没有输出、输出非法 JSON 或评分阶段失败时立即停止。
 
-Process each available live Feed category one at a time:
+### Step 5: Finalize
 
-**Channel 1 — AI Builders (X/Twitter):**
-Process builders from the `x` array. For each builder:
-1. Use their `bio` field for their role (e.g. bio says "ceo @box" → "Box CEO Aaron Levie")
-2. Summarize their `tweets` using `prompts.summarize_tweets`
-3. Every tweet MUST include its `url` from the JSON
+```bash
+cd ${CLAUDE_SKILL_DIR}/scripts && node finalize-digest.js --request <absolute-request-path> --selection <absolute-selection-path> --output <absolute-output-path> 2>/dev/null
+```
 
-**Channel 2 — Podcasts:**
-Process podcasts from the `podcasts` array. For each episode:
-1. Summarize its `transcript` using `prompts.summarize_podcast`
-2. Use `name`, `title`, and `url` from the JSON object — NOT from the transcript
+finalize 会再次校验 request、manifest、`digestId` 和确定性选择，然后原子写最终 JSON artifact。状态含义如下：
 
-**Channel 3 — Official Blogs:**
-Process blog posts from the `blogs` array. For each post:
-1. Summarize using `prompts.summarize_blogs`
-2. Include the direct link to the original article
-
-**Channel 4 — Newsletters:**
-Process newsletters from the `newsletters` array. For each issue:
-1. Summarize using `prompts.summarize_newsletter`
-2. Include the direct link to the original issue
-
-**Channel 5 — Academic Papers:**
-Process paper groups from the `academic` array. For each item in a group:
-1. Summarize using `prompts.summarize_paper`
-2. Include the paper link (arXiv URL or conference proceedings)
-
-**Channel 6 — Chinese Tech:**
-Process source groups from the `zhTech` array. For each article item in a group:
-1. Summarize using `prompts.summarize_zh_sources`
-2. The summary should be in Chinese
-3. Include the direct link to the original article
-
-Industry reports are not present in the current prepared JSON. Do not invent, fetch,
-or include a report section unless a future runtime explicitly provides report data.
-
-Assemble the digest following `prompts.digest_intro`.
-
-**ABSOLUTE RULES:**
-- NEVER invent or fabricate content. Only use what's in the JSON.
-- Every piece of content MUST have its URL. No URL = do not include.
-- Do NOT guess job titles. Use the `bio` field or just the person's name.
-- Do NOT visit x.com, search the web, or call any API.
-
-### Step 5: Apply language
-
-Read `config.language` from the JSON:
-- **"en":** Entire digest in English.
-- **"zh":** Entire digest in Chinese. Follow `prompts.translate`.
-  Chinese sources (Channel 6) stay in original Chinese.
-- **"bilingual":** Interleave English and Chinese **paragraph by paragraph**.
-  For each content item: English version, then Chinese translation directly below.
+- `ready`：完整检查且有 1-10 条合格更新。
+- `no-important-updates`：完整检查且没有合格项；daily 为“今日无重要更新”，weekly 为“本周无重要更新”。
+- `partial`：来源不完整；可交付已有合格项，但不能声称没有重要更新。
+- `incomplete-history`：历史覆盖不足，优先于 `partial` 披露。
+- `preparation-failed`：request、selection、Schema、IO 或评分结果无效；停止且不得创建或覆盖可投递 output。
 
 ### Step 6: Deliver
 
@@ -402,13 +345,14 @@ Read `config.delivery.method` from the JSON:
 
 **If "telegram" or "email":**
 ```bash
-echo '<your digest text>' > /tmp/fb-digest.txt
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --file /tmp/fb-digest.txt 2>/dev/null
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --file <absolute-output-path> 2>/dev/null
 ```
 If delivery fails, show the digest in the terminal as fallback.
 
 **If "stdout" (default):**
-Just output the digest directly.
+展示最终 artifact 中的 `message` 与 `items`。不要展示 request 中未选择的候选。
+
+任一步失败都必须停止后续步骤。特别是 finalize 失败时，不得读取旧 output 并继续投递。
 
 ---
 
@@ -421,10 +365,7 @@ centrally and updates automatically. If you'd like to suggest a source, you can
 open an issue at https://github.com/TheGoldenWave/Follow-up."
 
 ### Channel Changes
-The current config schema and digest preparation do not enforce per-user channel
-switches. If the user requests channel filtering, explain this limitation and record
-the desired preference as product feedback. Do not edit unsupported `channels.*`
-fields or claim that the next digest will be filtered.
+使用 `enabledChannels` 保存六个 live channel 的开关。缺少该字段的旧配置默认六类全开；空数组表示不生成 Digest。更新配置仍需遵守本节的 mutation 确认要求。
 
 ### Schedule Changes
 - "Switch to weekly/daily" → show the config and scheduler changes, then confirm each
