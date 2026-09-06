@@ -357,7 +357,7 @@ async function readJson(path, label, errors) {
 
 export async function validateRelease(
   root = resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
-  { treeish = 'HEAD', mode = 'checkout', verifyIntegrity = true } = {},
+  { treeish = 'HEAD', mode = 'checkout', verifyIntegrity = true, validateSchema = true } = {},
 ) {
   const rootPath = toPath(root);
   const errors = [];
@@ -391,7 +391,7 @@ export async function validateRelease(
     ),
   ]);
 
-  if (manifest && schema) {
+  if (manifest && schema && validateSchema) {
     try {
       const [{ default: Ajv2020 }, { default: addFormats }] = await Promise.all([
         import('ajv/dist/2020.js'),

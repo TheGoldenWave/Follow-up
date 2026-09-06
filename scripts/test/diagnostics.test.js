@@ -312,6 +312,27 @@ test('default registration discovery requires at least one valid built-in regist
   assert.equal(activeClaude.exitCode, 1);
 });
 
+test('installer diagnostics can explicitly skip registration before activation', async () => {
+  const report = await runDiagnostics({
+    requireRegistration: false, releaseRoot: '/release', configPath: '/state/config.json', nodeVersion: '20.0.0', now: NOW,
+    readFileImpl: async (path) => {
+      const value = String(path);
+      if (value.endsWith('/VERSION')) return '0.2.0';
+      if (value.endsWith('/scripts/package.json')) return JSON.stringify({ dependencies: {} });
+      if (value.endsWith('/scripts/package-lock.json')) return JSON.stringify({ packages: { '': {} } });
+      if (value === '/state/config.json') return '{}';
+      if (value.endsWith('/feed-candidates.json')) return JSON.stringify({ continuousHistorySince: '2026-09-01T00:00:00.000Z', historyTruncated: false });
+      throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+    },
+    validateReleaseImpl: async () => [], validateConfigImpl: () => ({ valid: true, errors: [] }),
+    validateFeedFilesImpl: async () => [], readDeliveryLedgerImpl: async () => [],
+    deriveDeliveryStateImpl: () => ({ attempts: new Map(), unresolvedReplacementAttempts: [] }),
+    inspectRegistrationImpl: async () => { throw new Error('must not inspect registration'); },
+  });
+  assert.equal(report.findings.find(({ id }) => id === 'registration').status, 'ok');
+  assert.equal(report.exitCode, 0);
+});
+
 test('chunked network reads stop at the configured byte limit', async () => {
   let reads = 0;
   const response = {

@@ -2,15 +2,18 @@
 
 ## 已验证安装
 
-请使用经过校验的 GitHub Release 压缩包，并准备 Node.js 20 或更高版本：
+请直接在未经修改、经过校验并解压的 GitHub Release 目录运行安装器，并准备 Node.js 20 或更高版本：
 
 ```text
-npm ci --prefix scripts
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <绝对路径>] [--register]
 node scripts/doctor.js [--network] [--json]
 ```
 
 `--register` 表示明确授权创建 `follow-up` Skill 链接。重复执行可重装同一版本，并逐字节保留已有可变用户文件。若升级时检测到旧的 `follow-builders` 注册，必须额外使用 `--replace-follow-builders`；只有新链接创建成功且本地 doctor 检查通过后才会删除旧链接。完成注册后可通过 `/follow-up` 进入。
+
+```text
+node scripts/install.js --platform codex --register --replace-follow-builders
+```
 
 # Follow-up：AI 信息信号与注意力策展
 

@@ -247,6 +247,9 @@ function defaultOfflineChecks(options) {
       return createFinding({ id: 'dependencies', status: 'ok', scope: 'local', blocking: false, message: 'Locked dependencies are installed' });
     },
     async () => {
+      if (options.requireRegistration === false) {
+        return createFinding({ id: 'registration', status: 'ok', scope: 'local', blocking: false, message: 'Skill registration was not requested' });
+      }
       let platforms = platform ? [{ platform, skillDir }] : [];
       if (!platform) {
         let activeRegistration = false;
