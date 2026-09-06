@@ -65,7 +65,7 @@ function redactString(value) {
   });
   output = output.replace(/([?&](?:token|secret|password|key|signature|credential)=[^&#\s]*)/giu, (part) => `${part.split('=')[0]}=[redacted]`);
   output = output.replace(/(["'])(?:\/(?!\/)|[A-Z]:\\)(?:(?!\1).)+\1/giu, '$1[redacted-path]$1');
-  output = output.replace(/(^|\s)\/(?!\/)\S+\s+.*\/\S+.*$/gu, '$1[redacted-path]');
+  output = output.replace(/(^|\s)\/(?!\/)\S[\s\S]*$/u, '$1[redacted-path]');
   output = output.replace(/(^|\s)(\/(?!\/)(?:[^\s\\]|\\ )+)/gu, '$1[redacted-path]');
   output = output.replace(/(^|\s)[A-Z]:\\.+?(?=\s+(?:and|for|at|from|now)\b|$)/giu, '$1[redacted-path]');
   output = output.replace(/(^|[\s"'(])(\/(?!\/)[^\s"'):,;]+)/gu, '$1[redacted-path]');

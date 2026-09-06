@@ -118,6 +118,27 @@ test('redaction conservatively removes the rest of an unquoted absolute POSIX pa
   assert.equal(redacted.prose, 'ratio input/output remains ordinary text');
 });
 
+test('redaction does not infer unquoted POSIX path endings from extensions or separators', () => {
+  for (const message of [
+    '/Users/alice/My Report.json',
+    'failed /Users/alice/Secret Project',
+  ]) {
+    const redacted = redactDiagnostics({ message });
+    assert.equal(redacted.message, message.startsWith('/')
+      ? '[redacted-path]'
+      : 'failed [redacted-path]');
+    assert.doesNotMatch(redacted.message, /alice|Report|Secret|Project/i);
+  }
+  assert.equal(
+    redactDiagnostics({ value: 'request https://example.com/path remains visible' }).value,
+    'request https://example.com/path remains visible',
+  );
+  assert.equal(
+    redactDiagnostics({ value: 'relative input/output remains visible' }).value,
+    'relative input/output remains visible',
+  );
+});
+
 test('default offline diagnostics cover all required local contracts through injected adapters', async () => {
   const report = await runDiagnostics({
     network: false,
