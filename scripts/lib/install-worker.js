@@ -76,13 +76,17 @@ async function buildObject(sourceRoot, version, transactionId) {
 async function publishPointer(objectName, versionName) {
   if (dirname(objectName) !== '.' || dirname(versionName) !== '.' || !objectName.startsWith(`.${versionName}.object-`)) fail('Invalid release pointer names');
   await fs.symlink(objectName, versionName, 'dir');
+  process.send({ type: 'created' });
   const directory = await fs.open('.', 'r'); try { await directory.sync(); } finally { await directory.close(); }
+  process.send({ type: 'durable' });
 }
 
 async function removePointer(objectName, versionName) {
   if (await fs.readlink(versionName) !== objectName) fail('Release pointer ownership changed');
   await fs.unlink(versionName);
+  process.send({ type: 'created' });
   const directory = await fs.open('.', 'r'); try { await directory.sync(); } finally { await directory.close(); }
+  process.send({ type: 'durable' });
 }
 
 const [mode, capability, ...args] = process.argv.slice(2);

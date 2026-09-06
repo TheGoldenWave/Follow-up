@@ -181,6 +181,28 @@ test('stable object cwd prevents pathname replacement from redirecting writes', 
   assert.ok(await fs.lstat(join(detached, '.install-owner'))); assert.ok(await fs.lstat(join(detached, 'SKILL.md')));
 });
 
+test('post-copy snapshot rejects a source replacement after trusted preflight', async () => {
+  const f = await fixture(); const original = `${f.root}-original`; const errors = [];
+  const result = await runInstaller(['--platform', 'codex'], {
+    ...f, validateReleaseImpl: async () => [], validateArchiveCriticalFilesImpl: async () => [], stdout: () => {}, stderr: (message) => errors.push(message),
+    onPreflightComplete: async () => {
+      await fs.rename(f.root, original); await fs.mkdir(join(f.root, 'scripts'), { recursive: true });
+      await fs.writeFile(join(f.root, 'VERSION'), '0.2.0\n'); await fs.writeFile(join(f.root, 'SKILL.md'), 'malicious'); await fs.writeFile(join(f.root, 'extra-payload'), 'evil');
+      await fs.writeFile(join(f.root, 'release-manifest.json'), '{}');
+      await fs.writeFile(join(f.root, 'scripts', 'package.json'), JSON.stringify({ version: '0.2.0', type: 'module' }));
+      await fs.writeFile(join(f.root, 'scripts', 'package-lock.json'), JSON.stringify({ name: 'swap', version: '0.2.0', lockfileVersion: 3, packages: { '': { name: 'swap', version: '0.2.0' } } }));
+      await fs.writeFile(join(f.root, 'scripts', 'doctor.js'), "export async function runDoctor(_a,o){const r={exitCode:0};o.stdout?.(JSON.stringify(r));return r}\n");
+    },
+  });
+  assert.equal(result.exitCode, 1); assert.match(errors.join('\n'), /snapshot|payload/i); await assert.rejects(fs.lstat(f.releaseRoot), { code: 'ENOENT' });
+});
+
+test('pointer created but not durable returns publication uncertain and keeps the release reachable', async () => {
+  const f = await fixture(); const errors = [];
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, stderr: (message) => errors.push(message), pointerWorkerImpl: async (_mode, [target, version], { cwd }) => { await fs.symlink(target, join(cwd, version)); const error = new Error('directory fsync failed'); error.created = true; throw error; } }));
+  assert.equal(result.exitCode, 1); assert.equal(result.publicationUncertain, true); assert.match(errors.join('\n'), /publication.*uncertain/i); assert.ok(await fs.lstat(f.releaseRoot)); assert.ok(await fs.lstat(await fs.realpath(f.releaseRoot)));
+});
+
 test('incomplete object pointer is never reused', async () => {
   const f = await fixture(); const releases = join(f.releaseRoot, '..'); const object = join(releases, '.0.2.0.object-abandoned'); await fs.mkdir(object, { recursive: true }); await fs.writeFile(join(object, '.install-owner'), 'abandoned\n'); await fs.symlink('.0.2.0.object-abandoned', f.releaseRoot);
   const result = await runInstaller(['--platform', 'codex'], injected({ ...f, validateReleaseImpl: async () => [] }));
@@ -224,14 +246,14 @@ test('real registration adapters preserve v0.1 legacy links until target doctor 
   }
 });
 
-test('registration failure restores prior active metadata and removes a newly published release', async () => {
+test('registration failure restores prior active metadata and retains the reusable immutable release', async () => {
   const f = await fixture(); const user = join(f.home, '.follow-builders'); await fs.mkdir(user, { recursive: true });
   const original = Buffer.from('{"generation":"keep"}\n'); await fs.writeFile(join(user, 'active.json'), original);
   const result = await runInstaller(['--platform', 'custom', '--skill-dir', join(f.base, 'skills', 'follow-up'), '--register'], injected({ ...f,
     registerSkillImpl: async ({ verify }) => { assert.equal(await verify(), true); throw new Error('registration cleanup failed'); },
   }));
   assert.equal(result.exitCode, 1); assert.deepEqual(await fs.readFile(join(user, 'active.json')), original);
-  await assert.rejects(fs.lstat(f.releaseRoot), { code: 'ENOENT' });
+  assert.ok(await fs.lstat(f.releaseRoot)); assert.equal((await runInstaller(['--platform', 'codex'], injected(f))).reused, true);
 });
 
 test('active metadata rollback failure is explicit and retains its published release', async () => {
@@ -261,6 +283,11 @@ test('mutable config, prompts, env, and state remain byte-for-byte unchanged', a
 test('module has a main guard and README invokes installer directly with upgrade flag', async () => {
   const script = `import ${JSON.stringify(new URL('../install.js', import.meta.url).href)}; console.log('imported')`; const child = spawn(process.execPath, ['--input-type=module', '--eval', script], { stdio: ['ignore', 'pipe', 'pipe'] }); let output = ''; child.stdout.on('data', (chunk) => { output += chunk; }); assert.equal(await new Promise((resolve) => child.on('close', resolve)), 0); assert.equal(output.trim(), 'imported');
   for (const readme of ['README.md', 'README.zh-CN.md']) { const text = await fs.readFile(new URL(`../../${readme}`, import.meta.url), 'utf8'); assert.match(text, /node scripts\/install\.js --platform/); assert.doesNotMatch(text, /npm ci --prefix scripts/); assert.match(text, /--replace-follow-builders/); }
+});
+
+test('Task 12 plan requires the stable-cwd installer worker in the critical set', async () => {
+  const plan = await fs.readFile(new URL('../../docs/superpowers/plans/2026-09-05-v0.2.0-product-closure.md', import.meta.url), 'utf8');
+  assert.match(plan, /required critical set[^\n]*scripts\/lib\/install-worker\.js/);
 });
 
 test('CLI invalid usage exits 64', async () => {

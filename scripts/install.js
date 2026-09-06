@@ -51,6 +51,35 @@ function sameIdentity(left, right) {
     && left.isDirectory() === right.isDirectory() && left.isSymbolicLink() === right.isSymbolicLink());
 }
 
+async function snapshotPayload(root, fsImpl, { target = false } = {}) {
+  const entries = new Map(); const rootPath = resolve(root);
+  async function visit(path) {
+    const metadata = await fsImpl.lstat(path); const rel = relative(rootPath, path).split(sep).join('/');
+    if (target && (rel === OWNER_FILE || rel === COMPLETE_FILE || rel === 'scripts/node_modules' || rel.startsWith('scripts/node_modules/'))) return;
+    if (metadata.isSymbolicLink()) {
+      if (target && rel.startsWith('scripts/node_modules/')) return;
+      throw new Error('Payload snapshot rejects symbolic links');
+    }
+    if (metadata.isDirectory()) {
+      if (rel) entries.set(rel, { type: 'directory', mode: metadata.mode & 0o777 });
+      for (const name of await fsImpl.readdir(path)) await visit(join(path, name));
+      return;
+    }
+    if (!metadata.isFile()) throw new Error('Payload snapshot rejects unsupported file types');
+    entries.set(rel, { type: 'file', mode: metadata.mode & 0o777, size: metadata.size,
+      sha256: createHash('sha256').update(await fsImpl.readFile(path)).digest('hex') });
+  }
+  await visit(rootPath); return entries;
+}
+
+async function verifyPayloadSnapshot(expected, objectRoot, fsImpl) {
+  const actual = await snapshotPayload(objectRoot, fsImpl, { target: true });
+  if (actual.size !== expected.size) throw new Error('Installed payload snapshot has unexpected paths');
+  for (const [path, value] of expected) {
+    if (JSON.stringify(actual.get(path)) !== JSON.stringify(value)) throw new Error(`Installed payload snapshot mismatch at ${path}`);
+  }
+}
+
 async function inspectTree(root, fsImpl, { rejectDependencies = false, skipDependencies = false } = {}) {
   const sourceRoot = resolve(root);
   async function visit(path) {
@@ -240,9 +269,20 @@ async function runInternalWorker(mode, args, { cwd, capability, env = process.en
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
   });
   let stderr = ''; child.stderr.on('data', (chunk) => { if (stderr.length < 8192) stderr += chunk; });
+  let ready = false; let created = false; let durable = false; let done = false;
   const completion = new Promise((accept, reject) => {
     child.once('error', reject);
-    child.once('close', (code) => code === 0 ? accept() : reject(new Error('Installer internal worker failed')));
+    child.on('message', (message) => {
+      if (message?.type === 'ready' && !ready && !created && !durable && !done) ready = true;
+      else if (message?.type === 'created' && ready && !created && !durable && !done) created = true;
+      else if (message?.type === 'durable' && created && !durable && !done) durable = true;
+      else if (message?.type === 'done' && ready && !done && (mode === 'object' || durable)) done = true;
+      else { child.kill(); reject(new Error('Invalid installer worker message sequence')); }
+    });
+    child.once('close', (code) => {
+      if (code === 0 && done) accept({ created, durable });
+      else { const error = new Error('Installer internal worker failed'); error.created = created; error.durable = durable; reject(error); }
+    });
   });
   await new Promise((accept, reject) => {
     const timer = setTimeout(() => reject(new Error('Installer internal worker did not become ready')), 30_000);
@@ -250,7 +290,7 @@ async function runInternalWorker(mode, args, { cwd, capability, env = process.en
     child.once('error', reject);
   });
   try { await onReady?.(); child.send({ type: 'start', capability }); } catch (error) { child.kill(); throw error; }
-  await completion;
+  return completion;
 }
 
 export async function runInstaller(args, options = {}) {
@@ -261,7 +301,7 @@ export async function runInstaller(args, options = {}) {
     copyReleaseImpl = copyTree, npmCiImpl = async (cwd) => execFile(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts'], { cwd }),
     registerSkillImpl = registerSkill, doctorImpl = runReleaseDoctor,
     objectWorkerImpl, pointerWorkerImpl = runInternalWorker,
-    onObjectWorkerReady, onPointerWorkerReady,
+    onPreflightComplete, onObjectWorkerReady, onPointerWorkerReady,
     stdout = console.log, stderr = console.error, transactionId = randomUUID(),
   } = options;
   let parsed;
@@ -271,8 +311,10 @@ export async function runInstaller(args, options = {}) {
   let metadataPrevious; let metadataChanged = false;
   try {
     await inspectTree(sourceRoot, fsImpl, { rejectDependencies: true });
+    const payloadSnapshot = await snapshotPayload(sourceRoot, fsImpl);
     await validateArchive(sourceRoot, nodeVersion, validateReleaseImpl, validateArchiveCriticalFilesImpl);
     const version = (await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8')).trim();
+    await onPreflightComplete?.();
     const userDir = join(home, '.follow-builders'); releasesDir = join(userDir, 'releases'); const releaseRoot = join(releasesDir, version);
     await ensureDirectorySafe(userDir, fsImpl); lockPath = join(userDir, '.install.lock');
     try {
@@ -317,17 +359,28 @@ export async function runInstaller(args, options = {}) {
         await completeObject(objectRoot, objectIdentity, version, transactionId, fsImpl);
       }
       if (!sameIdentity(objectIdentity, await fsImpl.lstat(objectRoot))) throw new Error('Release object changed during copy');
+      await verifyPayloadSnapshot(payloadSnapshot, objectRoot, fsImpl);
       await validateCompletion(objectRoot, version, fsImpl); published = true;
       if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))) throw new Error('Release directory changed before pointer publication');
       pointerTarget = relative(releasesDir, objectRoot);
+      let publication;
       try {
-        await pointerWorkerImpl('publish', [pointerTarget, version], {
+        publication = await pointerWorkerImpl('publish', [pointerTarget, version], {
           cwd: releasesDir, capability: transactionId,
           onReady: () => onPointerWorkerReady?.({ releasesDir, releaseRoot, pointerTarget }),
         });
       } catch (error) {
+        if (error?.created) {
+          pointerPublished = true;
+          const uncertain = new Error('Install publication is uncertain after the version pointer was created', { cause: error });
+          uncertain.code = 'INSTALL_PUBLICATION_UNCERTAIN'; uncertain.publicationUncertain = true; throw uncertain;
+        }
         if (await pathState(releaseRoot, fsImpl)) throw new Error('Release target became occupied during installation');
         throw error;
+      }
+      const injectedPointer = pointerWorkerImpl !== runInternalWorker;
+      if (!injectedPointer && publication?.durable !== true) {
+        const uncertain = new Error('Install publication is uncertain because pointer durability was not confirmed'); uncertain.code = 'INSTALL_PUBLICATION_UNCERTAIN'; uncertain.publicationUncertain = true; throw uncertain;
       }
       pointerPublished = true;
       if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir)) || await fsImpl.readlink(releaseRoot) !== pointerTarget) throw new Error('Release pointer changed during publication');
@@ -359,14 +412,8 @@ export async function runInstaller(args, options = {}) {
     }
     if (error?.code === 'REGISTRATION_ROLLBACK_FAILED') rollbackError ??= error;
     const releaseParentOwned = releasesDir && sameIdentity(releasesIdentity, await pathState(releasesDir, fsImpl));
-    if (!rollbackError && pointerPublished && releasesDir && pointerTarget) {
-      const version = await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8').then((value) => value.trim()).catch(() => null);
-      const pointer = version && join(releasesDir, version);
-      const exact = pointer && await fsImpl.lstat(pointer).then((metadata) => metadata.isSymbolicLink()).catch(() => false)
-        && await fsImpl.readlink(pointer).catch(() => null) === pointerTarget;
-      if (exact && releaseParentOwned) {
-        await pointerWorkerImpl('remove', [pointerTarget, version], { cwd: releasesDir, capability: transactionId }).catch(() => {});
-      }
+    if (error?.code === 'INSTALL_PUBLICATION_UNCERTAIN') {
+      stderr(error.message); return { exitCode: 1, error, publicationUncertain: true, published };
     }
     // Random incomplete or unreferenced objects are ignored by reuse and doctor. Removing
     // their root by pathname after a worker/callback would reintroduce the replacement race.
