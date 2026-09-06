@@ -139,6 +139,30 @@ test('redaction does not infer unquoted POSIX path endings from extensions or se
   );
 });
 
+test('redaction recognizes absolute paths after common diagnostic boundaries', () => {
+  const cases = [
+    ['failed /Users/alice/My Report.json', 'failed [redacted-path]'],
+    ['failed (/Users/alice/My Report.json)', 'failed ([redacted-path]'],
+    ['failed [/Users/alice/My Report.json]', 'failed [[redacted-path]'],
+    ['failed {/Users/alice/My Report.json}', 'failed {[redacted-path]'],
+    ['path=/Users/alice/My Report.json', 'path=[redacted-path]'],
+    ['path:/Users/alice/My Report.json', 'path:[redacted-path]'],
+    ['path="/Users/alice/My Report.json"', 'path="[redacted-path]"'],
+    ["path='/Users/alice/My Report.json'", "path='[redacted-path]'"],
+    ['path=C:\\Users\\Alice Smith\\token.txt', 'path=[redacted-path]'],
+    ['failed (C:\\Users\\Alice Smith\\token.txt)', 'failed ([redacted-path]'],
+  ];
+  for (const [message, expected] of cases) {
+    assert.equal(redactDiagnostics({ message }).message, expected, message);
+  }
+
+  for (const value of [
+    'https://example.com/path remains visible',
+    'relative input/output remains visible',
+    'ratio:1/2 remains visible',
+  ]) assert.equal(redactDiagnostics({ value }).value, value);
+});
+
 test('default offline diagnostics cover all required local contracts through injected adapters', async () => {
   const report = await runDiagnostics({
     network: false,
