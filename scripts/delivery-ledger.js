@@ -23,6 +23,7 @@ const EVENT_TYPES = new Set([
   'failed',
   'assumed-delivered',
   'superseded',
+  'handoff-claimed',
 ]);
 const SUCCESS_TYPES = new Set(['delivered', 'assumed-delivered']);
 const COMMON_FIELDS = Object.freeze(['schemaVersion', 'type', 'occurredAt', 'attemptId']);
@@ -40,6 +41,7 @@ const EVENT_FIELDS = Object.freeze({
   failed: Object.freeze([...COMMON_FIELDS, 'reasonCode']),
   'assumed-delivered': COMMON_FIELDS,
   superseded: Object.freeze([...COMMON_FIELDS, 'replacementAttemptId']),
+  'handoff-claimed': Object.freeze([...COMMON_FIELDS, 'claimId']),
 });
 const STRICT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
@@ -191,6 +193,7 @@ export function validateDeliveryEvent(event, { limits: limitOverrides } = {}) {
       throw new TypeError('Superseded delivery event replacementAttemptId must be different');
     }
   }
+  if (event.type === 'handoff-claimed') requireId(event.claimId, 'claimId');
   return event;
 }
 
@@ -206,6 +209,8 @@ function buildAttemptState(events, options = {}) {
       attempts.set(event.attemptId, {
         pending: event,
         pendingIndex: index,
+        claim: null,
+        claimIndex: null,
         resolution: null,
         resolutionIndex: null,
       });
@@ -214,17 +219,35 @@ function buildAttemptState(events, options = {}) {
     if (!existing) {
       throw new Error(`Illegal transition at event ${index + 1}: attempt ${event.attemptId} has no pending event`);
     }
+    if (event.type === 'handoff-claimed') {
+      if (existing.resolution) {
+        throw new Error(`Illegal transition at event ${index + 1}: attempt ${event.attemptId} is already resolved`);
+      }
+      if (existing.claim) {
+        throw new Error(`Illegal transition at event ${index + 1}: attempt ${event.attemptId} is already claimed`);
+      }
+      if (Date.parse(event.occurredAt) < Date.parse(existing.pending.occurredAt)) {
+        throw new Error(`Illegal transition at event ${index + 1}: claim predates pending attempt ${event.attemptId}`);
+      }
+      existing.claim = event;
+      existing.claimIndex = index;
+      continue;
+    }
     if (existing.resolution) {
       throw new Error(`Illegal transition at event ${index + 1}: attempt ${event.attemptId} is already resolved`);
     }
     if (Date.parse(event.occurredAt) < Date.parse(existing.pending.occurredAt)) {
       throw new Error(`Illegal transition at event ${index + 1}: resolution predates pending attempt ${event.attemptId}`);
     }
+    if (existing.claim && Date.parse(event.occurredAt) < Date.parse(existing.claim.occurredAt)) {
+      throw new Error(`Illegal transition at event ${index + 1}: resolution predates handoff claim ${event.attemptId}`);
+    }
     existing.resolution = event;
     existing.resolutionIndex = index;
   }
 
   const unresolvedReplacementAttempts = [];
+  const replacementOrigins = new Map();
   for (const [attemptId, attempt] of attempts) {
     if (attempt.resolution?.type !== 'superseded') continue;
     const replacementAttemptId = attempt.resolution.replacementAttemptId;
@@ -239,7 +262,11 @@ function buildAttemptState(events, options = {}) {
         `Illegal replacement for attempt ${attemptId}: ${replacementAttemptId} must be a subsequent later pending attempt and cannot form a cycle`,
       );
     }
-    for (const field of ['digestId', 'frequency', 'candidateIds', 'eventClusterIds']) {
+    if (replacementOrigins.has(replacementAttemptId)) {
+      throw new Error(`Illegal replacement: attempt ${replacementAttemptId} has multiple superseded origins`);
+    }
+    replacementOrigins.set(replacementAttemptId, attemptId);
+    for (const field of ['digestId', 'frequency', 'candidateIds', 'eventClusterIds', 'messageHash']) {
       const original = attempt.pending[field];
       const next = replacement.pending[field];
       const matches = Array.isArray(original)
@@ -252,7 +279,12 @@ function buildAttemptState(events, options = {}) {
       }
     }
   }
-  return { attempts, unresolvedReplacementAttempts };
+  for (const [attemptId, attempt] of attempts) {
+    if (attempt.claim && !replacementOrigins.has(attemptId)) {
+      throw new Error(`Illegal handoff claim: attempt ${attemptId} is not a replacement`);
+    }
+  }
+  return { attempts, unresolvedReplacementAttempts, replacementOrigins };
 }
 
 export function deriveDeliveryState(events, options = {}) {

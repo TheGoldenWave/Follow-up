@@ -115,6 +115,10 @@ export function validateOutboxRecord(record) {
     : record.status === 'failed'
       ? ['schemaVersion', 'status', 'attempt', 'updatedAt', 'reasonCode']
       : ['schemaVersion', 'status', 'attempt', 'updatedAt'];
+  const hasClaimId = Object.hasOwn(record, 'claimId');
+  const hasClaimedAt = Object.hasOwn(record, 'handoffClaimedAt');
+  if (hasClaimId !== hasClaimedAt) throw new TypeError('Outbox claim metadata is incomplete');
+  if (hasClaimId) allowed.push('claimId', 'handoffClaimedAt');
   if (record.schemaVersion !== '1.0'
     || !['pending', 'delivered', 'failed', 'assumed-delivered', 'superseded'].includes(record.status)
     || Object.keys(record).some((field) => !allowed.includes(field))
@@ -124,6 +128,14 @@ export function validateOutboxRecord(record) {
   validateDeliveryEvent(record.attempt);
   if (record.attempt.type !== 'pending') throw new TypeError('Outbox attempt must be pending');
   validateTimestamp(record.updatedAt, 'Outbox updatedAt');
+  if (hasClaimId) {
+    requireAttemptId(record.claimId);
+    validateTimestamp(record.handoffClaimedAt, 'Outbox handoffClaimedAt');
+    if (Date.parse(record.handoffClaimedAt) < Date.parse(record.attempt.occurredAt)
+      || Date.parse(record.updatedAt) < Date.parse(record.handoffClaimedAt)) {
+      throw new TypeError('Outbox claim timestamps are invalid');
+    }
+  }
   if (record.status === 'delivered') validateReceipt(record.receipt);
   if (record.status === 'failed' && !/^[a-z][a-z0-9-]{0,63}$/u.test(record.reasonCode)) {
     throw new TypeError('Outbox failure reasonCode is invalid');
@@ -147,7 +159,7 @@ function validateJournal(journal) {
   if (!journal || typeof journal !== 'object' || Array.isArray(journal)
     || Object.keys(journal).sort().join(',') !== fields.sort().join(',')
     || journal.schemaVersion !== '1.0' || !JOURNAL_PHASES.has(journal.phase)
-    || !['reservation', 'resolution', 'replacement'].includes(journal.operation)) {
+    || !['reservation', 'resolution', 'replacement', 'claim'].includes(journal.operation)) {
     throw new Error('Invalid closed delivery transaction journal');
   }
   requireAttemptId(journal.attemptId);
@@ -169,6 +181,13 @@ function validateJournal(journal) {
   if (journal.operation === 'resolution'
     && (events.length !== 1 || events[0].type !== records[0].status)) {
     throw new Error('Invalid resolution journal');
+  }
+  if (journal.operation === 'claim'
+    && (events.length !== 1 || events[0].type !== 'handoff-claimed'
+      || records[0].status !== 'pending'
+      || records[0].claimId !== events[0].claimId
+      || records[0].handoffClaimedAt !== events[0].occurredAt)) {
+    throw new Error('Invalid handoff claim journal');
   }
   if (journal.operation === 'replacement'
     && (events.length !== 2 || records.length !== 2
@@ -232,26 +251,35 @@ async function writeAtomic(path, value, maximum, fsImpl, randomUUID, prefix) {
 }
 
 function outboxRecordForAttempt(attempt) {
-  const { pending, resolution } = attempt;
+  const { pending, claim, resolution } = attempt;
+  const claimFields = claim ? {
+    claimId: claim.claimId, handoffClaimedAt: claim.occurredAt,
+  } : {};
   if (!resolution) {
-    return { schemaVersion: '1.0', status: 'pending', attempt: pending, updatedAt: pending.occurredAt };
+    return {
+      schemaVersion: '1.0', status: 'pending', attempt: pending,
+      updatedAt: claim?.occurredAt ?? pending.occurredAt, ...claimFields,
+    };
   }
   if (resolution.type === 'delivered') {
     return {
       schemaVersion: '1.0', status: 'delivered', attempt: pending,
       updatedAt: resolution.occurredAt, receipt: resolution.providerReceipt,
+      ...claimFields,
     };
   }
   if (resolution.type === 'failed') {
     return {
       schemaVersion: '1.0', status: 'failed', attempt: pending,
       updatedAt: resolution.occurredAt, reasonCode: resolution.reasonCode,
+      ...claimFields,
     };
   }
   if (resolution.type === 'assumed-delivered' || resolution.type === 'superseded') {
     return {
       schemaVersion: '1.0', status: resolution.type, attempt: pending,
       updatedAt: resolution.occurredAt,
+      ...claimFields,
     };
   }
   return null;
@@ -426,7 +454,9 @@ function transactionForEvents(events, records, rawOptions) {
   const options = resolvedOptions(rawOptions);
   const operation = events.length === 2
     ? 'replacement'
-    : events[0].type === 'pending' ? 'reservation' : 'resolution';
+    : events[0].type === 'pending'
+      ? 'reservation'
+      : events[0].type === 'handoff-claimed' ? 'claim' : 'resolution';
   const attemptId = events[0].attemptId;
   let journal = {
     schemaVersion: '1.0', phase: 'prepared', operation,
@@ -573,4 +603,24 @@ export async function replaceOutboxAttempt(attemptId, replacement, resolution, o
     transaction: transactionForEvents([superseded, replacement], records, options),
   });
   return records;
+}
+
+export async function claimReplacementOutboxAttempt(attemptId, claim, options = {}) {
+  requireAttemptId(attemptId);
+  const existing = await readOutboxAttempt(attemptId, options);
+  if (existing.status !== 'pending') throw new Error('Outbox attempt is already terminal');
+  if (existing.claimId) throw new Error('Outbox replacement attempt is already claimed');
+  const event = {
+    schemaVersion: '1.0', type: 'handoff-claimed', occurredAt: claim.occurredAt,
+    attemptId, claimId: claim.claimId,
+  };
+  validateDeliveryEvent(event);
+  const record = {
+    ...existing, updatedAt: claim.occurredAt,
+    claimId: claim.claimId, handoffClaimedAt: claim.occurredAt,
+  };
+  await appendDeliveryEvent(event, {
+    ...options, transaction: transactionFor(event, record, options),
+  });
+  return record;
 }

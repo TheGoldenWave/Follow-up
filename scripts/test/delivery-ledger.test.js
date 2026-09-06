@@ -316,6 +316,12 @@ test('a replacement pending must be later and preserve digest, candidate, and cl
     /frequency.*match|match.*frequency/i,
   );
   assert.throws(
+    () => deriveDeliveryState([old, superseded, {
+      ...replacement, messageHash: hashId('changed-message'),
+    }]),
+    /messageHash.*match|match.*messageHash/i,
+  );
+  assert.throws(
     () => deriveDeliveryState([replacement, old, superseded]),
     /subsequent|later/i,
   );

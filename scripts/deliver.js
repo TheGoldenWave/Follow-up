@@ -10,7 +10,12 @@ import { parse } from 'dotenv';
 
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
 import { loadActiveDigest } from './delivery-message.js';
-import { readOutboxAttempt, reserveOutboxAttempt, resolveOutboxAttempt } from './delivery-outbox.js';
+import {
+  claimReplacementOutboxAttempt,
+  readOutboxAttempt,
+  reserveOutboxAttempt,
+  resolveOutboxAttempt,
+} from './delivery-outbox.js';
 import { deliverWithProvider, validateDestination } from './delivery-providers.js';
 import { AtomicWriteCommittedError, writeJsonAtomic } from './prepare-digest.js';
 
@@ -176,6 +181,7 @@ export async function resumeActiveDigestDelivery({
   ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout = process.stderr,
   timeoutMs = 15_000, logger = () => {}, randomUUID = systemRandomUUID,
   now = () => new Date().toISOString(), resolveAttempt = resolveOutboxAttempt,
+  claimAttempt = claimReplacementOutboxAttempt,
 } = {}) {
   const loaded = await loadActiveDigest(activePath);
   const validated = validateDestination(destination, credentials);
@@ -191,6 +197,14 @@ export async function resumeActiveDigestDelivery({
     && sameValues(attempt.candidateIds, loaded.candidateIds)
     && sameValues(attempt.eventClusterIds, loaded.eventClusterIds);
   if (!matches) throw new Error('Resume attempt does not match the active digest and destination');
+  const claimedAt = timestamp(now);
+  const claimId = randomUUID();
+  if (typeof claimId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(claimId)) {
+    throw new Error('Generated delivery claimId is invalid');
+  }
+  await claimAttempt(attemptId, { occurredAt: claimedAt, claimId }, {
+    ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID,
+  });
   return handoffReservedDigest(loaded, validated, attemptId, {
     ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout,
     timeoutMs, logger, randomUUID, now, resolveAttempt,

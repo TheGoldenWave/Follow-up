@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 
 import {
+  claimReplacementOutboxAttempt,
   readDeliveryOutbox,
   readOutboxAttempt,
   reconcileDeliveryTransactions,
@@ -13,7 +14,7 @@ import {
   reserveOutboxAttempt,
   resolveOutboxAttempt,
 } from '../delivery-outbox.js';
-import { readDeliveryLedger } from '../delivery-ledger.js';
+import { deriveDeliveryState, readDeliveryLedger } from '../delivery-ledger.js';
 
 const id = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -253,4 +254,44 @@ test('retry transaction recovers both superseded and replacement outbox records 
   assert.deepEqual((await readDeliveryLedger(options)).map(({ type }) => type), [
     'pending', 'superseded', 'pending',
   ]);
+});
+
+test('handoff claim is append-only, recoverable, and only valid for an unclaimed replacement', async (t) => {
+  const options = await paths(t);
+  await reserveOutboxAttempt(pending({ attemptId: 'attempt-old' }), options);
+  await assert.rejects(claimReplacementOutboxAttempt('attempt-old', {
+    occurredAt: '2026-09-06T08:00:30.000Z', claimId: 'claim-original',
+  }, options), /replacement|superseded/i);
+  const replacement = pending({
+    attemptId: 'attempt-new', occurredAt: '2026-09-06T08:01:00.001Z',
+  });
+  await replaceOutboxAttempt('attempt-old', replacement, {
+    occurredAt: '2026-09-06T08:01:00.000Z',
+  }, options);
+  await claimReplacementOutboxAttempt('attempt-new', {
+    occurredAt: '2026-09-06T08:02:00.000Z', claimId: 'claim-1',
+  }, options);
+  assert.deepEqual((await readDeliveryLedger(options)).map(({ type }) => type), [
+    'pending', 'superseded', 'pending', 'handoff-claimed',
+  ]);
+  assert.equal(
+    deriveDeliveryState(await readDeliveryLedger(options)).candidateStates.get(id('candidate')),
+    'delivery-uncertain',
+  );
+  await writeFile(join(options.outboxDir, 'attempt-new.json'), `${JSON.stringify({
+    schemaVersion: '1.0', status: 'pending', attempt: replacement,
+    updatedAt: replacement.occurredAt,
+  })}\n`);
+  assert.deepEqual(
+    (({ status, claimId, handoffClaimedAt }) => ({ status, claimId, handoffClaimedAt }))(
+      await readOutboxAttempt('attempt-new', options),
+    ),
+    {
+      status: 'pending', claimId: 'claim-1',
+      handoffClaimedAt: '2026-09-06T08:02:00.000Z',
+    },
+  );
+  await assert.rejects(claimReplacementOutboxAttempt('attempt-new', {
+    occurredAt: '2026-09-06T08:03:00.000Z', claimId: 'claim-2',
+  }, options), /claimed|claim/i);
 });

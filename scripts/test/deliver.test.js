@@ -144,7 +144,7 @@ test('resume handoff validates the active digest and does not create another res
   assert.equal(result.status, 'delivered');
   assert.equal(reserved, false);
   assert.deepEqual((await readDeliveryLedger(paths)).map(({ type }) => type), [
-    'pending', 'superseded', 'pending', 'delivered',
+    'pending', 'superseded', 'pending', 'handoff-claimed', 'delivered',
   ]);
 });
 
@@ -163,6 +163,84 @@ test('resume rejects a mismatched active digest before provider handoff', async 
     destination: { method: 'stdout' }, providerStdout: { write() { wrote = true; } },
   }), /does not match|digest/i);
   assert.equal(wrote, false);
+});
+
+test('resume rejects an original pending that was not created by explicit retry', async (t) => {
+  const paths = await fixture(t);
+  const loaded = await loadActiveDigest(paths.activePath);
+  await reserveOutboxAttempt({
+    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-06T08:00:00.000Z',
+    attemptId: 'attempt-original', digestId: loaded.digestId, frequency: loaded.frequency,
+    candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
+    destinationType: 'stdout', messageHash: id(loaded.message),
+  }, paths);
+  let wrote = false;
+  await assert.rejects(resumeActiveDigestDelivery({
+    ...paths, activePath: paths.activePath, attemptId: 'attempt-original',
+    destination: { method: 'stdout' }, providerStdout: { write() { wrote = true; } },
+    now: () => '2026-09-06T08:01:00.000Z',
+  }), /replacement|superseded/i);
+  assert.equal(wrote, false);
+});
+
+test('concurrent resume calls atomically claim one provider handoff', async (t) => {
+  const paths = await fixture(t);
+  const loaded = await loadActiveDigest(paths.activePath);
+  const original = {
+    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-06T08:00:00.000Z',
+    attemptId: 'attempt-old', digestId: loaded.digestId, frequency: loaded.frequency,
+    candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
+    destinationType: 'stdout', messageHash: id(loaded.message),
+  };
+  await reserveOutboxAttempt(original, paths);
+  await replaceOutboxAttempt('attempt-old', {
+    ...original, attemptId: 'attempt-new', occurredAt: '2026-09-06T08:01:00.001Z',
+  }, { occurredAt: '2026-09-06T08:01:00.000Z' }, paths);
+  let handoffs = 0;
+  const resume = () => resumeActiveDigestDelivery({
+    ...paths, activePath: paths.activePath, attemptId: 'attempt-new',
+    destination: { method: 'stdout' },
+    providerStdout: { write() { handoffs += 1; } },
+    now: () => '2026-09-06T08:02:00.000Z',
+  });
+  const outcomes = await Promise.allSettled([resume(), resume()]);
+  assert.equal(outcomes.filter(({ status }) => status === 'fulfilled').length, 1);
+  assert.equal(outcomes.filter(({ status }) => status === 'rejected').length, 1);
+  assert.equal(handoffs, 1);
+});
+
+test('uncertain claimed resume cannot repeat but can be explicitly superseded by another retry', async (t) => {
+  const paths = await fixture(t);
+  const loaded = await loadActiveDigest(paths.activePath);
+  const original = {
+    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-06T08:00:00.000Z',
+    attemptId: 'attempt-old', digestId: loaded.digestId, frequency: loaded.frequency,
+    candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
+    destinationType: 'stdout', messageHash: id(loaded.message),
+  };
+  await reserveOutboxAttempt(original, paths);
+  await replaceOutboxAttempt('attempt-old', {
+    ...original, attemptId: 'attempt-new', occurredAt: '2026-09-06T08:01:00.001Z',
+  }, { occurredAt: '2026-09-06T08:01:00.000Z' }, paths);
+  const uncertain = await resumeActiveDigestDelivery({
+    ...paths, activePath: paths.activePath, attemptId: 'attempt-new',
+    destination: { method: 'stdout' }, providerStdout: { write() { throw new Error('crash'); } },
+    randomUUID: () => 'claim-first', now: () => '2026-09-06T08:02:00.000Z',
+  });
+  assert.equal(uncertain.status, 'delivery-uncertain');
+  await assert.rejects(resumeActiveDigestDelivery({
+    ...paths, activePath: paths.activePath, attemptId: 'attempt-new',
+    destination: { method: 'stdout' }, providerStdout: { write() {} },
+    randomUUID: () => 'claim-second', now: () => '2026-09-06T08:03:00.000Z',
+  }), /claimed|claim/i);
+  const retried = await (await import('../resolve-delivery.js')).resolveUncertainDelivery(
+    'attempt-new', 'retry', {
+      ...paths, confirmExternalRetry: true, replacementAttemptId: 'attempt-newer',
+      now: () => '2026-09-06T08:04:00.000Z',
+    },
+  );
+  assert.equal(retried.replacementAttemptId, 'attempt-newer');
+  assert.equal((await readDeliveryLedger(paths)).at(-1).attemptId, 'attempt-newer');
 });
 
 test('a terminal persistence error after provider confirmation reports delivery-uncertain', async (t) => {

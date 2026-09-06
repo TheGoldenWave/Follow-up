@@ -386,7 +386,9 @@ cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> retry --
 cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> --result-out <absolute-delivery-result-path>
 ```
 
-resume 会校验 `digestId`、`frequency`、candidate IDs、event cluster IDs、`messageHash` 和 destination 完全匹配，并且不会创建普通 reservation。若 resolve 返回非零、resume 返回 `delivery-failed` 或 `delivery-uncertain`，立即停止；不得再次 retry、fallback 或新建 attempt。stdout resume 仍遵守正文与 machine result 分离规则。
+resume 会校验该 pending 确实由对应旧 attempt 的 `superseded` 事件创建，并要求 `digestId`、`frequency`、candidate IDs、event cluster IDs、`messageHash` 和 destination 完全匹配；它不会创建普通 reservation。每个 replacement 的 resume 会在 provider handoff 前持久化一次性 claim，只有 claim 成功的调用可以继续；进程崩溃或 provider 结果不确定时也不得重复 resume。
+
+若 resolve 返回非零或 resume 返回 `delivery-failed`，立即停止。若 resume 返回 `delivery-uncertain`，必须再次向用户说明重复投递风险并取得明确确认，然后对这个已 claim 的 pending 重新执行 `/follow-up resolve-delivery <attempt-id> retry`，生成下一个 replacement；不得直接重复 resume、fallback 或新建普通 attempt。stdout resume 仍遵守正文与 machine result 分离规则。
 
 不得直接读取未激活 generation，不得原样展示 JSON artifact，也不得展示 request 中未选择的候选。
 

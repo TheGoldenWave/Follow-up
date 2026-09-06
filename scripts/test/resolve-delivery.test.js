@@ -157,4 +157,6 @@ test('package and SKILL expose the guarded manual resolution workflow', async ()
   assert.match(skill, /retry[^]*--confirm-external-retry[^]*duplicate|retry[^]*--confirm-external-retry[^]*重复/i);
   assert.match(skill, /deliver\.js[^\n]*--resume-attempt <replacement-attempt-id>/);
   assert.match(skill, /retry-ready[^]*停止|retry-ready[^]*stop/i);
+  assert.match(skill, /resume[^]*claim[^]*一次|resume[^]*一次性[^]*claim/i);
+  assert.match(skill, /delivery-uncertain[^]*resolve-delivery[^]*retry/i);
 });
