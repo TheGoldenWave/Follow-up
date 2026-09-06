@@ -156,28 +156,29 @@ test('concurrent installers keep the winner lock until its transaction finishes'
 
 test('pointer publication refuses existing directory, file, or external symlink without mutation', async () => {
   for (const occupied of ['directory', 'file', 'symlink']) { const f = await fixture(); const victim = join(f.base, 'victim'); await fs.mkdir(victim); await fs.writeFile(join(victim, 'sentinel'), 'keep');
-    await fs.mkdir(join(f.releaseRoot, '..'), { recursive: true });
-    if (occupied === 'directory') { await fs.mkdir(f.releaseRoot); await fs.writeFile(join(f.releaseRoot, 'foreign'), 'keep'); }
-    else if (occupied === 'file') await fs.writeFile(f.releaseRoot, 'foreign');
-    else await fs.symlink(victim, f.releaseRoot);
-    const before = occupied === 'directory' ? await fs.readdir(f.releaseRoot) : occupied === 'file' ? await fs.readFile(f.releaseRoot, 'utf8') : await fs.readlink(f.releaseRoot);
-    assert.equal((await runInstaller(['--platform', 'codex'], injected(f))).exitCode, 1, occupied);
+    const result = await runInstaller(['--platform', 'codex'], injected({ ...f, onPointerWorkerReady: async () => {
+      if (occupied === 'directory') { await fs.mkdir(f.releaseRoot); await fs.writeFile(join(f.releaseRoot, 'foreign'), 'keep'); }
+      else if (occupied === 'file') await fs.writeFile(f.releaseRoot, 'foreign');
+      else await fs.symlink(victim, f.releaseRoot);
+    } }));
+    assert.equal(result.exitCode, 1, occupied);
+    const before = occupied === 'directory' ? ['foreign'] : occupied === 'file' ? 'foreign' : victim;
     const after = occupied === 'directory' ? await fs.readdir(f.releaseRoot) : occupied === 'file' ? await fs.readFile(f.releaseRoot, 'utf8') : await fs.readlink(f.releaseRoot);
     assert.deepEqual(after, before); assert.deepEqual(await fs.readdir(victim), ['sentinel']);
   }
 });
 
 test('pointer publication detects replacement of the releases parent with a symlink', async () => {
-  const f = await fixture(); const outside = join(f.base, 'outside'); await fs.mkdir(outside); let replaced = false;
-  const wrapped = new Proxy(fs, { get(target, key) { if (key !== 'symlink') return target[key]; return async (targetPath, path, type) => { if (path === f.releaseRoot && !replaced) { replaced = true; const releasesDir = join(path, '..'); await fs.rm(releasesDir, { recursive: true }); await fs.symlink(outside, releasesDir); } return fs.symlink(targetPath, path, type); }; } });
-  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, fsImpl: wrapped }));
+  const f = await fixture(); const outside = join(f.base, 'outside'); const detached = join(f.base, 'detached-releases'); await fs.mkdir(outside);
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, onPointerWorkerReady: async ({ releasesDir }) => { await fs.rename(releasesDir, detached); await fs.symlink(outside, releasesDir); } }));
   assert.equal(result.exitCode, 1); assert.deepEqual(await fs.readdir(outside), []);
 });
 
-test('version pointer replacement during object copy cannot redirect installation writes', async () => {
-  const f = await fixture(); const victim = join(f.base, 'victim'); await fs.mkdir(victim); await fs.writeFile(join(victim, 'sentinel'), 'unchanged');
-  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, copyReleaseImpl: async (source, object, fsImpl) => { await fs.symlink(victim, f.releaseRoot); await fs.cp(source, object, { recursive: true }); } }));
+test('stable object cwd prevents pathname replacement from redirecting writes', { timeout: 120_000 }, async () => {
+  const f = await pristineRepositoryArchive(); const victim = join(f.base, 'victim'); const detached = join(f.base, 'detached-object'); await fs.mkdir(victim); await fs.writeFile(join(victim, 'sentinel'), 'unchanged');
+  const result = await runInstaller(['--platform', 'codex'], { ...f, stdout: () => {}, stderr: () => {}, onObjectWorkerReady: async ({ objectRoot }) => { await fs.rename(objectRoot, detached); await fs.symlink(victim, objectRoot); } });
   assert.equal(result.exitCode, 1); assert.deepEqual(await fs.readdir(victim), ['sentinel']); assert.equal(await fs.readFile(join(victim, 'sentinel'), 'utf8'), 'unchanged');
+  assert.ok(await fs.lstat(join(detached, '.install-owner'))); assert.ok(await fs.lstat(join(detached, 'SKILL.md')));
 });
 
 test('incomplete object pointer is never reused', async () => {
