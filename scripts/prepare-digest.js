@@ -373,7 +373,7 @@ export async function writeTextAtomic(path, value, options = {}) {
 
 export async function prepareDigest({
   config,
-  frequency = config?.frequency ?? 'daily',
+  frequency,
   scheduled = false,
   now = new Date().toISOString(),
   registry,
@@ -383,8 +383,15 @@ export async function prepareDigest({
   randomUUID = systemRandomUUID,
 } = {}) {
   const normalizedConfig = normalizeConfig(config ?? {});
+  const resolvedFrequency = frequency
+    ?? normalizedConfig.schedule?.frequency
+    ?? config?.frequency
+    ?? 'daily';
+  if (!['daily', 'weekly'].includes(resolvedFrequency)) {
+    throw new TypeError('frequency must be daily or weekly');
+  }
   if (scheduled) {
-    const gate = authorizeSchedule(normalizedConfig, { now, frequency });
+    const gate = authorizeSchedule(normalizedConfig, { now, frequency: resolvedFrequency });
     if (!gate.authorized && gate.status !== 'no-channels') throw new Error('schedule-not-authorized');
   } else if (normalizedConfig.onboardingComplete !== true) {
     throw new Error('onboarding-required');
@@ -398,7 +405,6 @@ export async function prepareDigest({
       },
     };
   }
-  if (!['daily', 'weekly'].includes(frequency)) throw new TypeError('frequency must be daily or weekly');
   if (!Array.isArray(registry)) throw new TypeError('source registry is unavailable');
   if (typeof loadCandidateFeed !== 'function') throw new TypeError('candidate Feed loader is unavailable');
 
@@ -411,7 +417,8 @@ export async function prepareDigest({
   }
   const completeness = validateCandidateFeedCompleteness(feed, { expectedRegistry: expected });
   const resolved = await resolveDigestCandidates({
-    config: normalizedConfig, frequency, now, deliveryEvents, loadCandidateFeed: async () => feed,
+    config: normalizedConfig, frequency: resolvedFrequency, now, deliveryEvents,
+    loadCandidateFeed: async () => feed,
   });
   const enabledRegistry = registry.filter(({ channel }) => normalizedConfig.enabledChannels.includes(channel));
   const enabledMissingSources = completeness.missingSources.filter(({ channel }) => (
@@ -441,7 +448,7 @@ export async function prepareDigest({
   const request = {
     schemaVersion: DIGEST_CURATION_REQUEST_SCHEMA_VERSION,
     digestId: randomUUID(),
-    frequency,
+    frequency: resolvedFrequency,
     coverage: resolved.coverage,
     eligibleCandidates: boundedCandidates(resolved.eligibleCandidates),
     ...(Array.isArray(normalizedConfig.interests) && normalizedConfig.interests.length > 0

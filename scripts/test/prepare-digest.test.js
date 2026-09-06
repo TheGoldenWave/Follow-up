@@ -395,6 +395,25 @@ test('scheduled preparation proceeds when all three approvals and config are val
   assert.equal(result.status, 'request-ready');
 });
 
+test('direct API defaults to canonical weekly schedule frequency', async () => {
+  const result = await prepareDigest({
+    config: scheduledConfig({
+      schedule: {
+        frequency: 'weekly', time: '08:00', timezone: 'Asia/Shanghai',
+        weeklyDay: 'monday', approved: true,
+        approvedAt: '2026-09-06T07:00:00.000Z',
+      },
+    }),
+    scheduled: true, registry, deliveryEvents: [],
+    now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => feed([candidate('weekly-direct')]),
+    loadCurationPrompt: async () => 'curate',
+    randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  });
+  assert.equal(result.status, 'request-ready');
+  assert.equal(result.request.frequency, 'weekly');
+});
+
 test('manual preparation does not require schedule or destination approval', async () => {
   const result = await prepareDigest({
     config: { onboardingComplete: true, enabledChannels: ['blogs'] },
