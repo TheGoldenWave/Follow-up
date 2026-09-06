@@ -12,12 +12,15 @@ import {
   validateDeliveryEvent,
 } from './delivery-ledger.js';
 import { resolveRuntimePaths } from './lib/paths.js';
+import lockfile from 'proper-lockfile';
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u;
 const SAFE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u;
 const STRICT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const OUTBOX_BYTES = 256 * 1024;
 const JOURNAL_BYTES = 512 * 1024;
+const COMPACTION_BYTES = 64 * 1024 * 1024;
+const COMPACTION_MARKER = 'delivery-compaction.json';
 const JOURNAL_PHASES = new Set(['prepared', 'appending', 'ledger-appended', 'outbox-committed']);
 const OWNED_OUTBOX_TEMP = /^\.delivery-outbox-[A-Za-z0-9._:-]+-[A-Za-z0-9._-]+\.tmp$/u;
 const OWNED_JOURNAL_TEMP = /^\.delivery-journal-[A-Za-z0-9._:-]+-[A-Za-z0-9._-]+\.tmp$/u;
@@ -27,6 +30,24 @@ export class DeliveryReservationUncertainError extends Error {
     super(message, options);
     this.name = 'DeliveryReservationUncertainError';
     this.code = 'DELIVERY_RESERVATION_UNCERTAIN';
+  }
+}
+
+export class DeliveryClaimUncertainError extends Error {
+  constructor(attemptId, options) {
+    super('Delivery handoff claim requires reconciliation', options);
+    this.name = 'DeliveryClaimUncertainError';
+    this.code = 'DELIVERY_CLAIM_UNCERTAIN';
+    this.attemptId = attemptId;
+  }
+}
+
+export class DeliveryAttemptBusyError extends Error {
+  constructor(attemptId, options) {
+    super('Delivery attempt handoff is already in progress', options);
+    this.name = 'DeliveryAttemptBusyError';
+    this.code = 'DELIVERY_ATTEMPT_BUSY';
+    this.attemptId = attemptId;
   }
 }
 
@@ -239,7 +260,8 @@ async function writeExclusive(path, value, maximum, fsImpl) {
 async function writeAtomic(path, value, maximum, fsImpl, randomUUID, prefix) {
   await requireSafePath(path, fsImpl, { allowMissing: true });
   const token = requireToken(randomUUID());
-  const temporary = join(dirname(path), `.${prefix}-${value.attemptId ?? value.attempt?.attemptId}-${token}.tmp`);
+  const identifier = value.attemptId ?? value.attempt?.attemptId ?? 'state';
+  const temporary = join(dirname(path), `.${prefix}-${identifier}-${token}.tmp`);
   try {
     await writeExclusive(temporary, value, maximum, fsImpl);
     await fsImpl.rename(temporary, path);
@@ -328,6 +350,30 @@ function resolvedOptions(options = {}) {
   };
 }
 
+export async function withDeliveryAttemptLock(attemptId, callback, rawOptions = {}) {
+  requireAttemptId(attemptId);
+  const options = resolvedOptions(rawOptions);
+  const directory = join(options.transactionDir, 'attempt-locks');
+  await ensureDirectory(directory, options.fsImpl);
+  const target = join(directory, `${attemptId}.lock`);
+  await requireSafePath(target, options.fsImpl, { allowMissing: true });
+  try {
+    const handle = await options.fsImpl.open(target, 'a', 0o600);
+    await handle.close();
+  } catch (error) {
+    throw new DeliveryAttemptBusyError(attemptId, { cause: error });
+  }
+  let release;
+  try {
+    release = await lockfile.lock(target, {
+      realpath: false, retries: 0, stale: rawOptions.attemptLockStaleMs ?? 30_000,
+    });
+  } catch (error) {
+    throw new DeliveryAttemptBusyError(attemptId, { cause: error });
+  }
+  try { return await callback(); } finally { await release(); }
+}
+
 async function reconcileUnlocked(events, rawOptions = {}) {
   const options = resolvedOptions(rawOptions);
   await ensureDirectory(options.outboxDir, options.fsImpl);
@@ -336,7 +382,24 @@ async function reconcileUnlocked(events, rawOptions = {}) {
   await removeOwnedTemps(options.transactionDir, OWNED_JOURNAL_TEMP, options.fsImpl);
 
   const journals = new Map();
+  let compactionMarker = null;
   for (const entry of await options.fsImpl.readdir(options.transactionDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name === 'attempt-locks') continue;
+    if (entry.isFile() && entry.name === COMPACTION_MARKER) {
+      compactionMarker = await readJsonFile(
+        join(options.transactionDir, entry.name), COMPACTION_BYTES, options.fsImpl,
+        'Delivery compaction marker',
+      );
+      if (compactionMarker?.schemaVersion !== '1.0'
+        || Object.keys(compactionMarker).sort().join(',') !== 'removedAttemptIds,schemaVersion'
+        || !Array.isArray(compactionMarker.removedAttemptIds)
+        || compactionMarker.removedAttemptIds.some((id) => !SAFE_ID.test(id))
+        || new Set(compactionMarker.removedAttemptIds).size
+          !== compactionMarker.removedAttemptIds.length) {
+        throw new Error('Invalid delivery compaction marker');
+      }
+      continue;
+    }
     if (!entry.isFile() || !entry.name.endsWith('.json')) {
       throw new Error(`Invalid delivery transaction journal entry ${entry.name}`);
     }
@@ -368,8 +431,20 @@ async function reconcileUnlocked(events, rawOptions = {}) {
     }
     const attemptId = entry.name.slice(0, -'.json'.length);
     requireAttemptId(attemptId);
-    await readOutboxRaw(attemptId, options);
-    if (!attempts.has(attemptId)) throw new Error(`Outbox attempt ${attemptId} has no ledger event`);
+    const record = await readOutboxRaw(attemptId, options);
+    if (!attempts.has(attemptId)) {
+      if (compactionMarker?.removedAttemptIds.includes(attemptId)
+        && record.status !== 'pending') {
+        await options.fsImpl.unlink(join(options.outboxDir, entry.name));
+        continue;
+      }
+      throw new Error(`Outbox attempt ${attemptId} has no ledger event`);
+    }
+  }
+
+  if (compactionMarker) {
+    await options.fsImpl.unlink(join(options.transactionDir, COMPACTION_MARKER));
+    await fsyncDirectory(options.transactionDir, options.fsImpl);
   }
 
   for (const [attemptId] of journals) {
@@ -377,6 +452,36 @@ async function reconcileUnlocked(events, rawOptions = {}) {
   }
   if (journals.size > 0) await fsyncDirectory(options.transactionDir, options.fsImpl);
   return journals.size > 0;
+}
+
+export async function prepareDeliveryOutboxCompaction(existingEvents, retainedEvents, rawOptions = {}) {
+  const options = resolvedOptions(rawOptions);
+  await ensureDirectory(options.outboxDir, options.fsImpl);
+  await ensureDirectory(options.transactionDir, options.fsImpl);
+  const retained = new Set(retainedEvents.map(({ attemptId }) => attemptId));
+  const existing = deriveDeliveryState(existingEvents).attempts;
+  const removedAttemptIds = [];
+  for (const [attemptId, attempt] of existing) {
+    if (retained.has(attemptId) || !attempt.resolution
+      || attempt.resolution.type === 'superseded') continue;
+    try {
+      const record = await readOutboxRaw(attemptId, options);
+      if (record.status !== 'pending') removedAttemptIds.push(attemptId);
+    } catch (error) {
+      if (error?.code !== 'ENOENT' && error?.cause?.code !== 'ENOENT') throw error;
+    }
+  }
+  const marker = { schemaVersion: '1.0', removedAttemptIds };
+  await writeAtomic(
+    join(options.transactionDir, COMPACTION_MARKER),
+    marker, COMPACTION_BYTES,
+    options.fsImpl, options.randomUUID, 'delivery-journal',
+  );
+  return marker;
+}
+
+export async function completeDeliveryOutboxCompaction(retainedEvents, options = {}) {
+  return reconcileUnlocked(retainedEvents, options);
 }
 
 export async function recoverDeliveryLedgerBeforeRead(ledgerPath, rawOptions = {}) {
@@ -388,6 +493,8 @@ export async function recoverDeliveryLedgerBeforeRead(ledgerPath, rawOptions = {
   }
   const appending = [];
   for (const entry of await options.fsImpl.readdir(options.transactionDir, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name === 'attempt-locks') continue;
+    if (entry.isFile() && entry.name === COMPACTION_MARKER) continue;
     if (OWNED_JOURNAL_TEMP.test(entry.name)) continue;
     if (!entry.isFile() || !entry.name.endsWith('.json')) {
       throw new Error(`Invalid delivery transaction journal entry ${entry.name}`);
@@ -619,8 +726,14 @@ export async function claimReplacementOutboxAttempt(attemptId, claim, options = 
     ...existing, updatedAt: claim.occurredAt,
     claimId: claim.claimId, handoffClaimedAt: claim.occurredAt,
   };
-  await appendDeliveryEvent(event, {
-    ...options, transaction: transactionFor(event, record, options),
-  });
+  const transaction = transactionFor(event, record, options);
+  try {
+    await appendDeliveryEvent(event, { ...options, transaction });
+  } catch (error) {
+    if (transaction.ledgerWasAppended || transaction.ledgerMayBeAppended) {
+      throw new DeliveryClaimUncertainError(attemptId, { cause: error });
+    }
+    throw error;
+  }
   return record;
 }

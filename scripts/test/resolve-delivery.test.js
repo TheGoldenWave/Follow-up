@@ -93,6 +93,21 @@ test('retry atomically supersedes old pending and creates a matching replacement
   assert.equal(deriveDeliveryState(events).candidateStates.get(id('candidate')), 'delivery-uncertain');
 });
 
+test('replaying confirmed retry returns the existing replacement without appending', async (t) => {
+  const options = await paths(t);
+  await reserveOutboxAttempt(pending(), options);
+  await resolveUncertainDelivery('attempt-old', 'retry', {
+    ...options, confirmExternalRetry: true, replacementAttemptId: 'attempt-new',
+    now: () => '2026-09-06T08:01:00.000Z',
+  });
+  const before = await readFile(options.ledgerPath, 'utf8');
+  const replay = await resolveUncertainDelivery('attempt-old', 'retry', {
+    ...options, confirmExternalRetry: true,
+  });
+  assert.equal(replay.replacementAttemptId, 'attempt-new');
+  assert.equal(await readFile(options.ledgerPath, 'utf8'), before);
+});
+
 test('resolution rejects missing, terminal, repeated, and corrupt state without appending', async (t) => {
   const options = await paths(t);
   await assert.rejects(resolveUncertainDelivery('missing', 'delivered', options), /not found|pending/i);
@@ -149,6 +164,21 @@ test('CLI is strict, emits machine JSON, and redacts internal diagnostics', asyn
   assert.doesNotMatch(`${stdout.value}${stderr.value}`, /candidate|messageHash|secret|\/tmp\//i);
 });
 
+test('CLI atomically persists retry-ready to an absolute result path', async (t) => {
+  const options = await paths(t);
+  await reserveOutboxAttempt(pending(), options);
+  const resultPath = join((await import('node:path')).dirname(options.ledgerPath), 'result.json');
+  const stdout = { value: '', write(value) { this.value += value; } };
+  const stderr = { value: '', write(value) { this.value += value; } };
+  assert.equal(await main({
+    argv: ['attempt-old', 'retry', '--confirm-external-retry', '--result-out', resultPath],
+    stdout, stderr, ...options, randomUUID: () => 'attempt-new',
+    now: () => '2026-09-06T08:01:00.000Z',
+  }), 0);
+  assert.equal(stdout.value, '');
+  assert.equal(JSON.parse(await readFile(resultPath, 'utf8')).replacementAttemptId, 'attempt-new');
+});
+
 test('package and SKILL expose the guarded manual resolution workflow', async () => {
   const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
   const skill = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
@@ -159,4 +189,6 @@ test('package and SKILL expose the guarded manual resolution workflow', async ()
   assert.match(skill, /retry-ready[^]*停止|retry-ready[^]*stop/i);
   assert.match(skill, /resume[^]*claim[^]*一次|resume[^]*一次性[^]*claim/i);
   assert.match(skill, /delivery-uncertain[^]*resolve-delivery[^]*retry/i);
+  assert.match(skill, /resolve-delivery\.js[^\n]*--result-out/);
+  assert.match(skill, /resolve-delivery[^]*exit code|resolve-delivery[^]*退出码/i);
 });

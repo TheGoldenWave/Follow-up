@@ -17,6 +17,7 @@ import {
 } from '../delivery-ledger.js';
 import {
   claimReplacementOutboxAttempt,
+  readDeliveryOutbox,
   replaceOutboxAttempt,
   reserveOutboxAttempt,
 } from '../delivery-outbox.js';
@@ -491,6 +492,7 @@ test('compact retains an old retry origin for unclaimed and claimed unresolved r
         }, options);
       }
       await compactDeliveryLedger({ ledgerPath, now: '2026-09-30T00:00:00.000Z' });
+      await assert.doesNotReject(async () => readDeliveryOutbox(options));
       const retained = await readDeliveryLedger(options);
       assert.deepEqual(retained.map(({ attemptId }) => attemptId), [
         'origin', 'origin', 'replacement', ...(claimed ? ['replacement'] : []),
@@ -537,4 +539,18 @@ test('retention closes transitively over both directions of a three-generation r
   assert.deepEqual(selectRetainedDeliveryEvents(events, {
     now: '2026-09-30T00:00:00.000Z',
   }), events);
+});
+
+test('compact removes expired terminal outbox records without leaving reconcile orphans', async (t) => {
+  const ledgerPath = await ledgerFixture(t);
+  const options = { ledgerPath };
+  await reserveOutboxAttempt(pending({
+    attemptId: 'expired-failed', occurredAt: '2026-06-01T00:00:00.000Z',
+  }), options);
+  await (await import('../delivery-outbox.js')).resolveOutboxAttempt('expired-failed', {
+    status: 'failed', occurredAt: '2026-06-01T00:01:00.000Z', reasonCode: 'provider-rejected',
+  }, options);
+  await compactDeliveryLedger({ ledgerPath, now: '2026-09-30T00:00:00.000Z' });
+  assert.deepEqual(await readDeliveryOutbox(options), []);
+  assert.deepEqual(await readDeliveryLedger(options), []);
 });

@@ -12,9 +12,11 @@ import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-lin
 import { loadActiveDigest } from './delivery-message.js';
 import {
   claimReplacementOutboxAttempt,
+  DeliveryClaimUncertainError,
   readOutboxAttempt,
   reserveOutboxAttempt,
   resolveOutboxAttempt,
+  withDeliveryAttemptLock,
 } from './delivery-outbox.js';
 import { deliverWithProvider, validateDestination } from './delivery-providers.js';
 import { AtomicWriteCommittedError, writeJsonAtomic } from './prepare-digest.js';
@@ -176,7 +178,7 @@ function sameValues(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
-export async function resumeActiveDigestDelivery({
+async function resumeActiveDigestDeliveryUnlocked({
   activePath, attemptId, destination, credentials = process.env,
   ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout = process.stderr,
   timeoutMs = 15_000, logger = () => {}, randomUUID = systemRandomUUID,
@@ -202,13 +204,29 @@ export async function resumeActiveDigestDelivery({
   if (typeof claimId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(claimId)) {
     throw new Error('Generated delivery claimId is invalid');
   }
-  await claimAttempt(attemptId, { occurredAt: claimedAt, claimId }, {
-    ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID,
-  });
+  try {
+    await claimAttempt(attemptId, { occurredAt: claimedAt, claimId }, {
+      ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID,
+    });
+  } catch (error) {
+    if (error instanceof DeliveryClaimUncertainError || error?.code === 'DELIVERY_CLAIM_UNCERTAIN') {
+      return {
+        status: 'delivery-uncertain', reason: 'claim-uncertain', method: validated.method,
+        attemptId, digestId: loaded.digestId,
+      };
+    }
+    throw error;
+  }
   return handoffReservedDigest(loaded, validated, attemptId, {
     ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout,
     timeoutMs, logger, randomUUID, now, resolveAttempt,
   });
+}
+
+export async function resumeActiveDigestDelivery(options = {}) {
+  return withDeliveryAttemptLock(options.attemptId, () => (
+    resumeActiveDigestDeliveryUnlocked(options)
+  ), options);
 }
 
 export async function main({

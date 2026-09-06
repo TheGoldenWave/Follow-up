@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID as systemRandomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
@@ -9,7 +9,10 @@ import {
   readOutboxAttempt,
   replaceOutboxAttempt,
   resolveOutboxAttempt,
+  withDeliveryAttemptLock,
 } from './delivery-outbox.js';
+import { deriveDeliveryState, readDeliveryLedger } from './delivery-ledger.js';
+import { AtomicWriteCommittedError, writeJsonAtomic } from './prepare-digest.js';
 
 const ACTIONS = new Set(['delivered', 'retry', 'suppress']);
 const DESTINATIONS = new Set(['stdout', 'telegram', 'email']);
@@ -35,6 +38,7 @@ function parseOptions(argv) {
     options: {
       'confirm-external-retry': { type: 'boolean' },
       destination: { type: 'string' },
+      'result-out': { type: 'string' },
     },
     validate({ values, positionals }) {
       if (positionals.length !== 2) {
@@ -54,11 +58,14 @@ function parseOptions(argv) {
       if (values.destination && !DESTINATIONS.has(values.destination)) {
         throw new CommandLineUsageError('--destination must be stdout, telegram, or email');
       }
+      if (values['result-out'] && !isAbsolute(values['result-out'])) {
+        throw new CommandLineUsageError('--result-out must be absolute');
+      }
     },
   });
 }
 
-export async function resolveUncertainDelivery(attemptId, action, {
+async function resolveUncertainDeliveryUnlocked(attemptId, action, {
   confirmExternalRetry = false,
   destinationType,
   replacementAttemptId,
@@ -75,6 +82,17 @@ export async function resolveUncertainDelivery(attemptId, action, {
     }
     throw error;
   });
+  if (action === 'retry' && existing.status === 'superseded' && confirmExternalRetry) {
+    const state = deriveDeliveryState(await readDeliveryLedger(paths));
+    const replacementAttemptId = state.attempts.get(attemptId)?.resolution?.replacementAttemptId;
+    const replacement = replacementAttemptId && state.attempts.get(replacementAttemptId)?.pending;
+    if (!replacement) throw new Error('Existing retry replacement is invalid');
+    return {
+      status: 'retry-ready', action, attemptId, replacementAttemptId,
+      digestId: existing.attempt.digestId, destination: replacement.destinationType,
+      duplicateRisk: true,
+    };
+  }
   if (existing.status !== 'pending') {
     throw new Error('Delivery attempt is already terminal; only unresolved pending attempts can be resolved');
   }
@@ -118,10 +136,17 @@ export async function resolveUncertainDelivery(attemptId, action, {
   };
 }
 
+export async function resolveUncertainDelivery(attemptId, action, options = {}) {
+  return withDeliveryAttemptLock(attemptId, () => (
+    resolveUncertainDeliveryUnlocked(attemptId, action, options)
+  ), options);
+}
+
 export async function main({
   argv = process.argv.slice(2), stdout = process.stdout, stderr = process.stderr,
   now, randomUUID, ledgerPath, outboxDir, transactionDir, fsImpl,
   resolveImpl = resolveUncertainDelivery,
+  writeResult = writeJsonAtomic,
 } = {}) {
   let parsed;
   try {
@@ -137,10 +162,25 @@ export async function main({
       destinationType: parsed.values.destination,
       now, randomUUID, ledgerPath, outboxDir, transactionDir, fsImpl,
     });
-    stdout.write(`${JSON.stringify(result)}\n`);
+    if (parsed.values['result-out']) {
+      try {
+        await writeResult(parsed.values['result-out'], result, {
+          fsImpl, randomUUID, label: 'delivery resolution result',
+        });
+      } catch (error) {
+        const resultPersistence = error instanceof AtomicWriteCommittedError
+          ? 'committed-but-uncertain' : 'failed';
+        stderr.write(`${JSON.stringify({ ...result, resultPersistence })}\n`);
+        return 1;
+      }
+    } else {
+      stdout.write(`${JSON.stringify(result)}\n`);
+    }
     return 0;
-  } catch {
-    stderr.write(`${JSON.stringify({ status: 'resolution-failed', action, attemptId })}\n`);
+  } catch (error) {
+    const status = error?.code === 'DELIVERY_ATTEMPT_BUSY'
+      ? 'delivery-busy' : 'resolution-failed';
+    stderr.write(`${JSON.stringify({ status, action, attemptId })}\n`);
     return 1;
   }
 }

@@ -295,3 +295,27 @@ test('handoff claim is append-only, recoverable, and only valid for an unclaimed
     occurredAt: '2026-09-06T08:03:00.000Z', claimId: 'claim-2',
   }, options), /claimed|claim/i);
 });
+
+test('claim reports uncertainty after append starts and reconcile preserves the claim', async (t) => {
+  const options = await paths(t);
+  const original = pending({ attemptId: 'claim-old' });
+  const replacement = pending({
+    attemptId: 'claim-new', occurredAt: '2026-09-06T08:01:00.001Z',
+  });
+  await reserveOutboxAttempt(original, options);
+  await replaceOutboxAttempt('claim-old', replacement, {
+    occurredAt: '2026-09-06T08:01:00.000Z',
+  }, options);
+  await assert.rejects(claimReplacementOutboxAttempt('claim-new', {
+    occurredAt: '2026-09-06T08:02:00.000Z', claimId: 'claim-uncertain',
+  }, {
+    ...options,
+    appendLedgerImpl: async ({ ledgerPath, bytes, preAppendOffset }) => {
+      const handle = await open(ledgerPath, 'r+');
+      try { await handle.write(bytes.subarray(0, 10), 0, 10, preAppendOffset); }
+      finally { await handle.close(); }
+      throw new Error('claim append interrupted');
+    },
+  }), (error) => error.code === 'DELIVERY_CLAIM_UNCERTAIN' && error.attemptId === 'claim-new');
+  assert.equal((await readOutboxAttempt('claim-new', options)).claimId, 'claim-uncertain');
+});

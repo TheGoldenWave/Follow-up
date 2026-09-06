@@ -375,10 +375,12 @@ stdout destination 的用户正文只写 stdout；machine status 只从 `--resul
 对应脚本命令：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> delivered
-cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> suppress
-cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> retry --confirm-external-retry [--destination stdout|telegram|email]
+cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> delivered --result-out <absolute-resolution-result-path>
+cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> suppress --result-out <absolute-resolution-result-path>
+cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> retry --confirm-external-retry [--destination stdout|telegram|email] --result-out <absolute-resolution-result-path>
 ```
+
+必须先检查 `resolve-delivery.js` 的 exit code；只有 exit 0 才读取 `--result-out` 的 machine JSON。exit 非零时停止并检查 stderr；`delivery-busy` 表示该 attempt 正在 provider handoff 中，不得提交 delivered、suppress 或 retry，也不得绕过锁重试写状态。
 
 `retry` 只在同一 transaction 中将旧 attempt 标记为 `superseded` 并创建 replacement pending，不调用 provider。返回 `retry-ready` 后，从 machine JSON 读取 `replacementAttemptId`，然后使用同一个已激活 Digest 直接 resume：
 

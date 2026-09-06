@@ -739,6 +739,11 @@ export async function compactDeliveryLedger(options = {}) {
       limits,
     });
     deriveDeliveryState(retained, { limits });
+    const {
+      prepareDeliveryOutboxCompaction,
+      completeDeliveryOutboxCompaction,
+    } = await import('./delivery-outbox.js');
+    await prepareDeliveryOutboxCompaction(events, retained, options);
     const temporaryPath = `${ledgerPath}.compact-${process.pid}-${Date.now()}`;
     const serialized = retained.length === 0
       ? ''
@@ -759,6 +764,7 @@ export async function compactDeliveryLedger(options = {}) {
       await requireSafeLedgerPath(ledgerPath);
       await rename(temporaryPath, ledgerPath);
       await fsyncDirectory(dirname(ledgerPath));
+      await completeDeliveryOutboxCompaction(retained, options);
     } catch (error) {
       await unlink(temporaryPath).catch(() => {});
       throw error;
