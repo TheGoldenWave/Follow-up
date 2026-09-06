@@ -1,5 +1,17 @@
 **English** | [中文](README.zh-CN.md)
 
+## Verified installation
+
+From an extracted, verified GitHub Release archive (Node.js 20+):
+
+```text
+npm ci --prefix scripts
+node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] [--register]
+node scripts/doctor.js [--network] [--json]
+```
+
+`--register` is the explicit approval to create the `follow-up` Skill link. Re-running the command reinstalls the same release while preserving existing mutable user files. Upgrading from `follow-builders` requires `--replace-follow-builders`; the legacy link is removed only after the new link and local doctor checks succeed. The conversational entry point is `/follow-up` after registration.
+
 # Follow-up: AI Signal & Attention Curation
 
 > Follow Builders, Not Influencers — and beyond.
