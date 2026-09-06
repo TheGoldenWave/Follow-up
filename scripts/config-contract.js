@@ -39,10 +39,24 @@ export function normalizeConfig(config) {
   if (!result.valid) {
     throw new Error(`Invalid Follow-up configuration: ${result.errors.join('; ')}`);
   }
-  return {
+  const normalized = {
     ...config,
     enabledChannels: config.enabledChannels
       ? [...config.enabledChannels]
       : [...ENABLED_CHANNELS],
   };
+  if (!normalized.schedule
+      && config.frequency !== undefined
+      && config.deliveryTime !== undefined
+      && config.timezone !== undefined) {
+    normalized.schedule = {
+      frequency: config.frequency,
+      time: config.deliveryTime,
+      timezone: config.timezone,
+      ...(config.weeklyDay === undefined ? {} : { weeklyDay: config.weeklyDay }),
+      approved: config.scheduleApproved ?? false,
+      ...(config.scheduleApprovedAt === undefined ? {} : { approvedAt: config.scheduleApprovedAt }),
+    };
+  }
+  return normalized;
 }

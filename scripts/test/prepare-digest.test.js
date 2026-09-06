@@ -343,13 +343,53 @@ test('prepare CLI requires an absolute request output path', async () => {
   assert.match(stderr.value, /^usage:/);
 });
 
-test('scheduled preparation defaults to deny unless authorization explicitly returns true', async () => {
+function scheduledConfig(overrides = {}) {
+  return {
+    onboardingComplete: true,
+    enabledChannels: ['blogs'],
+    schedule: {
+      frequency: 'daily', time: '08:00', timezone: 'Asia/Shanghai',
+      approved: true, approvedAt: '2026-09-06T07:00:00.000Z',
+    },
+    delivery: {
+      method: 'stdout', approved: true, approvedAt: '2026-09-06T07:00:00.000Z',
+    },
+    ...overrides,
+  };
+}
+
+test('scheduled preparation uses the real gate and does not fetch when authorization is missing', async () => {
   let fetched = false;
   await assert.rejects(prepareDigest({
     config: { enabledChannels: ['blogs'] }, scheduled: true, registry,
+    now: '2026-09-06T08:00:00.000Z',
     loadCandidateFeed: async () => { fetched = true; return feed([]); },
   }), /schedule-not-authorized/);
   assert.equal(fetched, false);
+});
+
+test('scheduled preparation proceeds when all three approvals and config are valid', async () => {
+  let fetched = false;
+  const result = await prepareDigest({
+    config: scheduledConfig(), scheduled: true, registry, deliveryEvents: [],
+    now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => { fetched = true; return feed([candidate('scheduled')]); },
+    loadCurationPrompt: async () => 'curate',
+    randomUUID: () => '88888888-8888-4888-8888-888888888888',
+  });
+  assert.equal(fetched, true);
+  assert.equal(result.status, 'request-ready');
+});
+
+test('manual preparation does not require schedule or destination approval', async () => {
+  const result = await prepareDigest({
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] },
+    registry, deliveryEvents: [], now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => feed([candidate('manual')]),
+    loadCurationPrompt: async () => 'curate',
+    randomUUID: () => '99999999-9999-4999-8999-999999999999',
+  });
+  assert.equal(result.status, 'request-ready');
 });
 
 test('scheduled CLI denial is explicit, nonzero, and creates no request', async (t) => {
@@ -365,6 +405,22 @@ test('scheduled CLI denial is explicit, nonzero, and creates no request', async 
   });
   assert.equal(code, 1);
   assert.equal(stderr.value, 'preparation-failed: schedule-not-authorized\n');
+  await assert.rejects(readFile(output), /ENOENT/);
+});
+
+test('scheduled CLI with empty channels returns no-channels without a request or Feed fetch', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'prepare-scheduled-empty-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = join(root, 'request.json');
+  const stdout = { value: '', write(chunk) { this.value += chunk; } };
+  const code = await main({
+    argv: ['--request-out', output, '--scheduled'],
+    config: scheduledConfig({ enabledChannels: [] }), registry, deliveryEvents: [],
+    loadCandidateFeed: async () => assert.fail('empty channels must not fetch'),
+    stdout, stderr: { write() {} }, now: '2026-09-06T08:00:00.000Z',
+  });
+  assert.equal(code, 0);
+  assert.equal(JSON.parse(stdout.value).status, 'no-channels');
   await assert.rejects(readFile(output), /ENOENT/);
 });
 

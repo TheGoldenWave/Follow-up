@@ -105,6 +105,25 @@ test('v0.1.0 docs avoid unverified ClawHub and state the authorized MIT terms ac
   }
 });
 
+test('v0.2 exposes only the follow-up user invocation while retaining migration paths and provenance', async () => {
+  const skill = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
+  assert.match(skill, /^name: follow-up$/m);
+  for (const path of ['README.md', 'README.zh-CN.md', 'SKILL.md']) {
+    const content = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
+    assert.match(content, /set up follow-up/i, path);
+    assert.match(content, /\/follow-up(?:\s|`|$)/i, path);
+    assert.doesNotMatch(content, /set up follow builders/i, path);
+    assert.doesNotMatch(
+      content,
+      /(?:invoke|run|type|输入|执行|调用)[^\n]{0,40}`?\/follow-builders(?:\s|`|$)/i,
+      path,
+    );
+    assert.match(content, /~\/\.follow-builders\//, path);
+  }
+  const notices = await readFile(new URL('../../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8');
+  assert.match(notices, /zarazhangrui\/follow-builders/);
+});
+
 test('release workflow runs secret, dependency-license, and provenance gates before upload', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/release.yml', import.meta.url), 'utf8');
   const upload = workflow.indexOf('actions/upload-artifact@');

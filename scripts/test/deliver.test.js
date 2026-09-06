@@ -95,6 +95,7 @@ test('explicit provider rejection resolves failed and the same candidate becomes
   const paths = await fixture(t);
   const first = await deliverActiveDigest({
     ...paths, destination: { method: 'email', email: 'reader@example.com' },
+    confirmDestination: true,
     credentials: { RESEND_API_KEY: 'test-only-key' }, randomUUID: () => 'attempt-failed',
     now: () => '2026-09-06T08:01:00.000Z',
     transport: async () => ({ ok: false, status: 422, json: async () => ({}) }),
@@ -111,6 +112,7 @@ test('unknown result remains pending and blocks an automatic duplicate', async (
   const paths = await fixture(t);
   const first = await deliverActiveDigest({
     ...paths, destination: { method: 'email', email: 'reader@example.com' },
+    confirmDestination: true,
     credentials: { RESEND_API_KEY: 'test-only-key' }, randomUUID: () => 'attempt-uncertain',
     now: () => '2026-09-06T08:01:00.000Z',
     transport: async () => { throw new Error('socket closed'); },
@@ -148,6 +150,32 @@ test('resume handoff validates the active digest and does not create another res
   assert.equal(reserved, false);
   assert.deepEqual((await readDeliveryLedger(paths)).map(({ type }) => type), [
     'pending', 'superseded', 'pending', 'handoff-claimed', 'delivered',
+  ]);
+});
+
+test('direct scheduled resume cannot claim or hand off without schedule authorization', async (t) => {
+  const paths = await fixture(t);
+  const loaded = await loadActiveDigest(paths.activePath);
+  const original = {
+    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-06-01T08:00:00.000Z',
+    attemptId: 'attempt-old-gate', digestId: loaded.digestId, frequency: loaded.frequency,
+    candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
+    destinationType: 'stdout', messageHash: id(loaded.message),
+  };
+  await reserveOutboxAttempt(original, paths);
+  await replaceOutboxAttempt('attempt-old-gate', {
+    ...original, attemptId: 'attempt-new-gate', occurredAt: '2026-06-01T08:01:00.001Z',
+  }, { occurredAt: '2026-06-01T08:01:00.000Z' }, paths);
+  let wrote = false;
+  await assert.rejects(resumeActiveDigestDelivery({
+    ...paths, activePath: paths.activePath, attemptId: 'attempt-new-gate',
+    scheduled: true, config: approvedScheduledConfig({ onboardingComplete: false }),
+    destination: { method: 'stdout' }, providerStdout: { write() { wrote = true; } },
+    now: () => '2026-09-06T08:00:00.000Z',
+  }), /schedule-not-authorized/);
+  assert.equal(wrote, false);
+  assert.deepEqual((await readDeliveryLedger(paths)).map(({ type }) => type), [
+    'pending', 'superseded', 'pending',
   ]);
 });
 
@@ -373,6 +401,125 @@ test('no-update delivery records an empty-ID run without changing candidate stat
   assert.deepEqual(pending.eventClusterIds, []);
 });
 
+function approvedScheduledConfig(overrides = {}) {
+  return {
+    onboardingComplete: true,
+    enabledChannels: ['blogs'],
+    schedule: {
+      frequency: 'daily', time: '08:00', timezone: 'Asia/Shanghai',
+      approved: true, approvedAt: '2026-09-06T07:00:00.000Z',
+    },
+    delivery: {
+      method: 'stdout', approved: true, approvedAt: '2026-09-06T07:00:00.000Z',
+    },
+    ...overrides,
+  };
+}
+
+test('direct scheduled delivery cannot reserve or call a provider without all approvals', async (t) => {
+  const paths = await fixture(t);
+  let reserved = false;
+  let wrote = false;
+  await assert.rejects(deliverActiveDigest({
+    ...paths, scheduled: true,
+    config: approvedScheduledConfig({ onboardingComplete: false }),
+    destination: { method: 'stdout' },
+    now: () => '2026-09-06T08:00:00.000Z',
+    reserveAttempt: async () => { reserved = true; },
+    providerStdout: { write() { wrote = true; } },
+  }), /schedule-not-authorized/);
+  assert.equal(reserved, false);
+  assert.equal(wrote, false);
+});
+
+test('direct scheduled delivery proceeds when all approvals are current', async (t) => {
+  const paths = await fixture(t);
+  let wrote = false;
+  const result = await deliverActiveDigest({
+    ...paths, scheduled: true, config: approvedScheduledConfig(),
+    destination: { method: 'stdout' }, randomUUID: () => 'attempt-authorized',
+    now: () => '2026-09-06T08:00:00.000Z',
+    providerStdout: { write() { wrote = true; } },
+  });
+  assert.equal(result.status, 'delivered');
+  assert.equal(wrote, true);
+});
+
+test('scheduled delivery cannot override the approved destination', async (t) => {
+  const paths = await fixture(t);
+  let reserved = false;
+  await assert.rejects(deliverActiveDigest({
+    ...paths, scheduled: true, config: approvedScheduledConfig(),
+    destination: { method: 'email', email: 'other@example.com' },
+    credentials: { RESEND_API_KEY: 'test-only-key' },
+    reserveAttempt: async () => { reserved = true; },
+    now: () => '2026-09-06T08:00:00.000Z',
+  }), /schedule-not-authorized/);
+  assert.equal(reserved, false);
+});
+
+test('scheduled delivery rejects an active digest from a different cadence before reservation', async (t) => {
+  const paths = await fixture(t);
+  let reserved = false;
+  const config = approvedScheduledConfig({
+    schedule: {
+      frequency: 'weekly', time: '08:00', timezone: 'Asia/Shanghai', weeklyDay: 'monday',
+      approved: true, approvedAt: '2026-09-06T07:00:00.000Z',
+    },
+  });
+  await assert.rejects(deliverActiveDigest({
+    ...paths, scheduled: true, config, destination: { method: 'stdout' },
+    reserveAttempt: async () => { reserved = true; },
+    now: () => '2026-09-06T08:00:00.000Z',
+  }), /schedule-not-authorized/);
+  assert.equal(reserved, false);
+});
+
+test('manual external delivery requires persistent approval or immediate confirmation', async (t) => {
+  const paths = await fixture(t);
+  let reserved = false;
+  let providerCalled = false;
+  await assert.rejects(deliverActiveDigest({
+    ...paths,
+    config: { delivery: { method: 'email', email: 'reader@example.com' } },
+    destination: { method: 'email', email: 'reader@example.com' },
+    credentials: { RESEND_API_KEY: 'test-only-key' },
+    reserveAttempt: async () => { reserved = true; },
+    transport: async () => { providerCalled = true; },
+  }), /destination-not-authorized/);
+  assert.equal(reserved, false);
+  assert.equal(providerCalled, false);
+});
+
+test('manual stdout delivery needs no schedule or destination approval', async (t) => {
+  const paths = await fixture(t);
+  const result = await deliverActiveDigest({
+    ...paths, config: {}, destination: { method: 'stdout' },
+    randomUUID: () => 'attempt-manual-stdout', providerStdout: { write() {} },
+  });
+  assert.equal(result.status, 'delivered');
+});
+
+test('scheduled CLI denial emits safe status and never invokes delivery', async (t) => {
+  const paths = await fixture(t);
+  const configPath = join(dirname(paths.ledgerPath), '..', 'config.json');
+  await writeFile(configPath, JSON.stringify(approvedScheduledConfig({ onboardingComplete: false })));
+  const stdout = { value: '', write(value) { this.value += value; } };
+  const resultPath = join(dirname(configPath), 'result.json');
+  let invoked = false;
+  const code = await main({
+    argv: ['--active', paths.activePath, '--scheduled', '--result-out', resultPath],
+    configPath, stdout, stderr: { write() {} },
+    deliverImpl: async () => { invoked = true; },
+    now: () => '2026-09-06T08:00:00.000Z',
+  });
+  assert.equal(code, 1);
+  assert.equal(invoked, false);
+  const result = JSON.parse(await readFile(resultPath, 'utf8'));
+  assert.deepEqual(result, { status: 'schedule-not-authorized', reasons: ['onboarding-incomplete'] });
+  assert.equal(JSON.stringify(result).includes('reader@example.com'), false);
+});
+
 test('CLI is strict, emits one machine JSON result, and never reserves on local config failure', async (t) => {
   const paths = await fixture(t);
   const stdout = { value: '', write(value) { this.value += value; } };
@@ -381,7 +528,12 @@ test('CLI is strict, emits one machine JSON result, and never reserves on local 
   assert.equal(await main({ argv: ['--active', paths.activePath, '--destination', 'fax'], stdout, stderr }), 64);
 
   const configPath = join(dirname(paths.ledgerPath), '..', 'config.json');
-  await writeFile(configPath, JSON.stringify({ delivery: { method: 'telegram', chatId: '1' } }));
+  await writeFile(configPath, JSON.stringify({
+    delivery: {
+      method: 'telegram', chatId: '1', approved: true,
+      approvedAt: '2026-09-06T07:00:00.000Z',
+    },
+  }));
   stdout.value = '';
   const code = await main({
     argv: ['--active', paths.activePath], stdout, stderr,

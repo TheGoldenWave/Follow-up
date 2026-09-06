@@ -228,7 +228,7 @@ Follow-up 永远不直接或自动写入 Malow / GoldenWave 的权威状态。�
 ## 快速开始
 
 1. 按下方说明安装经过验证的精确 GitHub Release
-2. 输入 "set up follow builders" 或执行 `/follow-builders`
+2. 输入 "set up follow-up" 或执行 `/follow-up`
 3. Agent 会以对话方式引导你完成设置
 
 Agent 会询问你：
@@ -238,7 +238,13 @@ Agent 会询问你：
 
 不需要用户提供来源抓取 API key，内容由中心化服务统一抓取。Telegram 或邮件等外部投递仍需要用户自己的投递凭据。
 
-> 当前版本会读取全部 6 类实时 Feed。按用户配置真正执行频道开关仍在规划中；配置界面不应宣称已完成筛选。
+统一入口 `/follow-up` 会在配置未完成时进入 onboarding，完成后生成一次按需 Digest。
+自动投递只支持 daily 或 weekly；本版本不会在官网发布内容时即时 alert。
+
+自动投递需要三项独立授权同时成立：onboarding 已完成、schedule 已批准、exact delivery
+destination 已批准。手动运行不要求 schedule approval，但手动发送到 Telegram/email 仍需
+持久 destination approval 或发送前即时确认；stdout 仅用于当前操作，可以直接展示。
+`enabledChannels` 为空是需要修改配置的状态，不会发送“无更新”通知。
 
 ## 自定义摘要
 
@@ -404,14 +410,26 @@ ClawHub 安装路径。
 {
   "platform": "other",
   "language": "bilingual",
-  "timezone": "Asia/Shanghai",
-  "frequency": "daily",
-  "deliveryTime": "08:00",
+  "onboardingComplete": true,
+  "enabledChannels": ["blogs", "academic", "zh-tech"],
+  "schedule": {
+    "frequency": "daily",
+    "time": "08:00",
+    "timezone": "Asia/Shanghai",
+    "approved": true,
+    "approvedAt": "2026-09-06T07:00:00.000Z"
+  },
   "delivery": {
-    "method": "stdout"
+    "method": "stdout",
+    "approved": true,
+    "approvedAt": "2026-09-06T07:00:00.000Z"
   }
 }
 ```
+
+嵌套 `schedule` 是 v0.2 的规范形式。旧版顶层 `frequency`、`deliveryTime`、`timezone`
+和 `weeklyDay` 字段仍可读取用于迁移。已有用户数据继续保存在 `~/.follow-builders/`；
+升级 Skill registration 时不得重命名或删除该目录。
 
 ## 隐私
 

@@ -1,6 +1,6 @@
 ---
-name: follow-builders
-description: Skill-first AI Signal and Attention curation for personalized multi-source digests. Use when the user wants curated AI/tech signals, a scheduled digest, source-aware summaries, or invokes /ai. Outputs Signals rather than formal Knowledge; never write authoritative Malow or GoldenWave state directly.
+name: follow-up
+description: Skill-first AI Signal and Attention curation for personalized multi-source digests. Use when the user says "set up follow-up", wants a scheduled digest or source-aware summary, or invokes /follow-up. Outputs Signals rather than formal Knowledge; never write authoritative Malow or GoldenWave state directly.
 ---
 
 # Follow-up Signal & Attention Curation
@@ -100,15 +100,31 @@ which openclaw 2>/dev/null && echo "PLATFORM=openclaw" || echo "PLATFORM=other"
 
 - **Other** (Hermes, Claude Code, Cursor, etc.): Non-persistent agent. Terminal closes = agent stops.
   For automatic delivery, users MUST set up Telegram or Email. Without it, digests
-  are on-demand only (user types `/ai` to get one).
+  are on-demand only (user types `/follow-up` to get one).
   Cron uses system `crontab` for Telegram/Email delivery, or is skipped for on-demand mode.
 
 Save the detected platform in config.json as `"platform": "openclaw"` or `"platform": "other"`.
 
+## 统一入口
+
+用户说 `set up follow-up` 或执行 `/follow-up` 时进入本 Skill。不得把旧名称注册为
+用户入口。`~/.follow-builders/` 是兼容保留的用户数据目录，升级时不得自动重命名或
+删除；上游 `follow-builders` 名称也只保留在 attribution、provenance 与迁移说明中。
+
+- 配置不存在或 `onboardingComplete !== true`：进入首次 onboarding，不得 prepare。
+- onboarding 已完成：`/follow-up` 立即运行一次 manual on-demand Digest，不要求 schedule
+  approval；若投递到 Telegram/email，仍需该 exact destination 已持久批准，或本次发送前
+  再次确认并传 `--confirm-destination`。stdout 只展示当前操作，无需 destination approval。
+- daily/weekly 自动任务：prepare 和 deliver 都必须传 `--scheduled`，且 onboarding、
+  schedule approval、destination approval 三者均为 true 且配置有效。任一缺失立即停止。
+- 本版本没有“官网一发布就即时提醒”的 alert 模式；自动运行只有 daily 或 weekly。
+
 ## First Run — Onboarding
 
 Check if `~/.follow-builders/config.json` exists and has `onboardingComplete: true`.
-If NOT, run the onboarding flow:
+If NOT, run the onboarding flow. 全程使用中文面向用户说明，并将以下授权拆开确认，
+不得把一个“继续”解释为对所有操作的授权：Skill registration、delivery credentials、
+schedule mutation、external destination。
 
 ### Step 1: Introduction
 
@@ -131,9 +147,10 @@ These summaries do not automatically become personal Knowledge."
 
 ### Step 2: Source Overview
 
-Show the seven-category taxonomy and explain that the current release consumes all six
-live Feeds. Do not ask the user to configure channel switches or claim filtering is
-active. Record source-filtering requests as product feedback only.
+展示七类来源 taxonomy，并说明当前有六类 live Feed。询问用户要启用哪些 live channel，
+将选择写入 `enabledChannels`；至少明确提供全选、按需选择和暂不启用三种选择。空数组是
+合法配置，但只能进入 `no-channels` 配置提示，不能生成或投递 Digest。Industry reports
+仍是规划项，不得作为可启用 live channel。
 
 ### Step 3: Delivery Preferences
 
@@ -162,7 +179,7 @@ when you're not in this chat. You have two options:
 1. **Telegram** — I'll send it as a Telegram message (free, takes ~5 min to set up)
 2. **Email** — I'll email it to you (requires a free Resend account)
 
-Or you can skip this and just type /ai whenever you want your digest — but it
+Or you can skip this and just type /follow-up whenever you want your digest — but it
 won't arrive automatically."
 
 **If they choose Telegram:**
@@ -193,7 +210,7 @@ Then they need a Resend API key:
 Add the key to the .env file.
 
 **If they choose on-demand:**
-Set `delivery.method` to `"stdout"`. Tell them: "No problem — just type /ai
+Set `delivery.method` to `"stdout"`. Tell them: "No problem — just type /follow-up
 whenever you want your digest. No automatic delivery will be set up."
 
 ### Step 5: Language
@@ -253,14 +270,20 @@ cat > ~/.follow-builders/config.json << 'CFGEOF'
 {
   "platform": "<openclaw or other>",
   "language": "<en, zh, or bilingual>",
-  "timezone": "<IANA timezone>",
-  "frequency": "<daily or weekly>",
-  "deliveryTime": "<HH:MM>",
-  "weeklyDay": "<day of week, only if weekly>",
+  "schedule": {
+    "frequency": "<daily or weekly>",
+    "time": "<HH:MM>",
+    "timezone": "<IANA timezone>",
+    "weeklyDay": "<day of week, only if weekly>",
+    "approved": true,
+    "approvedAt": "<ISO-8601 timestamp>"
+  },
   "delivery": {
     "method": "<stdout, telegram, or email>",
     "chatId": "<telegram chat ID, only if telegram>",
-    "email": "<email address, only if email>"
+    "email": "<email address, only if email>",
+    "approved": true,
+    "approvedAt": "<ISO-8601 timestamp>"
   },
   "onboardingComplete": true
 }
@@ -291,7 +314,7 @@ Then run the full Content Delivery workflow below right now.
 
 ## Content Delivery — Digest Run
 
-This workflow runs on cron schedule or when the user invokes `/ai`.
+This workflow runs on a daily/weekly schedule or when the user invokes `/follow-up`.
 
 ### Step 1: Load Config
 
@@ -299,7 +322,12 @@ Read `~/.follow-builders/config.json` for language, schedule, delivery, and prom
 
 ### Step 2: 授权门禁
 
-手动请求可直接继续。计划任务必须先通过当前运行环境提供的授权门禁；没有明确授权时立即停止，不能生成、发送或补发 Digest。Task 9 会补齐统一入口和完整 schedule gate，本阶段不得用隐式授权替代。
+手动请求不要求 schedule approval。计划任务必须先运行 `schedule-gate.js` 或由
+`prepare-digest.js --scheduled` 调用同一真实门禁；只有 `onboardingComplete`、
+`schedule.approved`、`delivery.approved` 均为 true，批准时间为非未来的严格 ISO 时间，
+且 daily/weekly、`HH:MM`、IANA timezone、weekly day 与目的地字段有效时才可继续。
+门禁只输出 `authorized`、`status`、`reasons`，不得输出 config、地址或 credential。
+`no-channels` 是需要修改配置的状态，不得伪装成 authorized 或发送 no-update。
 
 ### Step 3: Prepare curation request
 
@@ -345,8 +373,16 @@ finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确�
 
 读取 `config.delivery.method`，并将其作为显式 `--destination` 传入统一 transaction 入口。stdout、Telegram 和 email 都不得绕过 `deliver.js` 直接读取或发送 `message.txt`：
 
+手动运行：
+
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --result-out <absolute-delivery-result-path>
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> [--confirm-destination] --result-out <absolute-delivery-result-path>
+```
+
+自动运行必须显式标记 scheduled，使 deliver 再次执行 TOCTOU 门禁：
+
+```bash
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --scheduled --result-out <absolute-delivery-result-path>
 ```
 
 默认 stdout 也必须运行：
@@ -385,7 +421,7 @@ cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> retry --
 `retry` 只在同一 transaction 中将旧 attempt 标记为 `superseded` 并创建 replacement pending，不调用 provider。返回 `retry-ready` 后，从 machine JSON 读取 `replacementAttemptId`，然后使用同一个已激活 Digest 直接 resume：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> --result-out <absolute-delivery-result-path>
+cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> [--confirm-destination] --result-out <absolute-delivery-result-path>
 ```
 
 resume 会校验该 pending 确实由对应旧 attempt 的 `superseded` 事件创建，并要求 `digestId`、`frequency`、candidate IDs、event cluster IDs、`messageHash` 和 destination 完全匹配；它不会创建普通 reservation。每个 replacement 的 resume 会在 provider handoff 前持久化一次性 claim，只有 claim 成功的调用可以继续；进程崩溃或 provider 结果不确定时也不得重复 resume。
@@ -463,7 +499,18 @@ If the user says "save this", "learn this", "use this in my project", or similar
 
 ## Manual Trigger
 
-When the user invokes `/ai` or asks for their digest manually:
+## 用户可见结果文案
+
+- `no-important-updates`：完整 daily 检查显示“今日无重要更新”；完整 weekly 检查显示
+  “本周无重要更新”。
+- `partial`：说明“部分来源检查未完成，以下是目前可确认的更新”，不得声称没有更新。
+- `incomplete-history`：说明“历史覆盖不完整，本次仅基于可用时间范围”，优先披露。
+- `delivery-failed`：说明“目标明确拒绝或配置无效，本次未送达”，不得隐式换目标。
+- `delivery-uncertain`：说明“投递结果无法确认，可能已送达”，并给出
+  `/follow-up resolve-delivery <attempt-id> delivered|retry|suppress`，不得自动重试。
+- `no-channels`：说明“未启用任何内容渠道”，引导启用至少一个渠道，不发送摘要。
+
+When the user invokes `/follow-up` or asks for their digest manually:
 1. Skip cron check — run the digest workflow immediately
 2. Use the same fetch → remix → deliver flow as the cron run
 3. Tell the user you're fetching fresh content (it takes a minute or two)

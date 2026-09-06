@@ -20,6 +20,7 @@ import {
 } from './delivery-outbox.js';
 import { deliverWithProvider, validateDestination } from './delivery-providers.js';
 import { AtomicWriteCommittedError, writeJsonAtomic } from './prepare-digest.js';
+import { authorizeDestination, authorizeSchedule } from './schedule-gate.js';
 
 const DEFAULT_USER_DIR = join(homedir(), '.follow-builders');
 
@@ -33,6 +34,8 @@ function parseOptions(argv) {
       active: { type: 'string' }, destination: { type: 'string' },
       'result-out': { type: 'string' },
       'resume-attempt': { type: 'string' },
+      scheduled: { type: 'boolean' },
+      'confirm-destination': { type: 'boolean' },
     },
     validate({ values, positionals }) {
       if (positionals.length) throw new CommandLineUsageError('unexpected positional arguments');
@@ -82,12 +85,23 @@ function timestamp(now) {
 
 export async function deliverActiveDigest({
   activePath, destination, credentials = process.env,
+  config = {}, scheduled = false, confirmDestination = false,
   ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout = process.stderr,
   timeoutMs = 15_000,
   logger = () => {}, randomUUID = systemRandomUUID, now = () => new Date().toISOString(),
   reserveAttempt = reserveOutboxAttempt, resolveAttempt = resolveOutboxAttempt,
 } = {}) {
+  const gateNow = timestamp(now);
+  const gate = scheduled
+    ? authorizeSchedule(config, { now: gateNow, destination })
+    : authorizeDestination(config, { destination, confirmDestination, now: gateNow });
+  if (!gate.authorized) throw new Error(gate.status);
   const loaded = await loadActiveDigest(activePath);
+  if (scheduled && !authorizeSchedule(config, {
+    now: gateNow, frequency: loaded.frequency, destination,
+  }).authorized) {
+    throw new Error('schedule-not-authorized');
+  }
   if (loaded.message.trim().length === 0) {
     return { status: 'skipped', reason: 'no-content', digestId: loaded.digestId };
   }
@@ -182,12 +196,23 @@ function sameValues(left, right) {
 
 async function resumeActiveDigestDeliveryUnlocked({
   activePath, attemptId, destination, credentials = process.env,
+  config = {}, scheduled = false, confirmDestination = false,
   ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout = process.stderr,
   timeoutMs = 15_000, logger = () => {}, randomUUID = systemRandomUUID,
   now = () => new Date().toISOString(), resolveAttempt = resolveOutboxAttempt,
   claimAttempt = claimReplacementOutboxAttempt,
 } = {}) {
+  const gateNow = timestamp(now);
+  const initialGate = scheduled
+    ? authorizeSchedule(config, { now: gateNow, destination })
+    : authorizeDestination(config, { destination, confirmDestination, now: gateNow });
+  if (!initialGate.authorized) throw new Error(initialGate.status);
   const loaded = await loadActiveDigest(activePath);
+  if (scheduled && !authorizeSchedule(config, {
+    now: gateNow, frequency: loaded.frequency, destination,
+  }).authorized) {
+    throw new Error('schedule-not-authorized');
+  }
   const validated = validateDestination(destination, credentials);
   const record = await readOutboxAttempt(attemptId, {
     ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID,
@@ -249,7 +274,6 @@ export async function main({
   let outcome;
   try {
     const config = await loadConfig(configPath);
-    const credentials = await loadCredentials(envPath, env);
     const destination = {
       ...(config.delivery ?? {}), method: options.destination ?? config.delivery?.method ?? 'stdout',
     };
@@ -257,16 +281,30 @@ export async function main({
       stderr.write('usage: --result-out is required for stdout delivery\n');
       return EX_USAGE;
     }
-    const delivery = options['resume-attempt'] ? resumeImpl : deliverImpl;
-    outcome = await delivery({
-      activePath: options.active,
-      attemptId: options['resume-attempt'],
-      destination,
-      credentials,
-      ledgerPath, outboxDir, transactionDir, fsImpl,
-      transport, providerStdout: providerStdout ?? (destination.method === 'stdout' ? stdout : stderr),
-      randomUUID, now,
-    });
+    const gate = options.scheduled
+      ? authorizeSchedule(config, { now: timestamp(now), destination })
+      : authorizeDestination(config, {
+        destination, confirmDestination: options['confirm-destination'] ?? false,
+        now: timestamp(now),
+      });
+    if (!gate.authorized) {
+      outcome = { status: gate.status, reasons: gate.reasons };
+    } else {
+      const credentials = await loadCredentials(envPath, env);
+      const delivery = options['resume-attempt'] ? resumeImpl : deliverImpl;
+      outcome = await delivery({
+        activePath: options.active,
+        attemptId: options['resume-attempt'],
+        destination,
+        config, scheduled: options.scheduled ?? false,
+        confirmDestination: options['confirm-destination'] ?? false,
+        credentials,
+        ledgerPath, outboxDir, transactionDir, fsImpl,
+        transport,
+        providerStdout: providerStdout ?? (destination.method === 'stdout' ? stdout : stderr),
+        randomUUID, now,
+      });
+    }
   } catch {
     outcome = { status: 'delivery-failed', reason: 'delivery-not-started' };
   }

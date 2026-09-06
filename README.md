@@ -239,7 +239,7 @@ All with links to original content. Available in English, Chinese, or bilingual.
 ## Quick Start
 
 1. Install the exact verified GitHub Release using the instructions below
-2. Say "set up follow builders" or invoke `/follow-builders`
+2. Say "set up follow-up" or invoke `/follow-up`
 3. The agent walks you through setup conversationally
 
 The agent will ask you:
@@ -249,7 +249,15 @@ The agent will ask you:
 
 No source-fetching API keys are required from users because content is fetched centrally. Telegram or email delivery still requires the user's own delivery credentials.
 
-> The current release consumes all six live Feeds. Enforced per-user channel switches are planned and should not be presented as implemented filtering.
+The unified `/follow-up` entry starts onboarding until configuration is complete, then
+runs an on-demand Digest. Automatic delivery supports daily or weekly schedules; this
+release does not send immediate alerts when an official site publishes.
+
+Scheduled delivery requires three independent approvals: completed onboarding, the
+schedule, and the exact delivery destination. Manual runs do not require schedule
+approval. Manual Telegram/email sends still require persistent destination approval or
+an immediate confirmation; stdout is allowed for the current operation. An empty channel
+selection is a configuration action, not a no-update notification.
 
 ## Customizing Your Digest
 
@@ -423,14 +431,27 @@ All settings are stored in `~/.follow-builders/config.json`:
 {
   "platform": "other",
   "language": "bilingual",
-  "timezone": "Asia/Shanghai",
-  "frequency": "daily",
-  "deliveryTime": "08:00",
+  "onboardingComplete": true,
+  "enabledChannels": ["blogs", "academic", "zh-tech"],
+  "schedule": {
+    "frequency": "daily",
+    "time": "08:00",
+    "timezone": "Asia/Shanghai",
+    "approved": true,
+    "approvedAt": "2026-09-06T07:00:00.000Z"
+  },
   "delivery": {
-    "method": "stdout"
+    "method": "stdout",
+    "approved": true,
+    "approvedAt": "2026-09-06T07:00:00.000Z"
   }
 }
 ```
+
+The nested `schedule` object is the v0.2 canonical form. Legacy top-level `frequency`,
+`deliveryTime`, `timezone`, and `weeklyDay` fields remain readable for migration.
+Existing user data stays in `~/.follow-builders/`; upgrading the Skill registration
+must not rename or delete that directory.
 
 ## Privacy
 

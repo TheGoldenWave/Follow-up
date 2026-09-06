@@ -52,3 +52,30 @@ test('missing enabledChannels defaults to all six live channels at runtime', () 
   });
   assert.equal(Object.hasOwn(config, 'enabledChannels'), false);
 });
+
+test('v0.2 schema accepts independent schedule and destination approvals', () => {
+  const config = {
+    onboardingComplete: true,
+    enabledChannels: ['blogs'],
+    schedule: {
+      frequency: 'weekly', time: '08:30', timezone: 'Asia/Shanghai', weeklyDay: 'friday',
+      approved: true, approvedAt: '2026-09-06T07:00:00.000Z',
+    },
+    delivery: {
+      method: 'email', email: 'reader@example.com',
+      approved: true, approvedAt: '2026-09-06T07:05:00.000Z',
+    },
+  };
+  assert.deepEqual(validateConfig(config), { valid: true, errors: [] });
+  assert.deepEqual(normalizeConfig(config).schedule, config.schedule);
+});
+
+test('v0.2 schema rejects malformed approval and weekly schedule state', () => {
+  for (const config of [
+    { schedule: { frequency: 'weekly', time: '08:00', timezone: 'UTC', approved: false } },
+    { schedule: { frequency: 'daily', time: '8am', timezone: 'UTC', approved: false } },
+    { delivery: { method: 'stdout', approved: true } },
+  ]) {
+    assert.equal(validateConfig(config).valid, false, JSON.stringify(config));
+  }
+});

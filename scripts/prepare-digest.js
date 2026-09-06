@@ -22,6 +22,7 @@ import {
   validateCurationRequest,
 } from './digest-selection-contract.js';
 import { resolveRuntimePaths } from './lib/paths.js';
+import { authorizeSchedule } from './schedule-gate.js';
 import { loadSourceRegistry } from './source-registry.js';
 import { sanitizeDiagnostic } from './source-status.js';
 import { readJsonLimited } from './validate-digest-selection.js';
@@ -383,9 +384,12 @@ export async function prepareDigest({
   randomUUID = systemRandomUUID,
 } = {}) {
   const normalizedConfig = normalizeConfig(config ?? {});
-  if (scheduled && (typeof authorizeScheduled !== 'function'
-      || await authorizeScheduled({ config: normalizedConfig, frequency }) !== true)) {
-    throw new Error('schedule-not-authorized');
+  if (scheduled) {
+    const gate = typeof authorizeScheduled === 'function'
+      ? await authorizeScheduled({ config: normalizedConfig, frequency, now })
+      : authorizeSchedule(normalizedConfig, { now, frequency });
+    const authorized = gate === true || gate?.authorized === true;
+    if (!authorized && gate?.status !== 'no-channels') throw new Error('schedule-not-authorized');
   }
   if (normalizedConfig.enabledChannels.length === 0) {
     return {
@@ -524,7 +528,8 @@ export async function main({
     if (normalized.enabledChannels.length === 0) {
       const result = await prepareDigest({
         config: loadedConfig,
-        frequency: options.frequency ?? loadedConfig.frequency ?? 'daily',
+        frequency: options.frequency ?? normalized.schedule?.frequency
+          ?? loadedConfig.frequency ?? 'daily',
         scheduled: options.scheduled ?? false,
         authorizeScheduled,
       });
@@ -544,7 +549,8 @@ export async function main({
       });
     const prepared = await prepareDigest({
       config: loadedConfig,
-      frequency: options.frequency ?? loadedConfig.frequency ?? 'daily',
+      frequency: options.frequency ?? normalized.schedule?.frequency
+        ?? loadedConfig.frequency ?? 'daily',
       scheduled: options.scheduled ?? false,
       authorizeScheduled,
       now,

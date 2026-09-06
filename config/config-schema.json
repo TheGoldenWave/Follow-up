@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "User configuration for Follow Builders skill. Stored at ~/.follow-builders/config.json",
+  "description": "User configuration for Follow-up. Stored at ~/.follow-builders/config.json",
   "type": "object",
   "properties": {
     "platform": {
@@ -36,6 +36,41 @@
       "default": "monday",
       "description": "Day of week for weekly digests (only used when frequency is weekly)"
     },
+    "scheduleApproved": {
+      "type": "boolean",
+      "description": "Legacy migration field; new configurations use schedule.approved"
+    },
+    "scheduleApprovedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Legacy migration field; new configurations use schedule.approvedAt"
+    },
+    "schedule": {
+      "type": "object",
+      "description": "Normalized v0.2 schedule and its independent user approval",
+      "required": ["frequency", "time", "timezone", "approved"],
+      "properties": {
+        "frequency": { "type": "string", "enum": ["daily", "weekly"] },
+        "time": { "type": "string", "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$" },
+        "timezone": { "type": "string", "minLength": 1 },
+        "weeklyDay": {
+          "type": "string",
+          "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        },
+        "approved": { "type": "boolean" },
+        "approvedAt": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "frequency": { "const": "weekly" } }, "required": ["frequency"] },
+          "then": { "required": ["weeklyDay"] }
+        },
+        {
+          "if": { "properties": { "approved": { "const": true } }, "required": ["approved"] },
+          "then": { "required": ["approvedAt"] }
+        }
+      ]
+    },
     "enabledChannels": {
       "type": "array",
       "items": {
@@ -63,8 +98,23 @@
         "email": {
           "type": "string",
           "description": "Email address to send digest to (only for email method)"
+        },
+        "approved": {
+          "type": "boolean",
+          "description": "Whether this exact delivery destination was independently approved"
+        },
+        "approvedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp for destination approval"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "approved": { "const": true } }, "required": ["approved"] },
+          "then": { "required": ["approvedAt"] }
+        }
+      ]
     },
     "onboardingComplete": {
       "type": "boolean",
