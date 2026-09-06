@@ -2,6 +2,7 @@
 
 import { execFile as nodeExecFile } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import * as systemFs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
@@ -118,17 +119,48 @@ async function completionPayload(root, version, transactionId, fsImpl) {
   return { schemaVersion: 1, version, manifestSha256, transactionId };
 }
 
+async function readRegularNoFollow(path, fsImpl) {
+  const handle = await fsImpl.open(path, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+  try {
+    const metadata = await handle.stat();
+    if (!metadata.isFile()) throw new Error('Installation marker is not a regular file');
+    return await handle.readFile('utf8');
+  } finally { await handle.close(); }
+}
+
 async function validateCompletion(root, version, fsImpl) {
   const metadata = await pathState(join(root, COMPLETE_FILE), fsImpl);
   if (!metadata?.isFile() || metadata.isSymbolicLink()) throw new Error('Immutable release completion marker is missing');
-  const marker = JSON.parse(await fsImpl.readFile(join(root, COMPLETE_FILE), 'utf8'));
+  const [markerText, owner] = await Promise.all([
+    readRegularNoFollow(join(root, COMPLETE_FILE), fsImpl),
+    readRegularNoFollow(join(root, OWNER_FILE), fsImpl),
+  ]);
+  const marker = JSON.parse(markerText);
   const expected = await completionPayload(root, version, marker.transactionId, fsImpl);
   if (marker.schemaVersion !== expected.schemaVersion || marker.version !== version
       || marker.manifestSha256 !== expected.manifestSha256
-      || typeof marker.transactionId !== 'string' || marker.transactionId.length < 8) {
+      || typeof marker.transactionId !== 'string' || marker.transactionId.length < 8
+      || owner !== `${marker.transactionId}\n`) {
     throw new Error('Immutable release completion marker is invalid');
   }
   return marker;
+}
+
+function objectPrefix(version) { return `.${version}.object-`; }
+
+async function resolveReleasePointer(releaseRoot, version, releasesDir, fsImpl) {
+  const metadata = await pathState(releaseRoot, fsImpl);
+  if (!metadata) return null;
+  if (metadata.isSymbolicLink()) {
+    const link = await fsImpl.readlink(releaseRoot);
+    if (isAbsolute(link) || dirname(link) !== '.' || !link.startsWith(objectPrefix(version))) throw new Error('Existing release pointer is unsafe');
+    const objectRoot = join(releasesDir, link); const objectMetadata = await fsImpl.lstat(objectRoot);
+    if (objectMetadata.isSymbolicLink() || !objectMetadata.isDirectory()) throw new Error('Existing release object is unsafe');
+    if (await fsImpl.realpath(objectRoot) !== resolve(objectRoot)) throw new Error('Existing release object escapes releases directory');
+    return { objectRoot, objectIdentity: objectMetadata, pointerTarget: link };
+  }
+  if (metadata.isDirectory()) return { objectRoot: releaseRoot, objectIdentity: metadata, pointerTarget: null };
+  throw new Error('Existing release path is unsafe');
 }
 
 async function writeRegistrationMetadata(userDir, registration, fsImpl, id) {
@@ -189,33 +221,16 @@ export async function runReleaseDoctor(options, {
   return { exitCode, report };
 }
 
-async function promoteRelease(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity, version, transactionId }) {
-  if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))) throw new Error('Release directory changed during installation');
-  try { await fsImpl.mkdir(releaseRoot, { mode: 0o700 }); } catch (error) {
-    if (error?.code === 'EEXIST') throw new Error('Release target became occupied during installation');
-    throw error;
-  }
-  const targetIdentity = await fsImpl.lstat(releaseRoot);
-  if (targetIdentity.isSymbolicLink() || !targetIdentity.isDirectory()) throw new Error('Claimed release target is unsafe');
-  try {
-    await fsImpl.writeFile(join(releaseRoot, OWNER_FILE), `${transactionId}\n`, { flag: 'wx', mode: 0o600 });
-    if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))
-        || !sameIdentity(targetIdentity, await fsImpl.lstat(releaseRoot))) throw new Error('Release claim changed during installation');
-    await copyTree(stagingRoot, releaseRoot, fsImpl, { createTarget: false, allowInternalSymlinks: true });
-    await syncTree(releaseRoot, fsImpl);
-    const payload = await completionPayload(releaseRoot, version, transactionId, fsImpl);
-    const temporary = join(releaseRoot, `.install-complete.tmp-${transactionId}`);
-    await fsImpl.writeFile(temporary, `${JSON.stringify(payload)}\n`, { flag: 'wx', mode: 0o600 });
-    const handle = await fsImpl.open(temporary, 'r'); try { await handle.sync(); } finally { await handle.close(); }
-    if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))
-        || !sameIdentity(targetIdentity, await fsImpl.lstat(releaseRoot))) throw new Error('Release claim changed before completion');
-    await fsImpl.rename(temporary, join(releaseRoot, COMPLETE_FILE));
-    const directory = await fsImpl.open(releaseRoot, 'r'); try { await directory.sync(); } finally { await directory.close(); }
-    return { targetIdentity };
-  } catch (error) {
-    error.claimedIdentity = targetIdentity;
-    throw error;
-  }
+async function completeObject(objectRoot, objectIdentity, version, transactionId, fsImpl) {
+  if (!sameIdentity(objectIdentity, await fsImpl.lstat(objectRoot))) throw new Error('Release object changed during installation');
+  await syncTree(objectRoot, fsImpl);
+  const payload = await completionPayload(objectRoot, version, transactionId, fsImpl);
+  const temporary = join(objectRoot, `.install-complete.tmp-${transactionId}`);
+  await fsImpl.writeFile(temporary, `${JSON.stringify(payload)}\n`, { flag: 'wx', mode: 0o600 });
+  const handle = await fsImpl.open(temporary, 'r'); try { await handle.sync(); } finally { await handle.close(); }
+  if (!sameIdentity(objectIdentity, await fsImpl.lstat(objectRoot))) throw new Error('Release object changed before completion');
+  await fsImpl.rename(temporary, join(objectRoot, COMPLETE_FILE));
+  const directory = await fsImpl.open(objectRoot, 'r'); try { await directory.sync(); } finally { await directory.close(); }
 }
 
 export async function runInstaller(args, options = {}) {
@@ -224,12 +239,11 @@ export async function runInstaller(args, options = {}) {
     fsImpl = systemFs, validateReleaseImpl = validateRelease, validateArchiveCriticalFilesImpl = validateArchiveCriticalFiles,
     copyReleaseImpl = copyTree, npmCiImpl = async (cwd) => execFile(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts'], { cwd }),
     registerSkillImpl = registerSkill, doctorImpl = runReleaseDoctor,
-    promoteReleaseImpl = promoteRelease,
     stdout = console.log, stderr = console.error, transactionId = randomUUID(),
   } = options;
   let parsed;
   try { parsed = parseInstallArgs(args); } catch (error) { stderr(`${error.message}\n${USAGE}`); return { exitCode: EX_USAGE, error }; }
-  const sourceRoot = resolve(root); let lockPath; let lockIdentity; let lockOwned = false; let stagingRoot; let claimedIdentity; let claimed = false; let published = false; let reused = false;
+  const sourceRoot = resolve(root); let lockPath; let lockIdentity; let lockOwned = false; let objectRoot; let objectIdentity; let pointerTarget; let pointerPublished = false; let published = false; let reused = false;
   let releasesDir; let releasesIdentity;
   let metadataPrevious; let metadataChanged = false; let configCreated = false;
   try {
@@ -254,31 +268,34 @@ export async function runInstaller(args, options = {}) {
       catch (error) { if (error?.code !== 'EEXIST') throw error; throw new Error('Configuration path changed concurrently'); }
     }
     await ensureDirectorySafe(releasesDir, fsImpl); releasesIdentity = await fsImpl.lstat(releasesDir);
-    const existing = await pathState(releaseRoot, fsImpl);
+    const existing = await resolveReleasePointer(releaseRoot, version, releasesDir, fsImpl);
     if (existing) {
-      if (existing.isSymbolicLink() || !existing.isDirectory()) throw new Error('Existing release path is unsafe');
-      await validateCompletion(releaseRoot, version, fsImpl);
-      await inspectTree(releaseRoot, fsImpl, { skipDependencies: true });
-      const errors = await validateReleaseImpl(releaseRoot, { mode: 'archive', verifyIntegrity: true });
+      ({ objectRoot, objectIdentity, pointerTarget } = existing);
+      await validateCompletion(objectRoot, version, fsImpl);
+      await inspectTree(objectRoot, fsImpl, { skipDependencies: true });
+      const errors = await validateReleaseImpl(objectRoot, { mode: 'archive', verifyIntegrity: true });
       if (errors.length) throw new Error(`Existing immutable release is invalid: ${errors.join('; ')}`);
       reused = true;
     } else {
-      stagingRoot = join(releasesDir, `.${version}.staging-${transactionId}`);
-      if (await pathState(stagingRoot, fsImpl)) throw new Error('Unique staging directory already exists');
-      await copyReleaseImpl(sourceRoot, stagingRoot, fsImpl);
-      await npmCiImpl(join(stagingRoot, 'scripts'));
-      const stagedDoctor = await doctorImpl({ home, releaseRoot: stagingRoot, requireRegistration: false, allowIncomplete: true });
+      objectRoot = await fsImpl.mkdtemp(join(releasesDir, `${objectPrefix(version)}${transactionId}-`));
+      await fsImpl.chmod(objectRoot, 0o700); objectIdentity = await fsImpl.lstat(objectRoot);
+      await fsImpl.writeFile(join(objectRoot, OWNER_FILE), `${transactionId}\n`, { flag: 'wx', mode: 0o600 });
+      await copyReleaseImpl(sourceRoot, objectRoot, fsImpl, { createTarget: false });
+      if (!sameIdentity(objectIdentity, await fsImpl.lstat(objectRoot))) throw new Error('Release object changed during copy');
+      await npmCiImpl(join(objectRoot, 'scripts'));
+      const stagedDoctor = await doctorImpl({ home, releaseRoot: objectRoot, requireRegistration: false, allowIncomplete: true });
       const stagedCode = typeof stagedDoctor === 'number' ? stagedDoctor : stagedDoctor?.exitCode;
       if (stagedCode !== 0 && stagedCode !== 2) throw new Error('Local doctor checks failed');
-      let promotion;
-      try { promotion = await promoteReleaseImpl(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity, version, transactionId }); }
-      catch (error) { if (error?.claimedIdentity) { claimedIdentity = error.claimedIdentity; claimed = true; } throw error; }
-      claimedIdentity = promotion?.targetIdentity ?? await pathState(releaseRoot, fsImpl); claimed = true;
-      await validateCompletion(releaseRoot, version, fsImpl); published = true;
-      await fsImpl.rm(stagingRoot, { recursive: true, force: true }); stagingRoot = undefined;
+      await completeObject(objectRoot, objectIdentity, version, transactionId, fsImpl);
+      await validateCompletion(objectRoot, version, fsImpl); published = true;
+      if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))) throw new Error('Release directory changed before pointer publication');
+      pointerTarget = relative(releasesDir, objectRoot);
+      try { await fsImpl.symlink(pointerTarget, releaseRoot, 'dir'); } catch (error) { if (error?.code === 'EEXIST') throw new Error('Release target became occupied during installation'); throw error; }
+      pointerPublished = true;
+      if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir)) || await fsImpl.readlink(releaseRoot) !== pointerTarget) throw new Error('Release pointer changed during publication');
     }
     const verifyRegistration = async () => {
-      const result = await doctorImpl({ home, releaseRoot, platform: parsed.platform, skillDir: parsed.skillDir, requireRegistration: true });
+      const result = await doctorImpl({ home, releaseRoot: objectRoot, platform: parsed.platform, skillDir: parsed.skillDir, requireRegistration: true });
       const code = typeof result === 'number' ? result : result?.exitCode;
       return code === 0 || code === 2;
     };
@@ -290,7 +307,7 @@ export async function runInstaller(args, options = {}) {
       const registration = await registerSkillImpl({ platform: parsed.platform, skillDir: parsed.skillDir, home, releaseRoot, replaceLegacy: parsed.replaceFollowBuilders, verify: verifyRegistration, fsImpl });
       stdout(`Follow-up ${version} is ready and registered at ${registration?.registrationPath ?? 'the selected Skill directory'}.`);
     } else {
-      const result = await doctorImpl({ home, releaseRoot, requireRegistration: false });
+      const result = await doctorImpl({ home, releaseRoot: objectRoot, requireRegistration: false });
       const code = typeof result === 'number' ? result : result?.exitCode;
       if (code !== 0 && code !== 2) throw new Error('Local doctor checks failed');
       stdout(`Follow-up ${version} is ready. Registration was not requested.`);
@@ -302,13 +319,23 @@ export async function runInstaller(args, options = {}) {
       try { await restoreRegistrationMetadata(join(home, '.follow-builders'), metadataPrevious, fsImpl, transactionId); }
       catch (restoreError) { rollbackError = restoreError; }
     }
+    if (error?.code === 'REGISTRATION_ROLLBACK_FAILED') rollbackError ??= error;
     const releaseParentOwned = releasesDir && sameIdentity(releasesIdentity, await pathState(releasesDir, fsImpl));
-    if (stagingRoot && releaseParentOwned) await fsImpl.rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
-    if (claimed && !rollbackError && releaseParentOwned) {
+    if (!rollbackError && pointerPublished && releasesDir && pointerTarget) {
       const version = await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8').then((value) => value.trim()).catch(() => null);
-      const target = version && join(home, '.follow-builders', 'releases', version);
-      const [identity, token] = target ? await Promise.all([pathState(target, fsImpl), fsImpl.readFile(join(target, OWNER_FILE), 'utf8').catch(() => null)]) : [];
-      if (sameIdentity(claimedIdentity, identity) && token === `${transactionId}\n`) await fsImpl.rm(target, { recursive: true, force: true }).catch(() => {});
+      const pointer = version && join(releasesDir, version);
+      const exact = pointer && await fsImpl.lstat(pointer).then((metadata) => metadata.isSymbolicLink()).catch(() => false)
+        && await fsImpl.readlink(pointer).catch(() => null) === pointerTarget;
+      if (exact) await fsImpl.unlink(pointer).catch(() => {});
+    }
+    if (!rollbackError && releaseParentOwned && objectRoot && objectIdentity) {
+      const token = await readRegularNoFollow(join(objectRoot, OWNER_FILE), fsImpl).catch(() => null);
+      if (sameIdentity(objectIdentity, await pathState(objectRoot, fsImpl)) && token === `${transactionId}\n`) {
+        if (pointerPublished && await fsImpl.readlink(join(releasesDir, (await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8')).trim())).catch(() => null) === pointerTarget) {
+          await fsImpl.unlink(join(releasesDir, (await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8')).trim())).catch(() => {});
+        }
+        await fsImpl.rm(objectRoot, { recursive: true, force: true }).catch(() => {});
+      }
     }
     if (configCreated) {
       const configPath = join(home, '.follow-builders', 'config.json');
@@ -316,7 +343,7 @@ export async function runInstaller(args, options = {}) {
       if (unchanged) await fsImpl.unlink(configPath).catch(() => {});
     }
     if (rollbackError) {
-      const uncertain = new Error(`Installation rollback is uncertain: active metadata restore failed: ${rollbackError.message}`, { cause: error });
+      const uncertain = new Error(`Installation rollback is uncertain: ${rollbackError.message}`, { cause: error });
       uncertain.code = 'INSTALL_ROLLBACK_UNCERTAIN'; stderr(uncertain.message); return { exitCode: 1, error: uncertain, rollbackUncertain: true, published };
     }
     stderr(error.message); return { exitCode: 1, error };

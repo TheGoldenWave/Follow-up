@@ -210,3 +210,16 @@ test('registration inspection distinguishes correct, missing, and unsafe registr
     platform: 'custom', skillDir: registrationPath, releaseRoot,
   })).status, 'invalid');
 });
+
+test('registration accepts only an exact internal one-hop immutable release pointer', async (t) => {
+  const { root } = await fixture(t); const releases = join(root, 'releases'); await fs.mkdir(releases);
+  const object = join(releases, '.0.2.0.object-AbCd1234'); await fs.mkdir(object); await fs.writeFile(join(object, 'SKILL.md'), '# skill');
+  const pointer = join(releases, '0.2.0'); await fs.symlink('.0.2.0.object-AbCd1234', pointer, 'dir');
+  const skillDir = join(root, 'skills', 'follow-up');
+  assert.equal((await registerSkill({ platform: 'custom', skillDir, releaseRoot: pointer })).status, 'registered');
+  await fs.unlink(skillDir);
+  const outside = join(root, 'outside'); await fs.mkdir(outside); await fs.writeFile(join(outside, 'SKILL.md'), '# outside'); await fs.unlink(pointer); await fs.symlink(outside, pointer, 'dir');
+  await assert.rejects(registerSkill({ platform: 'custom', skillDir, releaseRoot: pointer }), /unsafe|internal|pointer/i);
+  await fs.unlink(pointer); const hop = join(releases, '.0.2.0.object-Hop12345'); await fs.symlink(object, hop, 'dir'); await fs.symlink('.0.2.0.object-Hop12345', pointer, 'dir');
+  await assert.rejects(registerSkill({ platform: 'custom', skillDir, releaseRoot: pointer }), /unsafe|one-hop|pointer/i);
+});

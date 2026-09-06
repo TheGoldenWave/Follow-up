@@ -11,6 +11,8 @@ node scripts/doctor.js [--network] [--json]
 
 `--register` 表示明确授权创建 `follow-up` Skill 链接。重复执行可重装同一版本，并逐字节保留已有可变用户文件。若升级时检测到旧的 `follow-builders` 注册，必须额外使用 `--replace-follow-builders`；只有新链接创建成功且本地 doctor 检查通过后才会删除旧链接。完成注册后可通过 `/follow-up` 进入。
 
+`~/.follow-builders/releases/0.2.0` 是不可变版本指针，指向同一 `releases` 目录内经验证、随机命名的 release object。它可以像普通目录一样访问，但安装器不会通过该指针写入任何文件。
+
 ```text
 node scripts/install.js --platform codex --register --replace-follow-builders
 ```

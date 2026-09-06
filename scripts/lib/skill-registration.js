@@ -1,13 +1,27 @@
 import * as systemFs from 'node:fs/promises';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 
 import { resolveSkillRegistrationPath } from './paths.js';
 
-function requireReleaseRoot(releaseRoot) {
+async function requireReleaseRoot(releaseRoot, fsImpl) {
   if (typeof releaseRoot !== 'string' || !isAbsolute(releaseRoot)) {
     throw new TypeError('releaseRoot must be an absolute path');
   }
-  return resolve(releaseRoot);
+  const target = resolve(releaseRoot);
+  const metadata = await pathState(target, fsImpl);
+  if (metadata?.isSymbolicLink()) {
+    const link = await fsImpl.readlink(target); const version = basename(target);
+    if (isAbsolute(link) || dirname(link) !== '.' || !link.startsWith(`.${version}.object-`)) {
+      throw new Error('Release pointer is unsafe or not an internal one-hop pointer');
+    }
+    const object = join(dirname(target), link); const objectMetadata = await pathState(object, fsImpl);
+    const expectedObject = join(await fsImpl.realpath(dirname(target)), link);
+    if (!objectMetadata?.isDirectory() || objectMetadata.isSymbolicLink()
+        || await fsImpl.realpath(object) !== expectedObject) {
+      throw new Error('Release pointer target is unsafe or not an internal one-hop object');
+    }
+  }
+  return target;
 }
 
 async function pathState(path, fsImpl) {
@@ -54,7 +68,7 @@ export async function inspectSkillRegistration({
   fsImpl = systemFs,
   ...pathOptions
 }) {
-  const target = requireReleaseRoot(releaseRoot);
+  const target = await requireReleaseRoot(releaseRoot, fsImpl);
   const { registrationPath, legacyPath } = registrationPaths(platform, pathOptions);
   const metadata = await pathState(registrationPath, fsImpl);
   const legacyMetadata = await pathState(legacyPath, fsImpl);
@@ -84,7 +98,7 @@ export async function registerSkill({
   randomUUID: _randomUUID,
   ...pathOptions
 }) {
-  const target = requireReleaseRoot(releaseRoot);
+  const target = await requireReleaseRoot(releaseRoot, fsImpl);
   const skillMetadata = await pathState(join(target, 'SKILL.md'), fsImpl);
   if (!skillMetadata?.isFile()) throw new Error('Release root does not contain a regular SKILL.md');
 

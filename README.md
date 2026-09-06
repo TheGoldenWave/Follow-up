@@ -11,6 +11,8 @@ node scripts/doctor.js [--network] [--json]
 
 `--register` is the explicit approval to create the `follow-up` Skill link. Re-running the command reinstalls the same release while preserving existing mutable user files. Upgrading from `follow-builders` requires `--replace-follow-builders`; the legacy link is removed only after the new link and local doctor checks succeed. The conversational entry point is `/follow-up` after registration.
 
+The path `~/.follow-builders/releases/0.2.0` is an immutable version pointer to a verified, randomly named release object in the same `releases` directory. It can be used like a directory, but the installer never writes through that pointer.
+
 ```text
 node scripts/install.js --platform codex --register --replace-follow-builders
 ```

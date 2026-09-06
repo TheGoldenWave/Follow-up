@@ -55,7 +55,8 @@ test('release doctor resolves dependencies from the staged release, not the pris
 test('pristine archive completes real npm ci and target-local doctor on clean install and reinstall', { timeout: 120_000 }, async () => {
   const f = await pristineRepositoryArchive(); await assert.rejects(fs.lstat(join(f.root, 'scripts', 'node_modules')), { code: 'ENOENT' });
   const errors = []; const reports = []; const clean = await runInstaller(['--platform', 'codex'], { ...f, stdout: () => {}, stderr: (message) => errors.push(message), doctorImpl: async (options) => { const result = await runReleaseDoctor(options); reports.push(result.report); return result; } });
-  assert.equal(clean.exitCode, 0, `${errors.join('; ')} ${JSON.stringify(reports)}`); assert.equal(clean.reused, false); assert.ok(await fs.lstat(join(clean.releaseRoot, 'scripts', 'node_modules', 'ajv')));
+  assert.equal(clean.exitCode, 0, `${errors.join('; ')} ${JSON.stringify(reports)}`); assert.equal(clean.reused, false); assert.equal((await fs.lstat(clean.releaseRoot)).isSymbolicLink(), true);
+  const objectRoot = await fs.realpath(clean.releaseRoot); assert.match(objectRoot, /\.0\.1\.0\.object-[A-Za-z0-9_-]+$/); assert.ok(await fs.lstat(join(objectRoot, 'scripts', 'node_modules', 'ajv')));
   const reinstall = await runInstaller(['--platform', 'codex'], { ...f, stdout: () => {}, stderr: () => {} });
   assert.equal(reinstall.exitCode, 0); assert.equal(reinstall.reused, true); assert.equal(reinstall.releaseRoot, clean.releaseRoot);
 });
@@ -98,7 +99,7 @@ test('clean install stages, installs, atomically publishes, then registers with 
   }));
   assert.equal(result.exitCode, 0); assert.equal(await fs.readFile(join(f.releaseRoot, 'SKILL.md'), 'utf8'), '# Follow-up\n');
   assert.deepEqual(JSON.parse(await fs.readFile(join(f.home, '.follow-builders', 'config.json'), 'utf8')), {});
-  assert.match(operations[0], /npm:.*\.staging-/); assert.match(operations[1], /doctor:.*\.staging-.*:false/); assert.match(operations[2], /register:.*releases\/0\.2\.0/); assert.match(operations[3], /doctor:.*custom:.*follow-up:true/);
+  assert.match(operations[0], /npm:.*\.object-/); assert.match(operations[1], /doctor:.*\.object-.*:false/); assert.match(operations[2], /register:.*releases\/0\.2\.0/); assert.match(operations[3], /doctor:.*\.object-.*custom:.*follow-up:true/);
 });
 
 test('without registration local doctor gates publication and skips registration check', async () => {
@@ -112,9 +113,9 @@ test('doctor exit 2 is accepted and local exit 1 removes newly published release
 });
 
 test('reinstall validates and reuses immutable release without copy or npm', async () => {
-  const f = await fixture(); const installed = await runInstaller(['--platform', 'codex'], injected(f)); assert.equal(installed.exitCode, 0); await fs.writeFile(join(f.releaseRoot, 'SKILL.md'), 'immutable'); const calls = [];
+  const f = await fixture(); const installed = await runInstaller(['--platform', 'codex'], injected(f)); assert.equal(installed.exitCode, 0); const objectRoot = await fs.realpath(f.releaseRoot); await fs.writeFile(join(objectRoot, 'SKILL.md'), 'immutable'); const calls = [];
   const result = await runInstaller(['--platform', 'codex'], injected({ ...f, validateReleaseImpl: async (root) => { calls.push(root); return []; }, npmCiImpl: async () => calls.push('npm') }));
-  assert.equal(result.exitCode, 0); assert.equal(await fs.readFile(join(f.releaseRoot, 'SKILL.md'), 'utf8'), 'immutable'); assert.deepEqual(calls, [f.root, f.releaseRoot]);
+  assert.equal(result.exitCode, 0); assert.equal(await fs.readFile(join(f.releaseRoot, 'SKILL.md'), 'utf8'), 'immutable'); assert.deepEqual(calls, [f.root, objectRoot]);
 });
 
 test('invalid existing release and symlinked release parents are rejected without overwrite', async () => {
@@ -153,30 +154,43 @@ test('concurrent installers keep the winner lock until its transaction finishes'
   releaseNpm(); assert.equal((await first).exitCode, 0); await assert.rejects(fs.lstat(lock), { code: 'ENOENT' });
 });
 
-test('promotion refuses a concurrently created target and preserves it', async () => {
-  const f = await fixture(); const wrapped = new Proxy(fs, { get(target, key) { if (key !== 'mkdir') return target[key]; return async (path, options) => { if (path === f.releaseRoot) { await fs.mkdir(path); await fs.writeFile(join(path, 'foreign'), 'keep'); throw Object.assign(new Error('occupied'), { code: 'EEXIST' }); } return fs.mkdir(path, options); }; } });
-  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, fsImpl: wrapped }));
-  assert.equal(result.exitCode, 1); assert.equal(await fs.readFile(join(f.releaseRoot, 'foreign'), 'utf8'), 'keep');
+test('pointer publication refuses existing directory, file, or external symlink without mutation', async () => {
+  for (const occupied of ['directory', 'file', 'symlink']) { const f = await fixture(); const victim = join(f.base, 'victim'); await fs.mkdir(victim); await fs.writeFile(join(victim, 'sentinel'), 'keep');
+    await fs.mkdir(join(f.releaseRoot, '..'), { recursive: true });
+    if (occupied === 'directory') { await fs.mkdir(f.releaseRoot); await fs.writeFile(join(f.releaseRoot, 'foreign'), 'keep'); }
+    else if (occupied === 'file') await fs.writeFile(f.releaseRoot, 'foreign');
+    else await fs.symlink(victim, f.releaseRoot);
+    const before = occupied === 'directory' ? await fs.readdir(f.releaseRoot) : occupied === 'file' ? await fs.readFile(f.releaseRoot, 'utf8') : await fs.readlink(f.releaseRoot);
+    assert.equal((await runInstaller(['--platform', 'codex'], injected(f))).exitCode, 1, occupied);
+    const after = occupied === 'directory' ? await fs.readdir(f.releaseRoot) : occupied === 'file' ? await fs.readFile(f.releaseRoot, 'utf8') : await fs.readlink(f.releaseRoot);
+    assert.deepEqual(after, before); assert.deepEqual(await fs.readdir(victim), ['sentinel']);
+  }
 });
 
-test('promotion detects replacement of the releases parent with a symlink', async () => {
+test('pointer publication detects replacement of the releases parent with a symlink', async () => {
   const f = await fixture(); const outside = join(f.base, 'outside'); await fs.mkdir(outside); let replaced = false;
-  const wrapped = new Proxy(fs, { get(target, key) { if (key !== 'writeFile') return target[key]; return async (path, contents, options) => { if (String(path).endsWith('/.install-owner') && !replaced) { replaced = true; const releasesDir = join(path, '..', '..'); await fs.rm(releasesDir, { recursive: true }); await fs.symlink(outside, releasesDir); } return fs.writeFile(path, contents, options); }; } });
+  const wrapped = new Proxy(fs, { get(target, key) { if (key !== 'symlink') return target[key]; return async (targetPath, path, type) => { if (path === f.releaseRoot && !replaced) { replaced = true; const releasesDir = join(path, '..'); await fs.rm(releasesDir, { recursive: true }); await fs.symlink(outside, releasesDir); } return fs.symlink(targetPath, path, type); }; } });
   const result = await runInstaller(['--platform', 'codex'], injected({ ...f, fsImpl: wrapped }));
   assert.equal(result.exitCode, 1); assert.deepEqual(await fs.readdir(outside), []);
 });
 
-test('directory symlink promotion race cannot write into its victim', async () => {
+test('version pointer replacement during object copy cannot redirect installation writes', async () => {
   const f = await fixture(); const victim = join(f.base, 'victim'); await fs.mkdir(victim); await fs.writeFile(join(victim, 'sentinel'), 'unchanged');
-  const wrapped = new Proxy(fs, { get(target, key) { if (key !== 'mkdir') return target[key]; return async (path, options) => { if (path === f.releaseRoot) { await fs.symlink(victim, path); throw Object.assign(new Error('occupied'), { code: 'EEXIST' }); } return fs.mkdir(path, options); }; } });
-  assert.equal((await runInstaller(['--platform', 'codex'], injected({ ...f, fsImpl: wrapped }))).exitCode, 1);
-  assert.deepEqual(await fs.readdir(victim), ['sentinel']); assert.equal(await fs.readFile(join(victim, 'sentinel'), 'utf8'), 'unchanged');
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, copyReleaseImpl: async (source, object, fsImpl) => { await fs.symlink(victim, f.releaseRoot); await fs.cp(source, object, { recursive: true }); } }));
+  assert.equal(result.exitCode, 1); assert.deepEqual(await fs.readdir(victim), ['sentinel']); assert.equal(await fs.readFile(join(victim, 'sentinel'), 'utf8'), 'unchanged');
 });
 
-test('incomplete claimed release is never reused', async () => {
-  const f = await fixture(); await fs.mkdir(f.releaseRoot, { recursive: true }); await fs.writeFile(join(f.releaseRoot, '.install-owner'), 'abandoned\n');
+test('incomplete object pointer is never reused', async () => {
+  const f = await fixture(); const releases = join(f.releaseRoot, '..'); const object = join(releases, '.0.2.0.object-abandoned'); await fs.mkdir(object, { recursive: true }); await fs.writeFile(join(object, '.install-owner'), 'abandoned\n'); await fs.symlink('.0.2.0.object-abandoned', f.releaseRoot);
   const result = await runInstaller(['--platform', 'codex'], injected({ ...f, validateReleaseImpl: async () => [] }));
-  assert.equal(result.exitCode, 1); assert.equal(await fs.readFile(join(f.releaseRoot, '.install-owner'), 'utf8'), 'abandoned\n');
+  assert.equal(result.exitCode, 1); assert.equal(await fs.readFile(join(object, '.install-owner'), 'utf8'), 'abandoned\n');
+});
+
+test('forged completion marker with mismatched owner token is rejected by reuse and doctor', async () => {
+  const f = await fixture(); const installed = await runInstaller(['--platform', 'codex'], injected(f)); assert.equal(installed.exitCode, 0); const object = await fs.realpath(f.releaseRoot);
+  const markerPath = join(object, '.install-complete.json'); const marker = JSON.parse(await fs.readFile(markerPath, 'utf8')); marker.transactionId = 'forged-token'; await fs.writeFile(markerPath, JSON.stringify(marker));
+  assert.equal((await runInstaller(['--platform', 'codex'], injected(f))).exitCode, 1);
+  await assert.rejects(runReleaseDoctor({ home: f.home, releaseRoot: object, requireRegistration: false }), /completion|owner/i);
 });
 
 test('v0.1 legacy upgrade requires replace and verifies new link before deletion for all adapters', async () => {
@@ -205,7 +219,7 @@ test('real registration adapters preserve v0.1 legacy links until target doctor 
       },
     }));
     assert.equal(accepted.exitCode, 0); assert.deepEqual(order, ['doctor']); await assert.rejects(fs.lstat(legacyPath), { code: 'ENOENT' });
-    assert.equal(await fs.realpath(registrationPath), accepted.releaseRoot); assert.deepEqual(await fs.readFile(mutable), Buffer.from([7, 0, 1]));
+    assert.equal(await fs.realpath(registrationPath), await fs.realpath(accepted.releaseRoot)); assert.deepEqual(await fs.readFile(mutable), Buffer.from([7, 0, 1]));
   }
 });
 
@@ -227,6 +241,14 @@ test('active metadata rollback failure is explicit and retains its published rel
   }));
   assert.equal(result.exitCode, 1); assert.match(errors.join('\n'), /rollback.*uncertain|restore/i); assert.ok(await fs.lstat(f.releaseRoot));
   const active = JSON.parse(await fs.readFile(join(f.home, '.follow-builders', 'active.json'), 'utf8')); assert.equal(active.registration.platform, 'codex');
+});
+
+test('registration rollback failure retains completed pointer so a stuck Skill link is not dangling', async () => {
+  const f = await fixture(); const registrationPath = join(f.home, '.codex', 'skills', 'follow-up'); const errors = [];
+  const result = await runInstaller(['--platform', 'codex', '--register'], injected({ ...f, stderr: (message) => errors.push(message),
+    registerSkillImpl: async ({ releaseRoot }) => { await fs.mkdir(join(registrationPath, '..'), { recursive: true }); await fs.symlink(releaseRoot, registrationPath); const error = new Error('registration rollback failed'); error.code = 'REGISTRATION_ROLLBACK_FAILED'; throw error; },
+  }));
+  assert.equal(result.exitCode, 1); assert.match(errors.join('\n'), /rollback.*uncertain/i); assert.ok(await fs.lstat(f.releaseRoot)); assert.equal(await fs.realpath(registrationPath), await fs.realpath(f.releaseRoot));
 });
 
 test('mutable config, prompts, env, and state remain byte-for-byte unchanged', async () => {
