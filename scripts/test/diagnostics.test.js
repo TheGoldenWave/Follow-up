@@ -95,6 +95,18 @@ test('redacted JSON removes credentials, secret queries, cookies, tokens, email,
   assert.match(serialized, /\[redacted\]/i);
 });
 
+test('redaction removes complete quoted and escaped absolute paths containing spaces', () => {
+  const serialized = JSON.stringify(redactDiagnostics({
+    message: 'read "/Users/alice/Secret Project/private.json" and C:\\Users\\Alice Smith\\token.txt',
+    escaped: 'open /Users/alice/Secret\\ Project/private.json now',
+  }));
+  for (const fragment of [
+    'Secret Project', 'Secret\\\\ Project', 'private.json',
+    'Alice Smith', 'token.txt', '/Users/alice', 'C:\\\\Users',
+  ]) assert.doesNotMatch(serialized, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+  assert.match(serialized, /redacted-path/i);
+});
+
 test('default offline diagnostics cover all required local contracts through injected adapters', async () => {
   const report = await runDiagnostics({
     network: false,
@@ -207,6 +219,41 @@ test('default registration discovery requires at least one valid built-in regist
   });
   assert.deepEqual(calls, ['custom']);
   assert.equal(brokenCustom.findings.find(({ id }) => id === 'registration').status, 'error');
+
+  calls.length = 0;
+  const activeCodex = await runDiagnostics({
+    ...base,
+    readFileImpl: async (path) => {
+      if (String(path).endsWith('/active.json')) return JSON.stringify({
+        registration: { platform: 'codex' },
+      });
+      return base.readFileImpl(path);
+    },
+    inspectRegistrationImpl: async ({ platform }) => {
+      calls.push(platform);
+      return { status: platform === 'claude-code' ? 'registered' : 'missing' };
+    },
+  });
+  assert.deepEqual(calls, ['codex']);
+  assert.equal(activeCodex.findings.find(({ id }) => id === 'registration').status, 'error');
+  assert.equal(activeCodex.exitCode, 1);
+
+  calls.length = 0;
+  const activeClaude = await runDiagnostics({
+    ...base,
+    readFileImpl: async (path) => {
+      if (String(path).endsWith('/active.json')) return JSON.stringify({
+        registration: { platform: 'claude-code' },
+      });
+      return base.readFileImpl(path);
+    },
+    inspectRegistrationImpl: async ({ platform }) => {
+      calls.push(platform);
+      return { status: platform === 'codex' ? 'registered' : 'missing' };
+    },
+  });
+  assert.deepEqual(calls, ['claude-code']);
+  assert.equal(activeClaude.exitCode, 1);
 });
 
 test('chunked network reads stop at the configured byte limit', async () => {
@@ -306,4 +353,23 @@ test('default network diagnostics report each feed independently for reachabilit
     'ok', 'warning', 'error', 'error', 'error', 'ok',
   ]);
   assert.equal(report.exitCode, 2);
+});
+
+test('network freshness messages distinguish future, invalid, and stale timestamps', async () => {
+  const baseFeed = JSON.parse(await readFile(new URL('../../feed-x.json', import.meta.url), 'utf8'));
+  for (const [generatedAt, expected] of [
+    ['2027-09-06T12:00:00.000Z', /future/i],
+    ['not-a-time', /invalid/i],
+    ['2026-08-20T12:00:00.000Z', /more than seven days|stale/i],
+  ]) {
+    const report = await runDiagnostics({
+      network: true,
+      offlineChecks: [],
+      fetchJson: async (url) => url.endsWith('/feed-x.json')
+        ? { ...baseFeed, generatedAt }
+        : null,
+      now: NOW,
+    });
+    assert.match(report.findings.find(({ id }) => id === 'network:x').message, expected);
+  }
 });

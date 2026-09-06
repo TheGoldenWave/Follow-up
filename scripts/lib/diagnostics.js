@@ -1,6 +1,6 @@
 import * as systemFs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { createRequire } from 'node:module';
 
 import { validateRelease } from '../release/validate-release.js';
@@ -42,13 +42,13 @@ export function createFinding({ id, status, scope, blocking, message, evidence }
 
 export function classifyFreshness(generatedAt, now = Date.now()) {
   const timestamp = Date.parse(generatedAt);
-  if (!Number.isFinite(timestamp)) return { status: 'error', ageMs: null };
+  if (!Number.isFinite(timestamp)) return { status: 'error', ageMs: null, reason: 'invalid' };
   const ageMs = Number(now) - timestamp;
-  if (ageMs < -FUTURE_SKEW_MS) return { status: 'error', ageMs };
-  if (ageMs < 0) return { status: 'ok', ageMs: 0 };
-  if (ageMs <= FRESH_MS) return { status: 'ok', ageMs };
-  if (ageMs <= WARNING_MS) return { status: 'warning', ageMs };
-  return { status: 'error', ageMs };
+  if (ageMs < -FUTURE_SKEW_MS) return { status: 'error', ageMs, reason: 'future' };
+  if (ageMs < 0) return { status: 'ok', ageMs: 0, reason: 'fresh' };
+  if (ageMs <= FRESH_MS) return { status: 'ok', ageMs, reason: 'fresh' };
+  if (ageMs <= WARNING_MS) return { status: 'warning', ageMs, reason: 'stale-warning' };
+  return { status: 'error', ageMs, reason: 'stale' };
 }
 
 function redactString(value) {
@@ -64,6 +64,9 @@ function redactString(value) {
     } catch { return '[redacted]'; }
   });
   output = output.replace(/([?&](?:token|secret|password|key|signature|credential)=[^&#\s]*)/giu, (part) => `${part.split('=')[0]}=[redacted]`);
+  output = output.replace(/(["'])(?:\/(?!\/)|[A-Z]:\\)(?:(?!\1).)+\1/giu, '$1[redacted-path]$1');
+  output = output.replace(/(^|\s)(\/(?!\/)(?:[^\s\\]|\\ )+)/gu, '$1[redacted-path]');
+  output = output.replace(/(^|\s)[A-Z]:\\.+?(?=\s+(?:and|for|at|from|now)\b|$)/giu, '$1[redacted-path]');
   output = output.replace(/(^|[\s"'(])(\/(?!\/)[^\s"'):,;]+)/gu, '$1[redacted-path]');
   output = output.replace(/(^|[\s"'(])[A-Z]:\\[^\s"'):,;]+/giu, '$1[redacted-path]');
   return output;
@@ -250,11 +253,16 @@ function defaultOfflineChecks(options) {
         let activeRegistration = false;
         try {
           const active = await readJson(join(userDir, 'active.json'), readFileImpl, 256 * 1024);
-          if (active?.registration?.platform === 'custom'
-              && typeof active.registration.skillDir === 'string') {
+          const selectedPlatform = active?.registration?.platform;
+          const selectedSkillDir = active?.registration?.skillDir;
+          const validBuiltIn = selectedPlatform === 'codex' || selectedPlatform === 'claude-code';
+          const validCustom = selectedPlatform === 'custom'
+            && typeof selectedSkillDir === 'string' && isAbsolute(selectedSkillDir);
+          if (validBuiltIn || validCustom) {
             activeRegistration = true;
             platforms.push({
-              platform: 'custom', skillDir: active.registration.skillDir,
+              platform: selectedPlatform,
+              ...(validCustom ? { skillDir: selectedSkillDir } : {}),
             });
           }
         } catch (error) {
@@ -390,7 +398,9 @@ function defaultNetworkChecks(options) {
       id, status: freshness.status, scope: 'network', blocking: false,
       message: freshness.status === 'ok' ? `${category} Feed is reachable and fresh`
         : freshness.status === 'warning' ? `${category} Feed is reachable but stale`
-          : `${category} Feed is more than seven days old`,
+          : freshness.reason === 'future' ? `${category} Feed timestamp is in the future`
+            : freshness.reason === 'invalid' ? `${category} Feed timestamp is invalid`
+              : `${category} Feed is more than seven days old`,
       evidence: { ageMs: freshness.ageMs },
     });
   });
