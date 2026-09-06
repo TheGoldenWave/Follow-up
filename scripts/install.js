@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFile as nodeExecFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import * as systemFs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
@@ -14,6 +14,8 @@ import { validateArchiveCriticalFiles, validateRelease } from './release/validat
 const execFile = promisify(nodeExecFile);
 export const EX_USAGE = 64;
 const USAGE = 'Usage: node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] [--register] [--replace-follow-builders]';
+const OWNER_FILE = '.install-owner';
+const COMPLETE_FILE = '.install-complete.json';
 
 export function parseInstallArgs(args) {
   const parsed = { platform: undefined, skillDir: undefined, register: false, replaceFollowBuilders: false };
@@ -76,12 +78,18 @@ async function ensureDirectorySafe(path, fsImpl) {
   }
 }
 
-async function copyTree(source, target, fsImpl) {
+async function copyTree(source, target, fsImpl, { createTarget = true, allowInternalSymlinks = false } = {}) {
   const sourceRoot = resolve(source); const targetRoot = resolve(target);
-  await fsImpl.mkdir(targetRoot, { mode: 0o700 });
+  if (createTarget) await fsImpl.mkdir(targetRoot, { mode: 0o700 });
   async function copy(current, destination) {
     const metadata = await fsImpl.lstat(current);
-    if (metadata.isSymbolicLink()) throw new Error('Archive contains an unsafe symbolic link');
+    if (metadata.isSymbolicLink()) {
+      if (!allowInternalSymlinks) throw new Error('Archive contains an unsafe symbolic link');
+      const link = await fsImpl.readlink(current);
+      const resolved = resolve(dirname(current), link); const rel = relative(sourceRoot, resolved);
+      if (isAbsolute(link) || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error('Installed dependency contains an escaping symbolic link');
+      await fsImpl.symlink(link, destination); return;
+    }
     if (metadata.isDirectory()) {
       if (current !== sourceRoot) await fsImpl.mkdir(destination, { mode: metadata.mode & 0o777 });
       for (const entry of await fsImpl.readdir(current)) {
@@ -93,6 +101,34 @@ async function copyTree(source, target, fsImpl) {
     else throw new Error('Archive contains an unsupported file type');
   }
   await copy(sourceRoot, targetRoot);
+}
+
+async function syncTree(root, fsImpl) {
+  const metadata = await fsImpl.lstat(root);
+  if (metadata.isSymbolicLink()) return;
+  if (metadata.isDirectory()) {
+    for (const entry of await fsImpl.readdir(root)) await syncTree(join(root, entry), fsImpl);
+  }
+  const handle = await fsImpl.open(root, 'r');
+  try { await handle.sync(); } finally { await handle.close(); }
+}
+
+async function completionPayload(root, version, transactionId, fsImpl) {
+  const manifestSha256 = createHash('sha256').update(await fsImpl.readFile(join(root, 'release-manifest.json'))).digest('hex');
+  return { schemaVersion: 1, version, manifestSha256, transactionId };
+}
+
+async function validateCompletion(root, version, fsImpl) {
+  const metadata = await pathState(join(root, COMPLETE_FILE), fsImpl);
+  if (!metadata?.isFile() || metadata.isSymbolicLink()) throw new Error('Immutable release completion marker is missing');
+  const marker = JSON.parse(await fsImpl.readFile(join(root, COMPLETE_FILE), 'utf8'));
+  const expected = await completionPayload(root, version, marker.transactionId, fsImpl);
+  if (marker.schemaVersion !== expected.schemaVersion || marker.version !== version
+      || marker.manifestSha256 !== expected.manifestSha256
+      || typeof marker.transactionId !== 'string' || marker.transactionId.length < 8) {
+    throw new Error('Immutable release completion marker is invalid');
+  }
+  return marker;
 }
 
 async function writeRegistrationMetadata(userDir, registration, fsImpl, id) {
@@ -124,6 +160,10 @@ export async function runReleaseDoctor(options, {
   execFileImpl = execFile,
   env = process.env,
 } = {}) {
+  if (options.allowIncomplete !== true) {
+    const version = (await systemFs.readFile(join(options.releaseRoot, 'VERSION'), 'utf8')).trim();
+    await validateCompletion(options.releaseRoot, version, systemFs);
+  }
   const doctorUrl = pathToFileURL(join(options.releaseRoot, 'scripts', 'doctor.js')).href;
   const serialized = JSON.stringify({
     home: options.home,
@@ -149,19 +189,32 @@ export async function runReleaseDoctor(options, {
   return { exitCode, report };
 }
 
-async function promoteRelease(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity }) {
+async function promoteRelease(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity, version, transactionId }) {
   if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))) throw new Error('Release directory changed during installation');
-  if (await pathState(releaseRoot, fsImpl)) throw new Error('Release target became occupied during installation');
-  if (process.platform === 'win32') throw new Error('Atomic no-clobber release promotion is unsupported on Windows');
-  await execFile('mv', ['-n', stagingRoot, releaseRoot]);
-}
-
-async function verifyPromotion(stagingRoot, releaseRoot, stagingIdentity, { fsImpl, releasesDir, releasesIdentity }) {
-  const [parentAfter, targetAfter, stagingAfter] = await Promise.all([
-    pathState(releasesDir, fsImpl), pathState(releaseRoot, fsImpl), pathState(stagingRoot, fsImpl),
-  ]);
-  if (!sameIdentity(releasesIdentity, parentAfter) || !sameIdentity(stagingIdentity, targetAfter) || stagingAfter) {
-    throw new Error('Release promotion lost its no-clobber guarantee');
+  try { await fsImpl.mkdir(releaseRoot, { mode: 0o700 }); } catch (error) {
+    if (error?.code === 'EEXIST') throw new Error('Release target became occupied during installation');
+    throw error;
+  }
+  const targetIdentity = await fsImpl.lstat(releaseRoot);
+  if (targetIdentity.isSymbolicLink() || !targetIdentity.isDirectory()) throw new Error('Claimed release target is unsafe');
+  try {
+    await fsImpl.writeFile(join(releaseRoot, OWNER_FILE), `${transactionId}\n`, { flag: 'wx', mode: 0o600 });
+    if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))
+        || !sameIdentity(targetIdentity, await fsImpl.lstat(releaseRoot))) throw new Error('Release claim changed during installation');
+    await copyTree(stagingRoot, releaseRoot, fsImpl, { createTarget: false, allowInternalSymlinks: true });
+    await syncTree(releaseRoot, fsImpl);
+    const payload = await completionPayload(releaseRoot, version, transactionId, fsImpl);
+    const temporary = join(releaseRoot, `.install-complete.tmp-${transactionId}`);
+    await fsImpl.writeFile(temporary, `${JSON.stringify(payload)}\n`, { flag: 'wx', mode: 0o600 });
+    const handle = await fsImpl.open(temporary, 'r'); try { await handle.sync(); } finally { await handle.close(); }
+    if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))
+        || !sameIdentity(targetIdentity, await fsImpl.lstat(releaseRoot))) throw new Error('Release claim changed before completion');
+    await fsImpl.rename(temporary, join(releaseRoot, COMPLETE_FILE));
+    const directory = await fsImpl.open(releaseRoot, 'r'); try { await directory.sync(); } finally { await directory.close(); }
+    return { targetIdentity };
+  } catch (error) {
+    error.claimedIdentity = targetIdentity;
+    throw error;
   }
 }
 
@@ -176,7 +229,7 @@ export async function runInstaller(args, options = {}) {
   } = options;
   let parsed;
   try { parsed = parseInstallArgs(args); } catch (error) { stderr(`${error.message}\n${USAGE}`); return { exitCode: EX_USAGE, error }; }
-  const sourceRoot = resolve(root); let lockPath; let lockIdentity; let lockOwned = false; let stagingRoot; let promoted = false; let reused = false;
+  const sourceRoot = resolve(root); let lockPath; let lockIdentity; let lockOwned = false; let stagingRoot; let claimedIdentity; let claimed = false; let published = false; let reused = false;
   let releasesDir; let releasesIdentity;
   let metadataPrevious; let metadataChanged = false; let configCreated = false;
   try {
@@ -204,6 +257,7 @@ export async function runInstaller(args, options = {}) {
     const existing = await pathState(releaseRoot, fsImpl);
     if (existing) {
       if (existing.isSymbolicLink() || !existing.isDirectory()) throw new Error('Existing release path is unsafe');
+      await validateCompletion(releaseRoot, version, fsImpl);
       await inspectTree(releaseRoot, fsImpl, { skipDependencies: true });
       const errors = await validateReleaseImpl(releaseRoot, { mode: 'archive', verifyIntegrity: true });
       if (errors.length) throw new Error(`Existing immutable release is invalid: ${errors.join('; ')}`);
@@ -213,13 +267,15 @@ export async function runInstaller(args, options = {}) {
       if (await pathState(stagingRoot, fsImpl)) throw new Error('Unique staging directory already exists');
       await copyReleaseImpl(sourceRoot, stagingRoot, fsImpl);
       await npmCiImpl(join(stagingRoot, 'scripts'));
-      const stagedDoctor = await doctorImpl({ home, releaseRoot: stagingRoot, requireRegistration: false });
+      const stagedDoctor = await doctorImpl({ home, releaseRoot: stagingRoot, requireRegistration: false, allowIncomplete: true });
       const stagedCode = typeof stagedDoctor === 'number' ? stagedDoctor : stagedDoctor?.exitCode;
       if (stagedCode !== 0 && stagedCode !== 2) throw new Error('Local doctor checks failed');
-      const stagingIdentity = await fsImpl.lstat(stagingRoot);
-      await promoteReleaseImpl(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity });
-      await verifyPromotion(stagingRoot, releaseRoot, stagingIdentity, { fsImpl, releasesDir, releasesIdentity });
-      stagingRoot = undefined; promoted = true;
+      let promotion;
+      try { promotion = await promoteReleaseImpl(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity, version, transactionId }); }
+      catch (error) { if (error?.claimedIdentity) { claimedIdentity = error.claimedIdentity; claimed = true; } throw error; }
+      claimedIdentity = promotion?.targetIdentity ?? await pathState(releaseRoot, fsImpl); claimed = true;
+      await validateCompletion(releaseRoot, version, fsImpl); published = true;
+      await fsImpl.rm(stagingRoot, { recursive: true, force: true }); stagingRoot = undefined;
     }
     const verifyRegistration = async () => {
       const result = await doctorImpl({ home, releaseRoot, platform: parsed.platform, skillDir: parsed.skillDir, requireRegistration: true });
@@ -241,17 +297,27 @@ export async function runInstaller(args, options = {}) {
     }
     return { exitCode: 0, version, releaseRoot, reused };
   } catch (error) {
-    if (metadataChanged) await restoreRegistrationMetadata(join(home, '.follow-builders'), metadataPrevious, fsImpl, transactionId).catch(() => {});
+    let rollbackError;
+    if (metadataChanged) {
+      try { await restoreRegistrationMetadata(join(home, '.follow-builders'), metadataPrevious, fsImpl, transactionId); }
+      catch (restoreError) { rollbackError = restoreError; }
+    }
     const releaseParentOwned = releasesDir && sameIdentity(releasesIdentity, await pathState(releasesDir, fsImpl));
     if (stagingRoot && releaseParentOwned) await fsImpl.rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
-    if (promoted && releaseParentOwned) {
+    if (claimed && !rollbackError && releaseParentOwned) {
       const version = await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8').then((value) => value.trim()).catch(() => null);
-      if (version) await fsImpl.rm(join(home, '.follow-builders', 'releases', version), { recursive: true, force: true }).catch(() => {});
+      const target = version && join(home, '.follow-builders', 'releases', version);
+      const [identity, token] = target ? await Promise.all([pathState(target, fsImpl), fsImpl.readFile(join(target, OWNER_FILE), 'utf8').catch(() => null)]) : [];
+      if (sameIdentity(claimedIdentity, identity) && token === `${transactionId}\n`) await fsImpl.rm(target, { recursive: true, force: true }).catch(() => {});
     }
     if (configCreated) {
       const configPath = join(home, '.follow-builders', 'config.json');
       const unchanged = await fsImpl.readFile(configPath, 'utf8').then((value) => value === '{}\n').catch(() => false);
       if (unchanged) await fsImpl.unlink(configPath).catch(() => {});
+    }
+    if (rollbackError) {
+      const uncertain = new Error(`Installation rollback is uncertain: active metadata restore failed: ${rollbackError.message}`, { cause: error });
+      uncertain.code = 'INSTALL_ROLLBACK_UNCERTAIN'; stderr(uncertain.message); return { exitCode: 1, error: uncertain, rollbackUncertain: true, published };
     }
     stderr(error.message); return { exitCode: 1, error };
   } finally {
