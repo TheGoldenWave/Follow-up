@@ -375,7 +375,6 @@ export async function prepareDigest({
   config,
   frequency = config?.frequency ?? 'daily',
   scheduled = false,
-  authorizeScheduled,
   now = new Date().toISOString(),
   registry,
   deliveryEvents = [],
@@ -385,11 +384,10 @@ export async function prepareDigest({
 } = {}) {
   const normalizedConfig = normalizeConfig(config ?? {});
   if (scheduled) {
-    const gate = typeof authorizeScheduled === 'function'
-      ? await authorizeScheduled({ config: normalizedConfig, frequency, now })
-      : authorizeSchedule(normalizedConfig, { now, frequency });
-    const authorized = gate === true || gate?.authorized === true;
-    if (!authorized && gate?.status !== 'no-channels') throw new Error('schedule-not-authorized');
+    const gate = authorizeSchedule(normalizedConfig, { now, frequency });
+    if (!gate.authorized && gate.status !== 'no-channels') throw new Error('schedule-not-authorized');
+  } else if (normalizedConfig.onboardingComplete !== true) {
+    throw new Error('onboarding-required');
   }
   if (normalizedConfig.enabledChannels.length === 0) {
     return {
@@ -509,7 +507,6 @@ export async function main({
   fetchJson = fetchJSON,
   now = new Date().toISOString(),
   randomUUID = systemRandomUUID,
-  authorizeScheduled,
 } = {}) {
   let options;
   try {
@@ -531,7 +528,7 @@ export async function main({
         frequency: options.frequency ?? normalized.schedule?.frequency
           ?? loadedConfig.frequency ?? 'daily',
         scheduled: options.scheduled ?? false,
-        authorizeScheduled,
+        now,
       });
       stdout.write(`${JSON.stringify(result)}\n`);
       return 0;
@@ -552,7 +549,6 @@ export async function main({
       frequency: options.frequency ?? normalized.schedule?.frequency
         ?? loadedConfig.frequency ?? 'daily',
       scheduled: options.scheduled ?? false,
-      authorizeScheduled,
       now,
       registry: loadedRegistry,
       deliveryEvents: events,
@@ -579,6 +575,7 @@ export async function main({
     }
     const message = error.message === 'request output could not be written'
       || error.message === 'schedule-not-authorized'
+      || error.message === 'onboarding-required'
       ? error.message : 'digest preparation failed';
     stderr.write(`preparation-failed: ${message}\n`);
     return 1;

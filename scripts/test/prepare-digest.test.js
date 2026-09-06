@@ -52,7 +52,10 @@ const registry = [
 ];
 
 async function fixtureConfig(name) {
-  return JSON.parse(await readFile(new URL(`config/${name}.json`, fixtures), 'utf8'));
+  return {
+    ...JSON.parse(await readFile(new URL(`config/${name}.json`, fixtures), 'utf8')),
+    onboardingComplete: true,
+  };
 }
 
 async function createPromptFixture(t) {
@@ -211,7 +214,7 @@ test('legacy config enables all channels while explicit selection excludes disab
 test('empty enabledChannels returns no-channels without loading the rolling Feed', async () => {
   let fetched = false;
   const result = await prepareDigest({
-    config: { enabledChannels: [] }, frequency: 'daily', registry,
+    config: { onboardingComplete: true, enabledChannels: [] }, frequency: 'daily', registry,
     loadCandidateFeed: async () => { fetched = true; throw new Error('must not fetch'); },
   });
   assert.equal(fetched, false);
@@ -230,7 +233,7 @@ test('missing expected source status becomes a synthetic error while valid candi
     }],
   });
   const result = await prepareDigest({
-    config: { enabledChannels: ['blogs', 'x'] }, frequency: 'daily',
+    config: { onboardingComplete: true, enabledChannels: ['blogs', 'x'] }, frequency: 'daily',
     now: '2026-09-06T08:00:00.000Z', registry, deliveryEvents: [],
     loadCandidateFeed: async () => incompleteFeed,
     loadCurationPrompt: async () => 'curate',
@@ -260,7 +263,7 @@ test('unknown source status remains structural corruption and stops preparation'
     status: 'no-results', candidateCount: 0,
   });
   await assert.rejects(prepareDigest({
-    config: { enabledChannels: ['blogs'] }, frequency: 'daily',
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] }, frequency: 'daily',
     now: '2026-09-06T08:00:00.000Z', registry, deliveryEvents: [],
     loadCandidateFeed: async () => corrupt,
   }), /candidate Feed is invalid/);
@@ -274,7 +277,7 @@ test('prepare creates a schema-valid bounded request from only the rolling candi
   });
   let feedLoads = 0;
   const result = await prepareDigest({
-    config: { enabledChannels: ['podcasts'], interests: ['agents'] }, frequency: 'daily',
+    config: { onboardingComplete: true, enabledChannels: ['podcasts'], interests: ['agents'] }, frequency: 'daily',
     now: '2026-09-06T08:00:00.000Z', registry: podcastRegistry, deliveryEvents: [],
     loadCandidateFeed: async () => { feedLoads += 1; return podcastFeed; },
     loadCurationPrompt: async () => 'curation instructions',
@@ -291,7 +294,7 @@ test('prepare creates a schema-valid bounded request from only the rolling candi
 
 test('stale and incomplete sources produce partial context while incomplete history remains requestable', async () => {
   const stale = await prepareDigest({
-    config: { enabledChannels: ['blogs'] }, frequency: 'daily',
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] }, frequency: 'daily',
     now: '2026-09-09T08:00:00.001Z', registry, deliveryEvents: [],
     loadCandidateFeed: async () => feed([candidate('blog-item')]),
     loadCurationPrompt: async () => 'curate', randomUUID: () => '33333333-3333-4333-8333-333333333333',
@@ -303,7 +306,7 @@ test('stale and incomplete sources produce partial context while incomplete hist
     continuousHistorySince: '2026-09-05T08:00:00.000Z',
   });
   const incomplete = await prepareDigest({
-    config: { enabledChannels: ['blogs'] }, frequency: 'weekly',
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] }, frequency: 'weekly',
     now: '2026-09-06T08:00:00.000Z', registry, deliveryEvents: [],
     loadCandidateFeed: async () => incompleteFeed,
     loadCurationPrompt: async () => 'curate', randomUUID: () => '44444444-4444-4444-8444-444444444444',
@@ -318,7 +321,7 @@ test('prepare CLI atomically writes the request and cleans failed temporary outp
   t.after(() => rm(root, { recursive: true, force: true }));
   const output = join(root, 'request.json');
   const common = {
-    argv: ['--request-out', output], config: { enabledChannels: ['blogs'] }, registry,
+    argv: ['--request-out', output], config: { onboardingComplete: true, enabledChannels: ['blogs'] }, registry,
     now: '2026-09-06T08:00:00.000Z', deliveryEvents: [],
     loadCandidateFeed: async () => feed([candidate('blog-item')]),
     loadCurationPrompt: async () => 'curate', randomUUID: () => '55555555-5555-4555-8555-555555555555',
@@ -368,6 +371,17 @@ test('scheduled preparation uses the real gate and does not fetch when authoriza
   assert.equal(fetched, false);
 });
 
+test('scheduled preparation cannot replace the real gate with an injected allow decision', async () => {
+  let fetched = false;
+  await assert.rejects(prepareDigest({
+    config: { enabledChannels: ['blogs'] }, scheduled: true, registry,
+    authorizeScheduled: async () => true,
+    now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => { fetched = true; return feed([]); },
+  }), /schedule-not-authorized/);
+  assert.equal(fetched, false);
+});
+
 test('scheduled preparation proceeds when all three approvals and config are valid', async () => {
   let fetched = false;
   const result = await prepareDigest({
@@ -390,6 +404,16 @@ test('manual preparation does not require schedule or destination approval', asy
     randomUUID: () => '99999999-9999-4999-8999-999999999999',
   });
   assert.equal(result.status, 'request-ready');
+});
+
+test('manual preparation requires completed onboarding before reading the Feed', async () => {
+  let fetched = false;
+  await assert.rejects(prepareDigest({
+    config: { onboardingComplete: false, enabledChannels: ['blogs'] },
+    registry, deliveryEvents: [], now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => { fetched = true; return feed([]); },
+  }), /onboarding-required/);
+  assert.equal(fetched, false);
 });
 
 test('scheduled CLI denial is explicit, nonzero, and creates no request', async (t) => {
@@ -421,6 +445,23 @@ test('scheduled CLI with empty channels returns no-channels without a request or
   });
   assert.equal(code, 0);
   assert.equal(JSON.parse(stdout.value).status, 'no-channels');
+  await assert.rejects(readFile(output), /ENOENT/);
+});
+
+test('manual CLI requires onboarding and creates no request', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'prepare-manual-onboarding-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = join(root, 'request.json');
+  const stderr = { value: '', write(chunk) { this.value += chunk; } };
+  const code = await main({
+    argv: ['--request-out', output],
+    config: { onboardingComplete: false, enabledChannels: ['blogs'] },
+    registry, deliveryEvents: [],
+    loadCandidateFeed: async () => assert.fail('onboarding must stop before Feed read'),
+    stdout: { write() {} }, stderr, now: '2026-09-06T08:00:00.000Z',
+  });
+  assert.equal(code, 1);
+  assert.equal(stderr.value, 'preparation-failed: onboarding-required\n');
   await assert.rejects(readFile(output), /ENOENT/);
 });
 
@@ -458,7 +499,7 @@ test('remote candidate Feed timeout remains active while streaming the body', as
 
 test('future candidate Feed timestamps beyond clock skew stop preparation', async () => {
   await assert.rejects(prepareDigest({
-    config: { enabledChannels: ['blogs'] }, frequency: 'daily',
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] }, frequency: 'daily',
     now: '2026-09-06T08:00:00.000Z', registry, deliveryEvents: [],
     loadCandidateFeed: async () => feed([], { generatedAt: '2026-09-06T08:05:00.001Z' }),
   }), /future/i);
@@ -521,7 +562,7 @@ test('prepare CLI reports committed-but-uncertain after post-rename fsync failur
   const stderr = { value: '', write(chunk) { this.value += chunk; } };
   const values = ['88888888-8888-4888-8888-888888888888', 'write-token'];
   const code = await main({
-    argv: ['--request-out', output], config: { enabledChannels: ['blogs'] }, registry,
+    argv: ['--request-out', output], config: { onboardingComplete: true, enabledChannels: ['blogs'] }, registry,
     now: '2026-09-06T08:00:00.000Z', deliveryEvents: [],
     loadCandidateFeed: async () => feed([candidate('blog-item')]),
     loadCurationPrompt: async () => 'curate', randomUUID: () => values.shift(),

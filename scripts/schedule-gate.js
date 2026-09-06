@@ -105,9 +105,6 @@ export function authorizeDestination(config = {}, {
 export function authorizeSchedule(config = {}, {
   now = new Date().toISOString(), frequency, destination,
 } = {}) {
-  if (Array.isArray(config.enabledChannels) && config.enabledChannels.length === 0) {
-    return { authorized: false, status: 'no-channels', reasons: ['no-enabled-channels'] };
-  }
   const current = currentTimestamp(now);
   const schedule = normalizedSchedule(config);
   const delivery = config.delivery ?? {};
@@ -129,6 +126,10 @@ export function authorizeSchedule(config = {}, {
     reasons.push('destination-mismatch');
   }
   reasons.push(...approvalReasons('destination', delivery.approved, delivery.approvedAt, current));
+  if (reasons.length === 0
+      && Array.isArray(config.enabledChannels) && config.enabledChannels.length === 0) {
+    return { authorized: false, status: 'no-channels', reasons: ['no-enabled-channels'] };
+  }
   return reasons.length === 0
     ? { authorized: true, status: 'authorized', reasons: [] }
     : { authorized: false, status: 'schedule-not-authorized', reasons: [...new Set(reasons)] };

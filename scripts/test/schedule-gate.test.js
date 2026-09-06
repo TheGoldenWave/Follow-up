@@ -69,10 +69,15 @@ test('destination details are checked without returning secret configuration', (
   assert.equal(JSON.stringify(result).includes(secret), false);
 });
 
-test('empty channels are an actionable config state, never authorized delivery', () => {
+test('empty channels are actionable only after all scheduled authorization is valid', () => {
   assert.deepEqual(authorizeSchedule(approvedConfig({ enabledChannels: [] }), { now: NOW }), {
     authorized: false, status: 'no-channels', reasons: ['no-enabled-channels'],
   });
+  const incomplete = authorizeSchedule({ enabledChannels: [] }, { now: NOW });
+  assert.equal(incomplete.status, 'schedule-not-authorized');
+  assert.ok(incomplete.reasons.includes('onboarding-incomplete'));
+  assert.ok(incomplete.reasons.includes('schedule-not-approved'));
+  assert.ok(incomplete.reasons.includes('destination-not-approved'));
 });
 
 test('legacy top-level schedule fields remain readable for migration', () => {
