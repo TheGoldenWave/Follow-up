@@ -107,6 +107,17 @@ test('redaction removes complete quoted and escaped absolute paths containing sp
   assert.match(serialized, /redacted-path/i);
 });
 
+test('redaction conservatively removes the rest of an unquoted absolute POSIX path with spaces', () => {
+  const redacted = redactDiagnostics({
+    message: 'failed /Users/alice/Secret Project/private.json',
+    url: 'request https://example.com/path with ordinary words',
+    prose: 'ratio input/output remains ordinary text',
+  });
+  assert.equal(redacted.message, 'failed [redacted-path]');
+  assert.equal(redacted.url, 'request https://example.com/path with ordinary words');
+  assert.equal(redacted.prose, 'ratio input/output remains ordinary text');
+});
+
 test('default offline diagnostics cover all required local contracts through injected adapters', async () => {
   const report = await runDiagnostics({
     network: false,
