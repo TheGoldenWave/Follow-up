@@ -96,29 +96,31 @@ export async function deliverActiveDigest({
   if (typeof attemptId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(attemptId)) {
     throw new Error('Generated delivery attemptId is invalid');
   }
-  const createdAt = timestamp(now);
-  const attempt = {
-    schemaVersion: '1.0', type: 'pending', occurredAt: createdAt, attemptId,
-    digestId: loaded.digestId, frequency: loaded.frequency,
-    candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
-    destinationType: validated.method,
-    messageHash: createHash('sha256').update(loaded.message).digest('hex'),
-  };
-  try {
-    await reserveAttempt(attempt, { ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID });
-  } catch (error) {
-    if (error?.code === 'DELIVERY_RESERVATION_UNCERTAIN') {
-      return {
-        status: 'delivery-uncertain', reason: 'reservation-uncertain',
-        method: validated.method, attemptId, digestId: loaded.digestId,
-      };
+  return withDeliveryAttemptLock(attemptId, async () => {
+    const createdAt = timestamp(now);
+    const attempt = {
+      schemaVersion: '1.0', type: 'pending', occurredAt: createdAt, attemptId,
+      digestId: loaded.digestId, frequency: loaded.frequency,
+      candidateIds: loaded.candidateIds, eventClusterIds: loaded.eventClusterIds,
+      destinationType: validated.method,
+      messageHash: createHash('sha256').update(loaded.message).digest('hex'),
+    };
+    try {
+      await reserveAttempt(attempt, { ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID });
+    } catch (error) {
+      if (error?.code === 'DELIVERY_RESERVATION_UNCERTAIN') {
+        return {
+          status: 'delivery-uncertain', reason: 'reservation-uncertain',
+          method: validated.method, attemptId, digestId: loaded.digestId,
+        };
+      }
+      throw error;
     }
-    throw error;
-  }
-  return handoffReservedDigest(loaded, validated, attemptId, {
-    ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout,
-    timeoutMs, logger, randomUUID, now, resolveAttempt,
-  });
+    return handoffReservedDigest(loaded, validated, attemptId, {
+      ledgerPath, outboxDir, transactionDir, fsImpl, transport, providerStdout,
+      timeoutMs, logger, randomUUID, now, resolveAttempt,
+    });
+  }, { ledgerPath, outboxDir, transactionDir, fsImpl, randomUUID });
 }
 
 async function handoffReservedDigest(loaded, validated, attemptId, {

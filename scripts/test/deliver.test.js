@@ -281,6 +281,30 @@ test('manual resolution is busy while resume holds the attempt lock through prov
   await delivery;
 });
 
+test('manual resolution is busy while an initial delivery holds its attempt lock', async (t) => {
+  const paths = await fixture(t);
+  let releaseProvider;
+  const providerRelease = new Promise((resolveRelease) => { releaseProvider = resolveRelease; });
+  let markStarted;
+  const started = new Promise((resolveStarted) => { markStarted = resolveStarted; });
+  const delivery = deliverActiveDigest({
+    ...paths, destination: { method: 'stdout' }, randomUUID: () => 'attempt-initial-lock',
+    now: () => '2026-09-06T08:01:00.000Z',
+    providerStdout: { async write() { markStarted(); await providerRelease; } },
+  });
+  await started;
+  const { resolveUncertainDelivery } = await import('../resolve-delivery.js');
+  await assert.rejects(
+    resolveUncertainDelivery('attempt-initial-lock', 'suppress', paths),
+    /busy|in progress/i,
+  );
+  await assert.rejects(resolveUncertainDelivery('attempt-initial-lock', 'retry', {
+    ...paths, confirmExternalRetry: true,
+  }), /busy|in progress/i);
+  releaseProvider();
+  assert.equal((await delivery).status, 'delivered');
+});
+
 test('an uncertain claim commit returns delivery-uncertain before provider handoff', async (t) => {
   const paths = await fixture(t);
   const loaded = await loadActiveDigest(paths.activePath);

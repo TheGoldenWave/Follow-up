@@ -554,3 +554,24 @@ test('compact removes expired terminal outbox records without leaving reconcile 
   assert.deepEqual(await readDeliveryOutbox(options), []);
   assert.deepEqual(await readDeliveryLedger(options), []);
 });
+
+test('compact removes every terminal outbox in an expired retry lineage', async (t) => {
+  const ledgerPath = await ledgerFixture(t);
+  const options = { ledgerPath };
+  const origin = pending({
+    attemptId: 'expired-origin', occurredAt: '2026-06-01T00:00:00.000Z',
+  });
+  const replacement = pending({
+    ...origin, attemptId: 'expired-replacement', occurredAt: '2026-06-01T00:01:00.001Z',
+  });
+  await reserveOutboxAttempt(origin, options);
+  await replaceOutboxAttempt('expired-origin', replacement, {
+    occurredAt: '2026-06-01T00:01:00.000Z',
+  }, options);
+  await (await import('../delivery-outbox.js')).resolveOutboxAttempt('expired-replacement', {
+    status: 'failed', occurredAt: '2026-06-01T00:02:00.000Z', reasonCode: 'provider-rejected',
+  }, options);
+  await compactDeliveryLedger({ ledgerPath, now: '2026-09-30T00:00:00.000Z' });
+  assert.deepEqual(await readDeliveryLedger(options), []);
+  assert.deepEqual(await readDeliveryOutbox(options), []);
+});

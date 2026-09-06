@@ -462,8 +462,7 @@ export async function prepareDeliveryOutboxCompaction(existingEvents, retainedEv
   const existing = deriveDeliveryState(existingEvents).attempts;
   const removedAttemptIds = [];
   for (const [attemptId, attempt] of existing) {
-    if (retained.has(attemptId) || !attempt.resolution
-      || attempt.resolution.type === 'superseded') continue;
+    if (retained.has(attemptId) || !attempt.resolution) continue;
     try {
       const record = await readOutboxRaw(attemptId, options);
       if (record.status !== 'pending') removedAttemptIds.push(attemptId);
