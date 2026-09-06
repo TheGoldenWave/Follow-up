@@ -11,7 +11,7 @@ import test from 'node:test';
 import { deliverActiveDigest, main, resumeActiveDigestDelivery } from '../deliver.js';
 import { replaceOutboxAttempt, reserveOutboxAttempt } from '../delivery-outbox.js';
 import { loadActiveDigest } from '../delivery-message.js';
-import { readDeliveryLedger } from '../delivery-ledger.js';
+import { compactDeliveryLedger, readDeliveryLedger } from '../delivery-ledger.js';
 import { renderDigestMessage } from '../finalize-digest.js';
 import { AtomicWriteCommittedError } from '../prepare-digest.js';
 
@@ -126,20 +126,23 @@ test('resume handoff validates the active digest and does not create another res
   const paths = await fixture(t);
   const loaded = await loadActiveDigest(paths.activePath);
   const original = {
-    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-06T08:00:00.000Z',
+    schemaVersion: '1.0', type: 'pending', occurredAt: '2026-06-01T08:00:00.000Z',
     attemptId: 'attempt-old', digestId: 'digest-1', frequency: 'daily',
     candidateIds: [id('candidate')], eventClusterIds: [id('cluster')],
     destinationType: 'stdout', messageHash: id(loaded.message),
   };
   await reserveOutboxAttempt(original, paths);
   await replaceOutboxAttempt('attempt-old', {
-    ...original, attemptId: 'attempt-new', occurredAt: '2026-09-06T08:01:00.001Z',
-  }, { occurredAt: '2026-09-06T08:01:00.000Z' }, paths);
+    ...original, attemptId: 'attempt-new', occurredAt: '2026-06-01T08:01:00.001Z',
+  }, { occurredAt: '2026-06-01T08:01:00.000Z' }, paths);
+  await compactDeliveryLedger({
+    ...paths, now: '2026-09-30T00:00:00.000Z',
+  });
   let reserved = false;
   const result = await resumeActiveDigestDelivery({
     ...paths, activePath: paths.activePath, attemptId: 'attempt-new',
     destination: { method: 'stdout' }, providerStdout: { write() {} },
-    reserveAttempt: async () => { reserved = true; }, now: () => '2026-09-06T08:02:00.000Z',
+    reserveAttempt: async () => { reserved = true; }, now: () => '2026-09-30T00:01:00.000Z',
   });
   assert.equal(result.status, 'delivered');
   assert.equal(reserved, false);

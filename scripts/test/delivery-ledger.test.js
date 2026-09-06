@@ -15,6 +15,11 @@ import {
   reservePendingAttempt,
   selectRetainedDeliveryEvents,
 } from '../delivery-ledger.js';
+import {
+  claimReplacementOutboxAttempt,
+  replaceOutboxAttempt,
+  reserveOutboxAttempt,
+} from '../delivery-outbox.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -461,4 +466,75 @@ test('retention never accepts less than 90 days and preserves old events that st
     selectRetainedDeliveryEvents([oldPending, oldFailed, oldFailure, boundary], { now }),
     [oldPending, boundary],
   );
+});
+
+test('compact retains an old retry origin for unclaimed and claimed unresolved replacements', async (t) => {
+  for (const claimed of [false, true]) {
+    await t.test(claimed ? 'claimed' : 'unclaimed', async (t) => {
+      const ledgerPath = await ledgerFixture(t);
+      const options = { ledgerPath };
+      const candidateId = hashId(`lineage-${claimed}`);
+      const origin = pending({
+        attemptId: 'origin', occurredAt: '2026-06-01T00:00:00.000Z',
+        candidateIds: [candidateId],
+      });
+      const replacement = pending({
+        ...origin, attemptId: 'replacement', occurredAt: '2026-06-01T00:01:00.001Z',
+      });
+      await reserveOutboxAttempt(origin, options);
+      await replaceOutboxAttempt('origin', replacement, {
+        occurredAt: '2026-06-01T00:01:00.000Z',
+      }, options);
+      if (claimed) {
+        await claimReplacementOutboxAttempt('replacement', {
+          occurredAt: '2026-06-01T00:02:00.000Z', claimId: 'claim-old',
+        }, options);
+      }
+      await compactDeliveryLedger({ ledgerPath, now: '2026-09-30T00:00:00.000Z' });
+      const retained = await readDeliveryLedger(options);
+      assert.deepEqual(retained.map(({ attemptId }) => attemptId), [
+        'origin', 'origin', 'replacement', ...(claimed ? ['replacement'] : []),
+      ]);
+      assert.equal(deriveDeliveryState(retained).candidateStates.get(candidateId), 'delivery-uncertain');
+      if (!claimed) {
+        await claimReplacementOutboxAttempt('replacement', {
+          occurredAt: '2026-09-30T00:01:00.000Z', claimId: 'claim-after-compact',
+        }, options);
+      }
+    });
+  }
+});
+
+test('retention closes transitively over both directions of a three-generation retry lineage', () => {
+  const candidateId = hashId('three-generation-lineage');
+  const a = pending({
+    attemptId: 'attempt-a', occurredAt: '2026-06-01T00:00:00.000Z',
+    candidateIds: [candidateId],
+  });
+  const b = pending({ ...a, attemptId: 'attempt-b', occurredAt: '2026-06-01T00:01:00.001Z' });
+  const c = pending({ ...a, attemptId: 'attempt-c', occurredAt: '2026-06-01T00:03:00.001Z' });
+  const events = [
+    a,
+    resolution('superseded', {
+      attemptId: 'attempt-a', replacementAttemptId: 'attempt-b',
+      occurredAt: '2026-06-01T00:01:00.000Z',
+    }),
+    b,
+    {
+      schemaVersion: '1.0', type: 'handoff-claimed', attemptId: 'attempt-b',
+      occurredAt: '2026-06-01T00:02:00.000Z', claimId: 'claim-b',
+    },
+    resolution('superseded', {
+      attemptId: 'attempt-b', replacementAttemptId: 'attempt-c',
+      occurredAt: '2026-06-01T00:03:00.000Z',
+    }),
+    c,
+    {
+      schemaVersion: '1.0', type: 'handoff-claimed', attemptId: 'attempt-c',
+      occurredAt: '2026-06-01T00:04:00.000Z', claimId: 'claim-c',
+    },
+  ];
+  assert.deepEqual(selectRetainedDeliveryEvents(events, {
+    now: '2026-09-30T00:00:00.000Z',
+  }), events);
 });

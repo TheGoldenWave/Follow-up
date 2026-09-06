@@ -686,7 +686,7 @@ export function selectRetainedDeliveryEvents(events, {
   }
   const nowMs = Date.parse(now);
   if (!Number.isFinite(nowMs)) throw new TypeError('now must be a valid timestamp');
-  const { attempts, unresolvedReplacementAttempts } = buildAttemptState(events, { limits });
+  const { attempts, unresolvedReplacementAttempts, replacementOrigins } = buildAttemptState(events, { limits });
   const unresolvedAttemptIds = new Set(
     unresolvedReplacementAttempts.map(({ attemptId }) => attemptId),
   );
@@ -709,6 +709,21 @@ export function selectRetainedDeliveryEvents(events, {
     }
   }
   for (const { attemptId } of latestAnchors.values()) retainedAttempts.add(attemptId);
+  const lineageQueue = [...retainedAttempts];
+  for (let index = 0; index < lineageQueue.length; index += 1) {
+    const attemptId = lineageQueue[index];
+    const originAttemptId = replacementOrigins.get(attemptId);
+    const replacementAttemptId = attempts.get(attemptId)?.resolution?.type === 'superseded'
+      ? attempts.get(attemptId).resolution.replacementAttemptId
+      : null;
+    for (const linkedAttemptId of [originAttemptId, replacementAttemptId]) {
+      if (!linkedAttemptId || !attempts.has(linkedAttemptId) || retainedAttempts.has(linkedAttemptId)) {
+        continue;
+      }
+      retainedAttempts.add(linkedAttemptId);
+      lineageQueue.push(linkedAttemptId);
+    }
+  }
   return events.filter((event) => retainedAttempts.has(event.attemptId));
 }
 
