@@ -301,7 +301,7 @@ export async function runInstaller(args, options = {}) {
     copyReleaseImpl = copyTree, npmCiImpl = async (cwd) => execFile(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts'], { cwd }),
     registerSkillImpl = registerSkill, doctorImpl = runReleaseDoctor,
     objectWorkerImpl, pointerWorkerImpl = runInternalWorker,
-    onPreflightComplete, onObjectWorkerReady, onPointerWorkerReady,
+    onSnapshotComplete, onPreflightComplete, onObjectWorkerReady, onObjectWorkerComplete, onPointerWorkerReady,
     stdout = console.log, stderr = console.error, transactionId = randomUUID(),
   } = options;
   let parsed;
@@ -312,6 +312,7 @@ export async function runInstaller(args, options = {}) {
   try {
     await inspectTree(sourceRoot, fsImpl, { rejectDependencies: true });
     const payloadSnapshot = await snapshotPayload(sourceRoot, fsImpl);
+    await onSnapshotComplete?.();
     await validateArchive(sourceRoot, nodeVersion, validateReleaseImpl, validateArchiveCriticalFilesImpl);
     const version = (await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8')).trim();
     await onPreflightComplete?.();
@@ -359,6 +360,11 @@ export async function runInstaller(args, options = {}) {
         await completeObject(objectRoot, objectIdentity, version, transactionId, fsImpl);
       }
       if (!sameIdentity(objectIdentity, await fsImpl.lstat(objectRoot))) throw new Error('Release object changed during copy');
+      await onObjectWorkerComplete?.({ objectRoot, releasesDir });
+      const objectErrors = await validateReleaseImpl(objectRoot, { mode: 'archive', verifyIntegrity: true, validateSchema: false });
+      if (objectErrors.length) throw new Error(`Installed object validation failed: ${objectErrors.join('; ')}`);
+      const objectCriticalErrors = await validateArchiveCriticalFilesImpl(objectRoot);
+      if (objectCriticalErrors.length) throw new Error(`Installed object critical-file validation failed: ${objectCriticalErrors.join('; ')}`);
       await verifyPayloadSnapshot(payloadSnapshot, objectRoot, fsImpl);
       await validateCompletion(objectRoot, version, fsImpl); published = true;
       if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))) throw new Error('Release directory changed before pointer publication');

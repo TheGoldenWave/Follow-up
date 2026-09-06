@@ -197,6 +197,28 @@ test('post-copy snapshot rejects a source replacement after trusted preflight', 
   assert.equal(result.exitCode, 1); assert.match(errors.join('\n'), /snapshot|payload/i); await assert.rejects(fs.lstat(f.releaseRoot), { code: 'ENOENT' });
 });
 
+test('trusted object validation rejects snapshot A, preflight B, copy A switching', async () => {
+  const f = await fixture(); await fs.writeFile(join(f.root, 'SKILL.md'), 'malicious-A'); const savedA = `${f.root}-A`; let pointerCalled = false; const validations = [];
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f,
+    onSnapshotComplete: async () => { await fs.rename(f.root, savedA); await fs.cp(savedA, f.root, { recursive: true }); await fs.writeFile(join(f.root, 'SKILL.md'), 'legal-B'); },
+    onPreflightComplete: async () => { await fs.rm(f.root, { recursive: true }); await fs.rename(savedA, f.root); },
+    validateReleaseImpl: async (root) => { const skill = await fs.readFile(join(root, 'SKILL.md'), 'utf8'); validations.push(`${root}:${skill}`); return skill === 'malicious-A' ? ['malicious object payload'] : []; },
+    validateArchiveCriticalFilesImpl: async () => [], pointerWorkerImpl: async () => { pointerCalled = true; },
+  }));
+  assert.equal(result.exitCode, 1); assert.equal(pointerCalled, false); assert.equal(validations.some((entry) => entry.includes('.object-') && entry.endsWith(':malicious-A')), true); await assert.rejects(fs.lstat(f.releaseRoot), { code: 'ENOENT' });
+});
+
+test('trusted object validation catches worker-after critical tamper before pointer publication', async () => {
+  const f = await fixture(); let pointerCalled = false; const objectValidations = [];
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f,
+    onObjectWorkerComplete: async ({ objectRoot }) => fs.writeFile(join(objectRoot, 'SKILL.md'), 'tampered'),
+    validateReleaseImpl: async (root) => { if (root.includes('.object-')) { objectValidations.push(root); return ['critical file hash mismatch']; } return []; },
+    validateArchiveCriticalFilesImpl: async (root) => root.includes('.object-') ? ['critical file hash mismatch'] : [],
+    pointerWorkerImpl: async () => { pointerCalled = true; },
+  }));
+  assert.equal(result.exitCode, 1); assert.equal(pointerCalled, false); assert.equal(objectValidations.length, 1); await assert.rejects(fs.lstat(f.releaseRoot), { code: 'ENOENT' });
+});
+
 test('pointer created but not durable returns publication uncertain and keeps the release reachable', async () => {
   const f = await fixture(); const errors = [];
   const result = await runInstaller(['--platform', 'codex'], injected({ ...f, stderr: (message) => errors.push(message), pointerWorkerImpl: async (_mode, [target, version], { cwd }) => { await fs.symlink(target, join(cwd, version)); const error = new Error('directory fsync failed'); error.created = true; throw error; } }));
