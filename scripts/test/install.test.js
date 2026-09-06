@@ -1,12 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
-import { parseInstallArgs, runInstaller } from '../install.js';
+import { parseInstallArgs, runInstaller, runReleaseDoctor } from '../install.js';
+
+const execFileAsync = promisify(execFile);
 
 async function fixture() {
   const base = await fs.realpath(await fs.mkdtemp(join(tmpdir(), 'follow-install-')));
@@ -22,6 +26,39 @@ async function fixture() {
 function injected(options = {}) {
   return { validateReleaseImpl: async () => [], validateArchiveCriticalFilesImpl: async () => [], npmCiImpl: async () => {}, doctorImpl: async () => ({ exitCode: 0 }), stdout: () => {}, stderr: () => {}, ...options };
 }
+
+async function pristineRepositoryArchive() {
+  const base = await fs.realpath(await fs.mkdtemp(join(tmpdir(), 'follow-install-e2e-')));
+  const root = join(base, 'archive'); const repository = fileURLToPath(new URL('../..', import.meta.url));
+  const { stdout } = await execFileAsync('git', ['ls-files', '-z'], { cwd: repository, encoding: 'buffer' });
+  for (const path of stdout.toString('utf8').split('\0').filter(Boolean)) {
+    const target = join(root, path); await fs.mkdir(join(target, '..'), { recursive: true }); await fs.copyFile(join(repository, path), target);
+  }
+  const manifestPath = join(root, 'release-manifest.json'); const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  for (const path of Object.keys(manifest.integrity.criticalFiles.files)) {
+    manifest.integrity.criticalFiles.files[path] = createHash('sha256').update(await fs.readFile(join(root, path))).digest('hex');
+  }
+  await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return { base, root, home: join(base, 'home'), version: (await fs.readFile(join(root, 'VERSION'), 'utf8')).trim() };
+}
+
+test('release doctor resolves dependencies from the staged release, not the pristine source', async () => {
+  const f = await fixture(); const staged = join(f.base, 'staged');
+  await fs.mkdir(join(staged, 'scripts', 'node_modules', 'target-only'), { recursive: true });
+  await fs.writeFile(join(staged, 'scripts', 'node_modules', 'target-only', 'package.json'), JSON.stringify({ name: 'target-only', version: '1.0.0', type: 'module', exports: './index.js' }));
+  await fs.writeFile(join(staged, 'scripts', 'node_modules', 'target-only', 'index.js'), 'export default true;\n');
+  await fs.writeFile(join(staged, 'scripts', 'doctor.js'), "import targetOnly from 'target-only'; export async function runDoctor(_args, options) { const report={exitCode:targetOnly && options.releaseRoot===process.env.EXPECTED_RELEASE ? 0 : 1}; options.stdout(JSON.stringify(report)); return report; }\n");
+  const result = await runReleaseDoctor({ home: f.home, releaseRoot: staged, requireRegistration: false }, { env: { ...process.env, EXPECTED_RELEASE: staged } });
+  assert.equal(result.exitCode, 0);
+});
+
+test('pristine archive completes real npm ci and target-local doctor on clean install and reinstall', { timeout: 120_000 }, async () => {
+  const f = await pristineRepositoryArchive(); await assert.rejects(fs.lstat(join(f.root, 'scripts', 'node_modules')), { code: 'ENOENT' });
+  const errors = []; const reports = []; const clean = await runInstaller(['--platform', 'codex'], { ...f, stdout: () => {}, stderr: (message) => errors.push(message), doctorImpl: async (options) => { const result = await runReleaseDoctor(options); reports.push(result.report); return result; } });
+  assert.equal(clean.exitCode, 0, `${errors.join('; ')} ${JSON.stringify(reports)}`); assert.equal(clean.reused, false); assert.ok(await fs.lstat(join(clean.releaseRoot, 'scripts', 'node_modules', 'ajv')));
+  const reinstall = await runInstaller(['--platform', 'codex'], { ...f, stdout: () => {}, stderr: () => {} });
+  assert.equal(reinstall.exitCode, 0); assert.equal(reinstall.reused, true); assert.equal(reinstall.releaseRoot, clean.releaseRoot);
+});
 
 test('strict CLI supports three adapters and requires explicit registration authorization', () => {
   assert.deepEqual(parseInstallArgs(['--platform', 'codex']), { platform: 'codex', skillDir: undefined, register: false, replaceFollowBuilders: false });
@@ -98,11 +135,67 @@ test('source symlinks and copy, npm, or lock failure leave no release or staging
   }
 });
 
+test('a competing installer never removes a lock it does not own', async () => {
+  const f = await fixture(); const lock = join(f.home, '.follow-builders', '.install.lock');
+  await fs.mkdir(lock, { recursive: true }); await fs.writeFile(join(lock, 'owner'), 'foreign-token\n');
+  assert.equal((await runInstaller(['--platform', 'codex'], injected(f))).exitCode, 1);
+  assert.equal(await fs.readFile(join(lock, 'owner'), 'utf8'), 'foreign-token\n');
+});
+
+test('concurrent installers keep the winner lock until its transaction finishes', async () => {
+  const f = await fixture(); let releaseNpm;
+  const gate = new Promise((resolve) => { releaseNpm = resolve; });
+  const first = runInstaller(['--platform', 'codex'], injected({ ...f, npmCiImpl: async () => gate }));
+  const lock = join(f.home, '.follow-builders', '.install.lock');
+  while (!await fs.lstat(lock).catch(() => null)) await new Promise((resolve) => setTimeout(resolve, 5));
+  const second = await runInstaller(['--platform', 'codex'], injected(f));
+  assert.equal(second.exitCode, 1); assert.ok(await fs.lstat(lock));
+  releaseNpm(); assert.equal((await first).exitCode, 0); await assert.rejects(fs.lstat(lock), { code: 'ENOENT' });
+});
+
+test('promotion refuses a concurrently created target and preserves it', async () => {
+  const f = await fixture();
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f,
+    promoteReleaseImpl: async (_staging, target) => { await fs.mkdir(target); await fs.writeFile(join(target, 'foreign'), 'keep'); },
+  }));
+  assert.equal(result.exitCode, 1); assert.equal(await fs.readFile(join(f.releaseRoot, 'foreign'), 'utf8'), 'keep');
+});
+
+test('promotion detects replacement of the releases parent with a symlink', async () => {
+  const f = await fixture(); const outside = join(f.base, 'outside'); await fs.mkdir(outside);
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f,
+    promoteReleaseImpl: async (_staging, _target, { releasesDir }) => { await fs.rm(releasesDir, { recursive: true }); await fs.symlink(outside, releasesDir); },
+  }));
+  assert.equal(result.exitCode, 1); assert.deepEqual(await fs.readdir(outside), []);
+});
+
 test('v0.1 legacy upgrade requires replace and verifies new link before deletion for all adapters', async () => {
   for (const platform of ['codex', 'claude-code', 'custom']) { const f = await fixture(); const operations = []; const args = ['--platform', platform, '--register']; if (platform === 'custom') args.push('--skill-dir', join(f.base, 'agent', 'follow-up'));
     assert.equal((await runInstaller(args, injected({ ...f, registerSkillImpl: async () => { throw new Error('requires --replace-follow-builders'); } }))).exitCode, 1);
     const errors = []; const accepted = await runInstaller([...args, '--replace-follow-builders'], injected({ ...f, stderr: (message) => errors.push(message), registerSkillImpl: async ({ verify, replaceLegacy }) => { assert.equal(replaceLegacy, true); operations.push('link'); assert.equal(await verify(), true); operations.push('delete-legacy'); }, doctorImpl: async ({ platform: selected, requireRegistration }) => { if (requireRegistration) { assert.equal(selected, platform); operations.push('doctor'); } return { exitCode: 0 }; } }));
     assert.equal(accepted.exitCode, 0, errors.join('; ')); assert.deepEqual(operations, ['link', 'doctor', 'delete-legacy']);
+  }
+});
+
+test('real registration adapters preserve v0.1 legacy links until target doctor succeeds', async () => {
+  for (const platform of ['codex', 'claude-code', 'custom']) {
+    const f = await fixture(); const skillDir = platform === 'custom' ? join(f.base, 'custom', 'follow-up') : undefined;
+    const registrationPath = skillDir ?? join(f.home, platform === 'codex' ? '.codex' : '.claude', 'skills', 'follow-up');
+    const legacyPath = join(registrationPath, '..', 'follow-builders'); const legacyTarget = join(f.base, 'v0.1');
+    await fs.mkdir(legacyTarget, { recursive: true }); await fs.writeFile(join(legacyTarget, 'SKILL.md'), 'legacy');
+    await fs.mkdir(join(registrationPath, '..'), { recursive: true }); await fs.symlink(legacyTarget, legacyPath, 'dir');
+    const mutable = join(f.home, '.follow-builders', 'state', 'legacy.bin'); await fs.mkdir(join(mutable, '..'), { recursive: true }); await fs.writeFile(mutable, Buffer.from([7, 0, 1]));
+    const args = ['--platform', platform, '--register', ...(skillDir ? ['--skill-dir', skillDir] : [])];
+    assert.equal((await runInstaller(args, injected(f))).exitCode, 1); assert.equal(await fs.realpath(legacyPath), legacyTarget);
+    const order = [];
+    const accepted = await runInstaller([...args, '--replace-follow-builders'], injected({ ...f,
+      doctorImpl: async ({ requireRegistration, releaseRoot }) => {
+        if (requireRegistration) { order.push('doctor'); assert.equal(await fs.realpath(registrationPath), releaseRoot); assert.equal(await fs.realpath(legacyPath), legacyTarget); }
+        return { exitCode: 0 };
+      },
+    }));
+    assert.equal(accepted.exitCode, 0); assert.deepEqual(order, ['doctor']); await assert.rejects(fs.lstat(legacyPath), { code: 'ENOENT' });
+    assert.equal(await fs.realpath(registrationPath), accepted.releaseRoot); assert.deepEqual(await fs.readFile(mutable), Buffer.from([7, 0, 1]));
   }
 });
 

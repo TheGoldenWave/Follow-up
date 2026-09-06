@@ -168,27 +168,13 @@ export async function validateInstalledDependencies(releaseRoot, {
   }
   for (const [packagePath, locked] of Object.entries(lock.packages)) {
     if (!packagePath.startsWith('node_modules/')) continue;
+    if (locked.optional === true) continue;
     const installed = await readJson(
       join(releaseRoot, 'scripts', packagePath, 'package.json'), readFileImpl, 1024 * 1024,
     );
     if (typeof locked.version !== 'string' || installed.version !== locked.version) {
       throw new Error(`Installed dependency does not match the lockfile: ${packagePath.slice('node_modules/'.length)}`);
     }
-    const exported = installed.exports?.['.'] ?? installed.exports;
-    const selectExport = (value) => {
-      if (typeof value === 'string') return value;
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-      for (const key of ['node', 'import', 'require', 'default']) {
-        const selected = selectExport(value[key]);
-        if (selected) return selected;
-      }
-      return null;
-    };
-    const entry = installed.main ?? selectExport(exported) ?? 'index.js';
-    if (typeof entry !== 'string' || entry.startsWith('/') || entry.split('/').includes('..')) {
-      throw new Error(`Installed dependency has an invalid entry: ${packagePath.slice('node_modules/'.length)}`);
-    }
-    await accessImpl(join(releaseRoot, 'scripts', packagePath, entry.replace(/^\.\//u, '')));
   }
   for (const dependency of Object.keys(packageJson.dependencies ?? {})) {
     await resolveDependencyImpl(dependency);

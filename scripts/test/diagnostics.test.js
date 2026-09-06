@@ -374,7 +374,7 @@ test('local JSON reads reject oversized files before loading their contents', as
   assert.equal(readCalled, false);
 });
 
-test('dependency diagnostics verify transitive packages and installed versions from the lockfile', async () => {
+test('dependency diagnostics verify transitive package presence and versions from the lockfile', async () => {
   const documents = new Map([
     ['/release/scripts/package.json', { dependencies: { direct: '1.0.0' } }],
     ['/release/scripts/package-lock.json', { packages: {
@@ -397,13 +397,26 @@ test('dependency diagnostics verify transitive packages and installed versions f
     readFileImpl, accessImpl,
   }), /lockfile|transitive/i);
   documents.set('/release/scripts/node_modules/transitive/package.json', { version: '2.0.0', main: 'index.js' });
-  await assert.rejects(validateInstalledDependencies('/release', {
-    readFileImpl,
-    accessImpl: async (path) => {
-      if (String(path).includes('/transitive/')) throw new Error('transitive entry is missing');
+  await validateInstalledDependencies('/release', { readFileImpl, accessImpl, resolveDependencyImpl: async () => {} });
+});
+
+test('dependency diagnostics permit optional lockfile packages omitted by npm ci', async () => {
+  const documents = new Map([
+    ['/release/scripts/package.json', JSON.stringify({ dependencies: { required: '1.0.0' } })],
+    ['/release/scripts/package-lock.json', JSON.stringify({ packages: {
+      '': {}, 'node_modules/required': { version: '1.0.0' },
+      'node_modules/platform-optional': { version: '1.0.0', optional: true },
+    } })],
+    ['/release/scripts/node_modules/required/package.json', JSON.stringify({ version: '1.0.0', main: 'index.js' })],
+  ]);
+  await validateInstalledDependencies('/release', {
+    readFileImpl: async (path) => {
+      const value = documents.get(String(path));
+      if (value === undefined) throw Object.assign(new Error('missing'), { code: 'ENOENT' });
+      return value;
     },
-    resolveDependencyImpl: async () => {},
-  }), /entry|missing/i);
+    accessImpl: async () => {}, resolveDependencyImpl: async () => {},
+  });
 });
 
 test('default network diagnostics report each feed independently for reachability, validity, and freshness', async () => {

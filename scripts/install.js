@@ -8,7 +8,6 @@ import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:p
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-import { runDoctor } from './doctor.js';
 import { registerSkill } from './lib/skill-registration.js';
 import { validateArchiveCriticalFiles, validateRelease } from './release/validate-release.js';
 
@@ -41,6 +40,11 @@ export function parseInstallArgs(args) {
 
 async function pathState(path, fsImpl) {
   try { return await fsImpl.lstat(path); } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
+}
+
+function sameIdentity(left, right) {
+  return Boolean(left && right && left.dev === right.dev && left.ino === right.ino
+    && left.isDirectory() === right.isDirectory() && left.isSymbolicLink() === right.isSymbolicLink());
 }
 
 async function inspectTree(root, fsImpl, { rejectDependencies = false, skipDependencies = false } = {}) {
@@ -116,25 +120,79 @@ async function validateArchive(root, nodeVersion, validateReleaseImpl, validateC
   if (criticalErrors.length) throw new Error(`Archive critical-file validation failed: ${criticalErrors.join('; ')}`);
 }
 
+export async function runReleaseDoctor(options, {
+  execFileImpl = execFile,
+  env = process.env,
+} = {}) {
+  const doctorUrl = pathToFileURL(join(options.releaseRoot, 'scripts', 'doctor.js')).href;
+  const serialized = JSON.stringify({
+    home: options.home,
+    releaseRoot: options.releaseRoot,
+    requireRegistration: options.requireRegistration,
+    platform: options.platform,
+    skillDir: options.skillDir,
+  });
+  const program = `const module = await import(${JSON.stringify(doctorUrl)}); const options = ${serialized}; const result = await module.runDoctor(['--json'], { ...options, stdout: (value) => process.stdout.write(String(value)), stderr: (value) => process.stderr.write(String(value)) }); process.exitCode = result.exitCode;`;
+  let stdout;
+  let exitCode = 0;
+  try {
+    ({ stdout } = await execFileImpl(process.execPath, ['--input-type=module', '--eval', program], {
+      env: { ...env, HOME: options.home }, encoding: 'utf8', timeout: 60_000, maxBuffer: 2 * 1024 * 1024,
+    }));
+  } catch (error) {
+    stdout = error?.stdout;
+    exitCode = Number.isSafeInteger(error?.code) ? error.code : 1;
+  }
+  let report;
+  try { report = JSON.parse(String(stdout)); } catch { throw new Error('Release doctor did not return valid JSON'); }
+  if (report.exitCode !== exitCode) throw new Error('Release doctor exit code did not match its JSON report');
+  return { exitCode, report };
+}
+
+async function promoteRelease(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity }) {
+  if (!sameIdentity(releasesIdentity, await fsImpl.lstat(releasesDir))) throw new Error('Release directory changed during installation');
+  if (await pathState(releaseRoot, fsImpl)) throw new Error('Release target became occupied during installation');
+  if (process.platform === 'win32') throw new Error('Atomic no-clobber release promotion is unsupported on Windows');
+  await execFile('mv', ['-n', stagingRoot, releaseRoot]);
+}
+
+async function verifyPromotion(stagingRoot, releaseRoot, stagingIdentity, { fsImpl, releasesDir, releasesIdentity }) {
+  const [parentAfter, targetAfter, stagingAfter] = await Promise.all([
+    pathState(releasesDir, fsImpl), pathState(releaseRoot, fsImpl), pathState(stagingRoot, fsImpl),
+  ]);
+  if (!sameIdentity(releasesIdentity, parentAfter) || !sameIdentity(stagingIdentity, targetAfter) || stagingAfter) {
+    throw new Error('Release promotion lost its no-clobber guarantee');
+  }
+}
+
 export async function runInstaller(args, options = {}) {
   const {
     root = resolve(dirname(fileURLToPath(import.meta.url)), '..'), home = process.env.HOME ?? homedir(), nodeVersion = process.versions.node,
     fsImpl = systemFs, validateReleaseImpl = validateRelease, validateArchiveCriticalFilesImpl = validateArchiveCriticalFiles,
     copyReleaseImpl = copyTree, npmCiImpl = async (cwd) => execFile(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts'], { cwd }),
-    registerSkillImpl = registerSkill, doctorImpl = async (doctorOptions) => runDoctor([], doctorOptions),
+    registerSkillImpl = registerSkill, doctorImpl = runReleaseDoctor,
+    promoteReleaseImpl = promoteRelease,
     stdout = console.log, stderr = console.error, transactionId = randomUUID(),
   } = options;
   let parsed;
   try { parsed = parseInstallArgs(args); } catch (error) { stderr(`${error.message}\n${USAGE}`); return { exitCode: EX_USAGE, error }; }
-  const sourceRoot = resolve(root); let lockPath; let stagingRoot; let promoted = false; let reused = false;
+  const sourceRoot = resolve(root); let lockPath; let lockIdentity; let lockOwned = false; let stagingRoot; let promoted = false; let reused = false;
+  let releasesDir; let releasesIdentity;
   let metadataPrevious; let metadataChanged = false; let configCreated = false;
   try {
     await inspectTree(sourceRoot, fsImpl, { rejectDependencies: true });
     await validateArchive(sourceRoot, nodeVersion, validateReleaseImpl, validateArchiveCriticalFilesImpl);
     const version = (await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8')).trim();
-    const userDir = join(home, '.follow-builders'); const releasesDir = join(userDir, 'releases'); const releaseRoot = join(releasesDir, version);
+    const userDir = join(home, '.follow-builders'); releasesDir = join(userDir, 'releases'); const releaseRoot = join(releasesDir, version);
     await ensureDirectorySafe(userDir, fsImpl); lockPath = join(userDir, '.install.lock');
-    try { await fsImpl.mkdir(lockPath, { mode: 0o700 }); } catch (error) { if (error?.code === 'EEXIST') throw new Error('Another Follow-up installer is running'); throw error; }
+    try {
+      await fsImpl.mkdir(lockPath, { mode: 0o700 }); lockIdentity = await fsImpl.lstat(lockPath);
+      await fsImpl.writeFile(join(lockPath, 'owner'), `${transactionId}\n`, { flag: 'wx', mode: 0o600 }); lockOwned = true;
+    } catch (error) {
+      if (error?.code === 'EEXIST') throw new Error('Another Follow-up installer is running');
+      if (lockIdentity && sameIdentity(lockIdentity, await pathState(lockPath, fsImpl))) await fsImpl.rm(lockPath, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
     const configPath = join(userDir, 'config.json'); const configMetadata = await pathState(configPath, fsImpl);
     if (configMetadata) {
       if (configMetadata.isSymbolicLink() || !configMetadata.isFile()) throw new Error('Existing configuration path is unsafe');
@@ -142,7 +200,7 @@ export async function runInstaller(args, options = {}) {
       try { await fsImpl.writeFile(configPath, '{}\n', { flag: 'wx', mode: 0o600 }); configCreated = true; }
       catch (error) { if (error?.code !== 'EEXIST') throw error; throw new Error('Configuration path changed concurrently'); }
     }
-    await ensureDirectorySafe(releasesDir, fsImpl);
+    await ensureDirectorySafe(releasesDir, fsImpl); releasesIdentity = await fsImpl.lstat(releasesDir);
     const existing = await pathState(releaseRoot, fsImpl);
     if (existing) {
       if (existing.isSymbolicLink() || !existing.isDirectory()) throw new Error('Existing release path is unsafe');
@@ -158,7 +216,10 @@ export async function runInstaller(args, options = {}) {
       const stagedDoctor = await doctorImpl({ home, releaseRoot: stagingRoot, requireRegistration: false });
       const stagedCode = typeof stagedDoctor === 'number' ? stagedDoctor : stagedDoctor?.exitCode;
       if (stagedCode !== 0 && stagedCode !== 2) throw new Error('Local doctor checks failed');
-      await fsImpl.rename(stagingRoot, releaseRoot); stagingRoot = undefined; promoted = true;
+      const stagingIdentity = await fsImpl.lstat(stagingRoot);
+      await promoteReleaseImpl(stagingRoot, releaseRoot, { fsImpl, releasesDir, releasesIdentity });
+      await verifyPromotion(stagingRoot, releaseRoot, stagingIdentity, { fsImpl, releasesDir, releasesIdentity });
+      stagingRoot = undefined; promoted = true;
     }
     const verifyRegistration = async () => {
       const result = await doctorImpl({ home, releaseRoot, platform: parsed.platform, skillDir: parsed.skillDir, requireRegistration: true });
@@ -181,8 +242,9 @@ export async function runInstaller(args, options = {}) {
     return { exitCode: 0, version, releaseRoot, reused };
   } catch (error) {
     if (metadataChanged) await restoreRegistrationMetadata(join(home, '.follow-builders'), metadataPrevious, fsImpl, transactionId).catch(() => {});
-    if (stagingRoot) await fsImpl.rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
-    if (promoted) {
+    const releaseParentOwned = releasesDir && sameIdentity(releasesIdentity, await pathState(releasesDir, fsImpl));
+    if (stagingRoot && releaseParentOwned) await fsImpl.rm(stagingRoot, { recursive: true, force: true }).catch(() => {});
+    if (promoted && releaseParentOwned) {
       const version = await fsImpl.readFile(join(sourceRoot, 'VERSION'), 'utf8').then((value) => value.trim()).catch(() => null);
       if (version) await fsImpl.rm(join(home, '.follow-builders', 'releases', version), { recursive: true, force: true }).catch(() => {});
     }
@@ -193,7 +255,14 @@ export async function runInstaller(args, options = {}) {
     }
     stderr(error.message); return { exitCode: 1, error };
   } finally {
-    if (lockPath) await fsImpl.rm(lockPath, { recursive: true, force: true }).catch(() => {});
+    if (lockOwned && lockPath) {
+      const [current, token] = await Promise.all([
+        pathState(lockPath, fsImpl), fsImpl.readFile(join(lockPath, 'owner'), 'utf8').catch(() => null),
+      ]);
+      if (sameIdentity(lockIdentity, current) && token === `${transactionId}\n`) {
+        await fsImpl.rm(lockPath, { recursive: true, force: true }).catch(() => {});
+      }
+    }
   }
 }
 
