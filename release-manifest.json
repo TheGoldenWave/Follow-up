@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "5fba5e8552783bc6775e8695e3bfc5cdb1aa127b3a58a98af32de33120d7408a"
+      "digest": "47cdb4ac9ea6ddd607abfa7131519671aece5515df87b19ca24f1757d847787c"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -80,7 +80,7 @@
         "scripts/delivery-outbox.js": "1bcd987c15a1680f899344ffa53470f3178d287860954f73df1f3f95035701c5",
         "scripts/delivery-providers.js": "a1151b65245bd13dbdfa8fa10d924549ac0ce1d08fd40d31cb831fe6e901429e",
         "scripts/digest-candidates.js": "b5b3f8f5e17c2044f9647478c319da1d6aaea9fb0265fa71892f8987b5171f31",
-        "scripts/digest-selection-contract.js": "8be315172cc97230f36c235c1e2d2bb17c4a190ccc7837217a836cce9d669cf0",
+        "scripts/digest-selection-contract.js": "abc2ffc2a78ddaaea6c89cd424ce0960728825c95cca27444c9702dce4acb359",
         "scripts/digest-selection.js": "23f4e71b9cf234b67f8569b4f19944fc6314a922b4abbea7c480308e6d1c8d68",
         "scripts/digest-window.js": "401cfcb07a16803a03950da2efc16546b9279b7300af1386a46956453b64eca1",
         "scripts/doctor.js": "ef76c0d62fb1592101ad5b2591268235e6eb8646f4962b74eb8e4410cc674c17",
@@ -93,7 +93,7 @@
         "scripts/lib/skill-registration.js": "ca30a2fb33880c9d0cfa64d86aad1035c79883579cdea8825da4708bf92c6d94",
         "scripts/package-lock.json": "54e5534b339225e9d56d2602675f4eebfc12822e1053069fa679d8756758ccca",
         "scripts/package.json": "d53967cf987274e652d20c19654e3767537c429addd03a7f85ee71f1d9afdf06",
-        "scripts/prepare-digest.js": "6cd9742e979fd25b4fdfb104b00808baa7ef45ebc83509d5ac9be7987fe621a8",
+        "scripts/prepare-digest.js": "1e2a99cfe6d099eb1e8e908b9527e3d4be5a42b60cfcf9cd66470e475b2b52ab",
         "scripts/release/build-release.sh": "a96dd85222d22237986caaa198a390b511bf96f46885224f4a78e5b1257178c8",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
         "scripts/release/scan-secrets.js": "5879411abcf32c30609d336b1a28cf2323b4df51964cdead3d12274d5e5b2ada",
