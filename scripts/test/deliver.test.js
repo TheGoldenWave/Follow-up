@@ -546,8 +546,8 @@ test('CLI is strict, emits one machine JSON result, and never reserves on local 
 
 test('SKILL routes every destination through the transaction and forbids automatic fallback', async () => {
   const skill = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
-  assert.match(skill, /deliver\.js --active .*--destination stdout .*--result-out/);
-  assert.match(skill, /deliver\.js --active .*--destination (?:telegram\|email|<stdout\|telegram\|email>)/);
+  assert.match(skill, /deliver\.js"? --active .*--destination stdout .*--result-out/);
+  assert.match(skill, /deliver\.js"? --active .*--destination (?:telegram\|email|<stdout\|telegram\|email>)/);
   assert.doesNotMatch(skill, /deliver\.js[^\n]*2>\/dev\/null/);
   assert.doesNotMatch(skill, /show the digest in the terminal as fallback/i);
   assert.match(skill, /delivery-uncertain[^]*不得自动.*fallback|delivery-uncertain[^]*禁止自动.*回退/i);
