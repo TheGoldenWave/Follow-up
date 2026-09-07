@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "abb5bcfe9677d5e702cafc3f44c19d792107eb3c608be52fdbd6a3b841ca36aa"
+      "digest": "c443fd9f180cc505fb197ea783a385a728123caec037f392ab7d84a4af09a4c3"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -57,7 +57,7 @@
         "contracts/digest-curation-request.schema.json": "bb77723741fccaf3c1bcd08845a321d4f0c105477e633ea4d49dcce58e36f19a",
         "contracts/digest-selection.schema.json": "a11a2e794f123f29db9189ebffb5588f79b081db2971589a6a6b9e88afdb9db1",
         "contracts/release-manifest.schema.json": "ff86823ea1cc877bc64eed8b745828fe1820060c81055a60f6802a1fd29a6998",
-        "docs/source-catalog.md": "3c89a975ba88bb1b69b1178a04fe230df49759b540ac72c96832e909a825a7bf",
+        "docs/source-catalog.md": "960d81b8ac76bd89495b56ee2b70a867648600f19c94ff56dfe9a8e91c4528d0",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
         "prompts/digest-intro.md": "5d25f2184b8bbacd910fcbe4547f02b83af76eb03f57f3b0bef02c8d2e1b91c5",
@@ -92,7 +92,7 @@
         "scripts/lib/paths.js": "6f14445b5ebc797cdc48f938429fcd6ace05d7c84ccd404368398bde53fd58d1",
         "scripts/lib/skill-registration.js": "ca30a2fb33880c9d0cfa64d86aad1035c79883579cdea8825da4708bf92c6d94",
         "scripts/package-lock.json": "54e5534b339225e9d56d2602675f4eebfc12822e1053069fa679d8756758ccca",
-        "scripts/package.json": "8d2121cc4406e36d466061beba6b18279bbe759b61965a2b35258b31de85e99f",
+        "scripts/package.json": "d53967cf987274e652d20c19654e3767537c429addd03a7f85ee71f1d9afdf06",
         "scripts/prepare-digest.js": "031dcbddde4cb50e0eda5bc91bd25d681173834404104b3b833f0c703abe0b36",
         "scripts/release/build-release.sh": "a96dd85222d22237986caaa198a390b511bf96f46885224f4a78e5b1257178c8",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",

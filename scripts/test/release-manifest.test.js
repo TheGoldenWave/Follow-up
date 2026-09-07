@@ -56,6 +56,12 @@ test('repository release identity is frozen at version 0.2.0 on 2026-09-07', asy
   );
 
   assert.equal(version, '0.2.0');
+  assert.equal(packageJson.name, 'follow-builders-scripts');
+  assert.equal(
+    packageJson.description,
+    'Scripts for Follow-up - feed generation, digest preparation, and delivery',
+  );
+  assert.doesNotMatch(packageJson.description, /Follow Builders skill/i);
   assert.equal(packageJson.version, version);
   assert.equal(packageLock.version, version);
   assert.equal(packageLock.packages[''].version, version);
@@ -218,6 +224,11 @@ test('frozen user documentation states the v0.2 product boundary in both languag
 
 test('source catalog production Blog IDs exactly match the namespaced runtime config', async () => {
   const catalog = await readFile(new URL('docs/source-catalog.md', repositoryRoot), 'utf8');
+  assert.doesNotMatch(catalog, /README[^\n]*Papers With Code/i);
+  assert.match(
+    catalog,
+    /本目录[^\n]*Papers With Code[^\n]*Semantic Scholar[^\n]*会议论文入口[^\n]*候选[^\n]*当前学术采集实际只有 arXiv RSS/,
+  );
   const productionSection = catalog.match(
     /^### 生产 Blog 来源\n([\s\S]*?)(?=^##\s)/m,
   )?.[1];

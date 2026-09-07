@@ -73,7 +73,7 @@ candidate Feed 的历史，daily 与 weekly 都只选择符合资格的**未推*
 - `config/default-sources.json` 中保留了 8 个 Newsletter，但运行时会由 `config/feed-newsletters.json` 覆盖，因此当前有效数量是 4 个。
 - `config/default-sources.json` 中保留了 5 个中文科技源，但运行时会由 `config/feed-zh-tech.json` 覆盖，因此当前有效数量是 3 个。
 - README 与 `config/feed-blogs.json` 均以 17 个正式官网 Blog 来源为准。
-- README 提到 Papers With Code、Semantic Scholar 和多个会议论文入口；当前学术采集实际只有 arXiv RSS。
+- 本目录将 Papers With Code、Semantic Scholar 和多个会议论文入口列为候选；当前学术采集实际只有 arXiv RSS。
 - 行业报告虽有默认名单，但不会生成实时 Feed。
 
 ### 生产 Blog 来源

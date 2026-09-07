@@ -1,7 +1,7 @@
 {
   "name": "follow-builders-scripts",
   "version": "0.2.0",
-  "description": "Scripts for Follow Builders skill — feed generation, digest preparation, delivery",
+  "description": "Scripts for Follow-up - feed generation, digest preparation, and delivery",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
