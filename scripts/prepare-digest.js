@@ -21,6 +21,7 @@ import { readDeliveryLedger } from './delivery-ledger.js';
 import { resolveDigestCandidates } from './digest-candidates.js';
 import {
   CURATION_SUMMARY_CHARACTER_LIMIT,
+  CURATION_TITLE_CHARACTER_LIMIT,
   DIGEST_CURATION_REQUEST_SCHEMA_VERSION,
   MISSING_SOURCE_STATUS_SUMMARY,
   createRequestHash,
@@ -262,10 +263,14 @@ function safeSourceName(value, fallback) {
 
 function boundedCandidates(candidates) {
   return candidates.map((candidate) => {
+    const title = Array.from(candidate.title)
+      .slice(0, CURATION_TITLE_CHARACTER_LIMIT)
+      .join('');
     const characters = Array.from(candidate.summarizationContent);
-    if (characters.length <= CURATION_SUMMARY_CHARACTER_LIMIT) return { ...candidate };
+    if (characters.length <= CURATION_SUMMARY_CHARACTER_LIMIT) return { ...candidate, title };
     return {
       ...candidate,
+      title,
       summarizationContent: characters.slice(0, CURATION_SUMMARY_CHARACTER_LIMIT).join(''),
       contentTruncated: true,
     };

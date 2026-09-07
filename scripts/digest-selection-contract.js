@@ -9,6 +9,7 @@ import { frameFields } from './candidate-identity.js';
 export const DIGEST_CURATION_REQUEST_SCHEMA_VERSION = '1.0';
 export const DIGEST_SELECTION_SCHEMA_VERSION = '1.0';
 export const CURATION_CANDIDATE_LIMIT = 1000;
+export const CURATION_TITLE_CHARACTER_LIMIT = 500;
 export const CURATION_SUMMARY_CHARACTER_LIMIT = 12_000;
 export const MISSING_SOURCE_STATUS_SUMMARY = 'Source status was not reported.';
 

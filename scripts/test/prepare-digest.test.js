@@ -271,6 +271,8 @@ test('unknown source status remains structural corruption and stops preparation'
 
 test('prepare creates a schema-valid bounded request from only the rolling candidate Feed', async () => {
   const oversized = candidate('podcast', 'podcasts', 'podcast:show', '文'.repeat(80_000));
+  oversized.title = '题'.repeat(501);
+  oversized.contentFingerprint = createContentFingerprint(oversized);
   const podcastRegistry = [{ id: 'podcast:show', channel: 'podcasts', name: 'Show' }];
   const podcastFeed = feed([oversized], {
     registry: [{ sourceId: 'podcast:show', channel: 'podcasts', sourceName: 'Show', status: 'ok', candidateCount: 1 }],
@@ -285,6 +287,7 @@ test('prepare creates a schema-valid bounded request from only the rolling candi
   });
   assert.equal(feedLoads, 1);
   assert.equal(result.status, 'request-ready');
+  assert.equal(Array.from(result.request.eligibleCandidates[0].title).length, 500);
   assert.equal(Array.from(result.request.eligibleCandidates[0].summarizationContent).length, 12_000);
   assert.equal(result.request.eligibleCandidates[0].contentTruncated, true);
   assert.deepEqual(result.request.interests, ['agents']);
