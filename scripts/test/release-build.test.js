@@ -5,6 +5,7 @@ import {
   mkdtemp,
   mkdir,
   readFile,
+  realpath,
   readdir,
   rm,
   stat,
@@ -257,6 +258,47 @@ test('the exact archive installs and passes archive-supported validation and con
   assert.match(contractOutput, /installed release prompt is used/);
   assert.match(contractOutput, /repository release validator accepts/);
   assert.match(contractOutput, /fail 0/);
+});
+
+test('all three registered Skill paths execute the documented workflow CLIs', async (t) => {
+  const root = await createReleaseRepository(t);
+  const output = join(root, 'platform-output');
+  const installRoot = await mkdtemp(join(tmpdir(), 'follow-up-platform-install-'));
+  const fixtureHome = await realpath(await mkdtemp(join(tmpdir(), 'follow-up-platform-home-')));
+  t.after(() => rm(installRoot, { recursive: true, force: true }));
+  t.after(() => rm(fixtureHome, { recursive: true, force: true }));
+  await run('sh', [buildScript.pathname, 'HEAD', output], { cwd: root });
+  await run('tar', ['-xzf', join(output, archiveName), '-C', installRoot]);
+  const program = join(installRoot, archivePrefix);
+  const codexHome = join(fixtureHome, '.codex');
+  const claudeHome = join(fixtureHome, '.claude');
+  const customSkill = join(fixtureHome, 'custom', 'follow-up');
+  const commonEnv = {
+    ...process.env, HOME: fixtureHome, CODEX_HOME: codexHome,
+    CLAUDE_CONFIG_DIR: claudeHome, npm_config_cache: join(root, '.npm-cache'),
+  };
+  const registrations = [
+    ['codex', join(codexHome, 'skills', 'follow-up'), []],
+    ['claude-code', join(claudeHome, 'skills', 'follow-up'), []],
+    ['custom', customSkill, ['--skill-dir', customSkill]],
+  ];
+  for (const [platform, skillRoot, extra] of registrations) {
+    await run('node', [
+      'scripts/install.js', '--platform', platform, ...extra, '--register',
+    ], { cwd: program, env: commonEnv });
+    const skill = await readFile(join(skillRoot, 'SKILL.md'), 'utf8');
+    assert.match(skill, /FOLLOW_UP_SKILL_DIR/);
+    for (const entrypoint of [
+      'prepare-digest.js', 'finalize-digest.js', 'validate-digest-selection.js',
+      'deliver.js', 'resolve-delivery.js', 'schedule-gate.js',
+    ]) {
+      await assert.rejects(
+        run('node', [join(skillRoot, 'scripts', entrypoint)], { env: commonEnv }),
+        (error) => error.code === 64 && /usage/i.test(`${error.stdout}\n${error.stderr}`),
+        `${platform}:${entrypoint}`,
+      );
+    }
+  }
 });
 
 test('release workflow separates read-only build from guarded write-only publication', async () => {

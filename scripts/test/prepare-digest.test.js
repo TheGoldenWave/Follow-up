@@ -225,6 +225,35 @@ test('empty enabledChannels returns no-channels without loading the rolling Feed
   });
 });
 
+test('onboarding template persists channel choices that normalize and prepare without legacy expansion', async () => {
+  const skill = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
+  assert.match(
+    skill,
+    /"enabledChannels": \["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"\]/,
+  );
+  assert.match(skill, /"enabledChannels": \[\]/);
+
+  const subset = { onboardingComplete: true, enabledChannels: ['blogs'] };
+  assert.deepEqual((await fixtureConfig('selected-channels')).enabledChannels, ['blogs']);
+  assert.deepEqual((await import('../config-contract.js')).normalizeConfig(subset).enabledChannels, ['blogs']);
+  const prepared = await prepareDigest({
+    config: subset, frequency: 'daily', now: '2026-09-06T08:00:00.000Z', registry,
+    deliveryEvents: [], loadCandidateFeed: async () => feed([
+      candidate('blog-item'), candidate('x-item', 'x', 'x:builder'),
+    ]), loadCurationPrompt: async () => 'curate',
+    randomUUID: () => '99999999-9999-4999-8999-999999999999',
+  });
+  assert.deepEqual(prepared.request.eligibleCandidates.map(({ channel }) => channel), ['blogs']);
+
+  let fetched = false;
+  const none = await prepareDigest({
+    config: { onboardingComplete: true, enabledChannels: [] }, frequency: 'daily', registry,
+    loadCandidateFeed: async () => { fetched = true; return feed([]); },
+  });
+  assert.equal(none.status, 'no-channels');
+  assert.equal(fetched, false);
+});
+
 test('missing expected source status becomes a synthetic error while valid candidates continue', async () => {
   const incompleteFeed = feed([candidate('blog-item')], {
     registry: [{

@@ -148,19 +148,12 @@ schedule mutation、external destination。
 
 Tell the user:
 
-"I'm your Follow-up Signal & Attention Digest. I track 7 curated source categories
-across the global AI & tech landscape:
+"I'm your Follow-up Signal & Attention Digest. I track 70 configured sources across
+six live categories: 30 AI Builders on X, 10 Podcasts, 17 Official Blogs,
+4 Newsletters, 6 Academic sources, and 3 Chinese Tech sources.
 
-1. **AI Builders on X** — 30+ builders at leading AI labs and startups
-2. **Top Podcasts** — 10+ deep-dive podcasts with transcripts
-3. **Official Blogs** — 8+ company blogs (OpenAI, Anthropic, DeepMind, Meta, etc.)
-4. **Newsletters** — 8 curated newsletters (The Batch, Ben's Bites, TLDR AI, etc.)
-5. **Academic Papers** — arXiv, NeurIPS, ICML, ICLR, and more
-6. **Chinese Tech** — 机器之心, 量子位, 少数派, 36氪, and more
-7. **Industry Reports** — State of AI, Stanford HAI, VC annual reports
-
-Six categories currently have live centralized Feeds. Industry reports are a planned
-low-frequency category. Every day or week, I'll deliver a source-linked Signal digest.
+Industry reports are planned and are not a live Feed in v0.2. Every day or week,
+I'll deliver a source-linked Signal digest.
 These summaries do not automatically become personal Knowledge."
 
 ### Step 2: Source Overview
@@ -264,8 +257,12 @@ Uncomment only the line they need. Open the file for them to paste the key.
 ### Step 7: Show Sources
 
 Show the full centrally curated source taxonomy.
-Read from `config/default-sources.json` and display it organized by category. Clearly
-mark industry reports as planned and distinguish source taxonomy from live Feed output.
+Use the runtime registry assembled by `scripts/source-registry.js` from the production
+configuration files. Summarize the exact live counts as 30/10/17/4/6/3; only enumerate
+individual sources that are present in that registry, or direct the user to
+`docs/source-catalog.md`. Clearly mark industry reports as planned and distinguish
+source taxonomy from live Feed output. Do not use the legacy taxonomy list as a live
+source inventory.
 
 ### Step 8: Configuration Reminder
 
@@ -288,6 +285,7 @@ cat > ~/.follow-builders/config.json << 'CFGEOF'
 {
   "platform": "<openclaw or other>",
   "language": "<en, zh, or bilingual>",
+  "enabledChannels": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"],
   "schedule": {
     "frequency": "<daily or weekly>",
     "time": "<HH:MM>",
@@ -306,6 +304,13 @@ cat > ~/.follow-builders/config.json << 'CFGEOF'
   "onboardingComplete": true
 }
 CFGEOF
+```
+
+将 `enabledChannels` 精确替换为用户在 Step 2 选择的稳定 channel 值；不得因为用户只选
+部分来源而省略该字段。用户选择“暂不启用”时必须保存：
+
+```json
+"enabledChannels": []
 ```
 
 Then set up the scheduled job based on platform and delivery method:
@@ -334,6 +339,14 @@ Then run the full Content Delivery workflow below right now.
 
 This workflow runs on a daily/weekly schedule or when the user invokes `/follow-up`.
 
+### Step 0: Resolve the installed runtime
+
+优先使用当前 Skill 宿主提供的实际 Skill 根目录作为 `FOLLOW_UP_SKILL_DIR`。若宿主没有
+提供，则使用安装器发布并校验过的 immutable release pointer：
+`$HOME/.follow-builders/releases/0.2.0`。Codex、Claude Code 与 custom registration
+都只负责把 Skill 链接到该 release；不得假定任何单一宿主的专属环境变量存在。
+下面每条命令都在同一个 shell invocation 内完成 fallback，避免环境变量无法跨命令保留。
+
 ### Step 1: Load Config
 
 Read `~/.follow-builders/config.json` for language, schedule, delivery, and prompt preferences.
@@ -347,12 +360,16 @@ Read `~/.follow-builders/config.json` for language, schedule, delivery, and prom
 门禁只输出 `authorized`、`status`、`reasons`，不得输出 config、地址或 credential。
 `no-channels` 是需要修改配置的状态，不得伪装成 authorized 或发送 no-update。
 
+```bash
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/schedule-gate.js" --frequency <daily|weekly> --destination <stdout|telegram|email>
+```
+
 ### Step 3: Prepare curation request
 
 创建绝对路径作为本次 request 输出。只运行 `prepare-digest.js`，它读取本地配置、delivery ledger 和中央 rolling `feed-candidates.json`，验证完整 source registry，并按渠道与投递历史筛选候选。不要自行拉取六个 snapshot Feed。
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js --request-out <absolute-request-path> [--frequency daily|weekly] [--scheduled] 2>/dev/null
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/prepare-digest.js" --request-out <absolute-request-path> [--frequency daily|weekly] [--scheduled] 2>/dev/null
 ```
 
 - `no-channels`：停止，不生成 selection，不投递 daily no-update；向用户展示全零 `contentStats` 和启用渠道的操作提示。
@@ -371,10 +388,17 @@ cd ${CLAUDE_SKILL_DIR}/scripts && node prepare-digest.js --request-out <absolute
 
 文件 basename 必须严格等于 `<digest-id>.json`。`requestHash` 是对排除自身字段后的完整 request 做 canonical key ordering，再将 `digest-request-v1` 与 canonical JSON 使用 length-prefixed framing 编码后计算的 SHA-256；Agent 只复制该值。manifest 必须覆盖全部 eligible candidates 的 clustering，并让 `selectedEventClusterIds` 严格遵循 60 分门槛、最多 10 条以及确定性 source/channel portfolio 规则。Agent 没有输出、输出非法 JSON、`requestHash` 不匹配或评分阶段失败时立即停止。
 
+写入后先通过确定性 validator，将验证后的 manifest 输出到另一个绝对路径；后续 finalize
+只读取该验证输出：
+
+```bash
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/validate-digest-selection.js" --request <absolute-request-path> --selection <absolute-selection-path> --output <absolute-validated-selection-path>
+```
+
 ### Step 5: Finalize
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node finalize-digest.js --request <absolute-request-path> --selection <absolute-selection-path> --output-dir <absolute-output-directory> 2>/dev/null
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/finalize-digest.js" --request <absolute-request-path> --selection <absolute-validated-selection-path> --output-dir <absolute-output-directory> 2>/dev/null
 ```
 
 finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确定性选择。它先在同一 staging generation 内完整写入并持久化 `artifact.json`、`message.txt` 与 manifest，再以一次目录 rename 发布 generation，最后原子更新 `<absolute-output-directory>/active.json`。只有 `active.json` 指向的 generation 可投递；JSON artifact 供 ledger/outbox 使用，不能直接作为用户消息发送。状态含义如下：
@@ -394,19 +418,19 @@ finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确�
 手动运行：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> [--confirm-destination] --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> [--confirm-destination] --result-out <absolute-delivery-result-path>
 ```
 
 自动运行必须显式标记 scheduled，使 deliver 再次执行 TOCTOU 门禁：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --scheduled --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --scheduled --result-out <absolute-delivery-result-path>
 ```
 
 默认 stdout 也必须运行：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination stdout --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination stdout --result-out <absolute-delivery-result-path>
 ```
 
 stdout destination 的用户正文只写 stdout；machine status 只从 `--result-out` 指定的 JSON 文件读取。不得把正文当 JSON 解析，也不得隐藏或丢弃 stdout 正文。
@@ -429,9 +453,9 @@ stdout destination 的用户正文只写 stdout；machine status 只从 `--resul
 对应脚本命令：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> delivered --result-out <absolute-resolution-result-path>
-cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> suppress --result-out <absolute-resolution-result-path>
-cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> retry --confirm-external-retry [--destination stdout|telegram|email] --result-out <absolute-resolution-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> delivered --result-out <absolute-resolution-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> suppress --result-out <absolute-resolution-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> retry --confirm-external-retry [--destination stdout|telegram|email] --result-out <absolute-resolution-result-path>
 ```
 
 必须先检查 `resolve-delivery.js` 的 exit code；只有 exit 0 才读取 `--result-out` 的 machine JSON。exit 非零时停止并检查 stderr；`delivery-busy` 表示该 attempt 正在 provider handoff 中，不得提交 delivered、suppress 或 retry，也不得绕过锁重试写状态。
@@ -439,7 +463,7 @@ cd ${CLAUDE_SKILL_DIR}/scripts && node resolve-delivery.js <attempt-id> retry --
 `retry` 只在同一 transaction 中将旧 attempt 标记为 `superseded` 并创建 replacement pending，不调用 provider。返回 `retry-ready` 后，从 machine JSON 读取 `replacementAttemptId`，然后使用同一个已激活 Digest 直接 resume：
 
 ```bash
-cd ${CLAUDE_SKILL_DIR}/scripts && node deliver.js --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> [--confirm-destination] --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> [--confirm-destination] --result-out <absolute-delivery-result-path>
 ```
 
 resume 会校验该 pending 确实由对应旧 attempt 的 `superseded` 事件创建，并要求 `digestId`、`frequency`、candidate IDs、event cluster IDs、`messageHash` 和 destination 完全匹配；它不会创建普通 reservation。每个 replacement 的 resume 会在 provider handoff 前持久化一次性 claim，只有 claim 成功的调用可以继续；进程崩溃或 provider 结果不确定时也不得重复 resume。
@@ -485,7 +509,7 @@ bundled with the installed release.
 
 ```bash
 mkdir -p ~/.follow-builders/prompts
-cp ${CLAUDE_SKILL_DIR}/prompts/<filename>.md ~/.follow-builders/prompts/<filename>.md
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; cp "$FOLLOW_UP_SKILL_DIR/prompts/<filename>.md" ~/.follow-builders/prompts/<filename>.md
 ```
 
 Then edit the file with the user's requested changes.
