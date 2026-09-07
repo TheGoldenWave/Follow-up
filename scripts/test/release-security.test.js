@@ -145,6 +145,14 @@ test('SKILL uses one cross-platform immutable runtime root and records exact sou
   ]) {
     assert.match(skill, new RegExp(`FOLLOW_UP_SKILL_DIR[^\\n]*${entrypoint.replace('.', '\\.')}`));
   }
+  const scheduleExample = skill.split('\n').find((line) => (
+    line.includes('FOLLOW_UP_SKILL_DIR=') && line.includes('/schedule-gate.js')
+  ));
+  assert.match(
+    scheduleExample,
+    /schedule-gate\.js" --config "\$HOME\/\.follow-builders\/config\.json"$/,
+  );
+  assert.doesNotMatch(scheduleExample, /--frequency|--destination/);
   assert.match(skill, /30[^\n]*(?:X|构建者)/i);
   assert.match(skill, /10[^\n]*(?:Podcast|播客)/i);
   assert.match(skill, /17[^\n]*(?:Blog|官网)/i);

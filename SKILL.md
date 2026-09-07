@@ -361,8 +361,11 @@ Read `~/.follow-builders/config.json` for language, schedule, delivery, and prom
 `no-channels` 是需要修改配置的状态，不得伪装成 authorized 或发送 no-update。
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/schedule-gate.js" --frequency <daily|weekly> --destination <stdout|telegram|email>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/schedule-gate.js" --config "$HOME/.follow-builders/config.json"
 ```
+
+`schedule-gate.js` 从 config 内 canonical `schedule` 与 `delivery` 字段校验 frequency 和
+exact destination；不得向该 CLI 传入未声明的 `--frequency` 或 `--destination`。
 
 ### Step 3: Prepare curation request
 

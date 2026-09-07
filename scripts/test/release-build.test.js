@@ -13,6 +13,7 @@ import {
 } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import test from 'node:test';
 
@@ -62,7 +63,7 @@ async function copyTrackedRepository(destination) {
   }
 }
 
-async function createReleaseRepository(t) {
+async function createReleaseRepository(t, { installDependencies = true } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'follow-up-release-build-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await copyTrackedRepository(root);
@@ -106,10 +107,18 @@ async function createReleaseRepository(t) {
       },
     });
   }
-  await run('npm', ['ci'], {
-    cwd: join(root, 'scripts'),
-    env: { ...process.env, npm_config_cache: join(root, '.npm-cache') },
-  });
+  if (installDependencies) {
+    await run('npm', ['ci'], {
+      cwd: join(root, 'scripts'),
+      env: { ...process.env, npm_config_cache: join(root, '.npm-cache') },
+    });
+  } else {
+    await cp(
+      join(repositoryRoot.pathname, 'scripts', 'node_modules'),
+      join(root, 'scripts', 'node_modules'),
+      { recursive: true },
+    );
+  }
 
   await mkdir(join(root, '.hermes'), { recursive: true });
   await mkdir(join(root, 'docker'), { recursive: true });
@@ -260,8 +269,8 @@ test('the exact archive installs and passes archive-supported validation and con
   assert.match(contractOutput, /fail 0/);
 });
 
-test('all three registered Skill paths execute the documented workflow CLIs', async (t) => {
-  const root = await createReleaseRepository(t);
+test('all three registered Skill paths execute a documented workflow with real fixtures', async (t) => {
+  const root = await createReleaseRepository(t, { installDependencies: false });
   const output = join(root, 'platform-output');
   const installRoot = await mkdtemp(join(tmpdir(), 'follow-up-platform-install-'));
   const fixtureHome = await realpath(await mkdtemp(join(tmpdir(), 'follow-up-platform-home-')));
@@ -275,7 +284,7 @@ test('all three registered Skill paths execute the documented workflow CLIs', as
   const customSkill = join(fixtureHome, 'custom', 'follow-up');
   const commonEnv = {
     ...process.env, HOME: fixtureHome, CODEX_HOME: codexHome,
-    CLAUDE_CONFIG_DIR: claudeHome, npm_config_cache: join(root, '.npm-cache'),
+    CLAUDE_CONFIG_DIR: claudeHome,
   };
   const registrations = [
     ['codex', join(codexHome, 'skills', 'follow-up'), []],
@@ -287,17 +296,121 @@ test('all three registered Skill paths execute the documented workflow CLIs', as
       'scripts/install.js', '--platform', platform, ...extra, '--register',
     ], { cwd: program, env: commonEnv });
     const skill = await readFile(join(skillRoot, 'SKILL.md'), 'utf8');
-    assert.match(skill, /FOLLOW_UP_SKILL_DIR/);
+    const commandLines = skill.split('\n').filter((line) => (
+      line.includes('FOLLOW_UP_SKILL_DIR=') && line.includes('/scripts/')
+    ));
+    const documentedEntrypoints = new Set(commandLines.flatMap((line) => {
+      const match = /\/scripts\/([a-z-]+\.js)"/.exec(line);
+      return match ? [match[1]] : [];
+    }));
     for (const entrypoint of [
       'prepare-digest.js', 'finalize-digest.js', 'validate-digest-selection.js',
       'deliver.js', 'resolve-delivery.js', 'schedule-gate.js',
     ]) {
-      await assert.rejects(
-        run('node', [join(skillRoot, 'scripts', entrypoint)], { env: commonEnv }),
-        (error) => error.code === 64 && /usage/i.test(`${error.stdout}\n${error.stderr}`),
-        `${platform}:${entrypoint}`,
-      );
+      assert.equal(documentedEntrypoints.has(entrypoint), true, `${platform}:${entrypoint}`);
     }
+    const scheduleExample = commandLines.find((line) => line.includes('/schedule-gate.js'));
+    assert.match(
+      scheduleExample,
+      /schedule-gate\.js" --config "\$HOME\/\.follow-builders\/config\.json"$/,
+    );
+    assert.doesNotMatch(scheduleExample, /--frequency|--destination/);
+
+    const userDir = join(fixtureHome, '.follow-builders');
+    const stateDir = join(userDir, 'state');
+    await rm(stateDir, { recursive: true, force: true });
+    await mkdir(stateDir, { recursive: true });
+    const configPath = join(userDir, 'config.json');
+    await writeFile(configPath, JSON.stringify({
+      onboardingComplete: false, enabledChannels: ['blogs'], delivery: { method: 'stdout' },
+    }));
+    const script = (name) => {
+      assert.equal(documentedEntrypoints.has(name), true, name);
+      return join(skillRoot, 'scripts', name);
+    };
+
+    await assert.rejects(
+      run('node', [script('schedule-gate.js'), '--config', configPath], { env: commonEnv }),
+      (error) => {
+        const result = JSON.parse(error.stdout);
+        return error.code === 1 && result.authorized === false
+          && result.status === 'schedule-not-authorized';
+      },
+      `${platform}:schedule-gate`,
+    );
+    const deniedRequest = join(fixtureHome, `${platform}-denied-request.json`);
+    await assert.rejects(
+      run('node', [
+        script('prepare-digest.js'), '--request-out', deniedRequest,
+        '--frequency', 'daily', '--scheduled',
+      ], { env: commonEnv }),
+      (error) => error.code === 1 && /schedule-not-authorized/.test(error.stderr),
+      `${platform}:prepare`,
+    );
+    await assert.rejects(stat(deniedRequest), /ENOENT/);
+
+    await writeFile(configPath, JSON.stringify({
+      onboardingComplete: true, enabledChannels: ['blogs'], delivery: { method: 'stdout' },
+    }));
+    const flowRoot = join(fixtureHome, `${platform}-flow`);
+    await mkdir(flowRoot, { recursive: true });
+    const requestPath = join(flowRoot, 'request.json');
+    const selectionPath = join(
+      flowRoot,
+      'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.json',
+    );
+    const validatedDir = join(flowRoot, 'validated');
+    await mkdir(validatedDir);
+    const validatedPath = join(validatedDir, 'd'.repeat(64) + '.json');
+    await cp(join(skillRoot, 'scripts', 'test', 'fixtures', 'curation', 'valid-request.json'), requestPath);
+    await cp(join(skillRoot, 'scripts', 'test', 'fixtures', 'selections', 'valid-selection.json'), selectionPath);
+    await run('node', [
+      script('validate-digest-selection.js'), '--request', requestPath,
+      '--selection', selectionPath, '--output', validatedPath,
+    ], { env: commonEnv });
+    assert.equal(JSON.parse(await readFile(validatedPath, 'utf8')).digestId, 'd'.repeat(64));
+
+    const outputDir = join(flowRoot, 'output');
+    const finalized = await run('node', [
+      script('finalize-digest.js'), '--request', requestPath,
+      '--selection', validatedPath, '--output-dir', outputDir,
+    ], { env: commonEnv });
+    assert.equal(JSON.parse(finalized.stdout).status, 'ready');
+    const activePath = join(outputDir, 'active.json');
+    assert.equal(JSON.parse(await readFile(activePath, 'utf8')).digestId, 'd'.repeat(64));
+
+    const deliveryResult = join(flowRoot, 'delivery-result.json');
+    const delivered = await run('node', [
+      script('deliver.js'), '--active', activePath, '--destination', 'stdout',
+      '--result-out', deliveryResult,
+    ], { env: commonEnv });
+    assert.match(delivered.stdout, /Model launch/);
+    assert.equal(JSON.parse(await readFile(deliveryResult, 'utf8')).status, 'delivered');
+
+    const attemptId = `review-${platform}`;
+    const outboxModule = await import(pathToFileURL(
+      join(skillRoot, 'scripts', 'delivery-outbox.js'),
+    ).href);
+    await outboxModule.reserveOutboxAttempt({
+      schemaVersion: '1.0', type: 'pending', occurredAt: '2026-09-07T12:00:00.000Z',
+      attemptId, digestId: `pending-${platform}`, frequency: 'daily',
+      candidateIds: ['f'.repeat(64)], eventClusterIds: ['e'.repeat(64)],
+      destinationType: 'stdout', messageHash: 'c'.repeat(64),
+    }, { home: fixtureHome });
+    const resolutionResult = join(flowRoot, 'resolution-result.json');
+    await run('node', [
+      script('resolve-delivery.js'), attemptId, 'delivered',
+      '--result-out', resolutionResult,
+    ], { env: commonEnv });
+    assert.deepEqual(
+      (({ status, action, attemptId: id }) => ({ status, action, attemptId: id }))(
+        JSON.parse(await readFile(resolutionResult, 'utf8')),
+      ),
+      { status: 'resolved', action: 'delivered', attemptId },
+    );
+    const ledger = await readFile(join(stateDir, 'delivery-ledger.jsonl'), 'utf8');
+    assert.match(ledger, new RegExp(`"attemptId":"${attemptId}"`));
+    assert.match(ledger, /"type":"delivered"/);
   }
 });
 
