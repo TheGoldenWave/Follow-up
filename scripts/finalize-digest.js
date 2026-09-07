@@ -3,9 +3,13 @@
 import { createHash, randomUUID as systemRandomUUID } from 'node:crypto';
 import * as systemFs from 'node:fs/promises';
 import { basename, isAbsolute, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
+import {
+  CommandLineUsageError,
+  EX_USAGE,
+  isMainModule,
+  parseCommandLine,
+} from './command-line.js';
 import { renderDigestMessage, validateFinalDigestArtifact } from './delivery-message.js';
 import { validateSelectionAgainstRequest } from './digest-selection.js';
 import {
@@ -297,6 +301,6 @@ export async function main({
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = await main();
 }

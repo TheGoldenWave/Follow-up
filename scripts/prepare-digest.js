@@ -4,13 +4,18 @@ import { randomUUID as systemRandomUUID } from 'node:crypto';
 import * as systemFs from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 import {
   validateCandidateFeedCompleteness,
   validateCandidateFeedStructure,
 } from './candidate-feed-contract.js';
-import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
+import {
+  CommandLineUsageError,
+  EX_USAGE,
+  isMainModule,
+  parseCommandLine,
+} from './command-line.js';
 import { normalizeConfig } from './config-contract.js';
 import { readDeliveryLedger } from './delivery-ledger.js';
 import { resolveDigestCandidates } from './digest-candidates.js';
@@ -589,6 +594,6 @@ export async function main({
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = await main();
 }

@@ -2,9 +2,13 @@
 
 import { randomUUID as systemRandomUUID } from 'node:crypto';
 import { isAbsolute, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
+import {
+  CommandLineUsageError,
+  EX_USAGE,
+  isMainModule,
+  parseCommandLine,
+} from './command-line.js';
 import {
   readOutboxAttempt,
   replaceOutboxAttempt,
@@ -185,6 +189,6 @@ export async function main({
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = await main();
 }

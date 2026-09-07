@@ -4,9 +4,13 @@ import { randomUUID as systemRandomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
 import * as systemFs from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
+import {
+  CommandLineUsageError,
+  EX_USAGE,
+  isMainModule,
+  parseCommandLine,
+} from './command-line.js';
 import { validateSelectionAgainstRequest } from './digest-selection.js';
 
 const JSON_WORST_CASE_BYTES_PER_CHARACTER = 6;
@@ -218,6 +222,6 @@ export async function main({
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = await main();
 }

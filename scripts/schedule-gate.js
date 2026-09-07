@@ -2,9 +2,13 @@
 
 import { readFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
-import { CommandLineUsageError, EX_USAGE, parseCommandLine } from './command-line.js';
+import {
+  CommandLineUsageError,
+  EX_USAGE,
+  isMainModule,
+  parseCommandLine,
+} from './command-line.js';
 import { validateConfig } from './config-contract.js';
 
 const FREQUENCIES = new Set(['daily', 'weekly']);
@@ -166,6 +170,6 @@ export async function main({ argv = process.argv.slice(2), stdout = process.stdo
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMainModule(import.meta.url)) {
   process.exitCode = await main();
 }
