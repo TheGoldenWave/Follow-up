@@ -1,6 +1,6 @@
 {
   "name": "follow-builders-scripts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scripts for Follow Builders skill — feed generation, digest preparation, delivery",
   "type": "module",
   "engines": {
@@ -19,7 +19,7 @@
     "validate-release": "node release/validate-release.js",
     "validate-release:archive-critical": "node release/validate-release.js --archive-critical-only",
     "validate-release:archive": "node release/validate-release.js --archive",
-    "install": "node install.js"
+    "install:follow-up": "node install.js"
   },
   "dependencies": {
     "ajv": "^8.17.1",

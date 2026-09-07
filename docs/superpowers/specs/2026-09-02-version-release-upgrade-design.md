@@ -1,363 +1,196 @@
-# Follow-up Version Release and Upgrade Design
+# Follow-up 版本发布与升级设计
 
-Status: Approved direction; revised for the `v0.2.0` product-closure release
+状态：方向已批准，并按 `v0.2.0` 产品闭环版本修订
 
-Date: 2026-09-05
+日期：2026-09-07
 
-## Purpose
+Release freeze date: 2026-09-07
 
-Follow-up needs a release model that lets the Skill, acquisition runtime, Adapter
-bundle, managed tools, and authenticated Sidecars evolve without forcing users to
-reinstall everything or lose local configuration and login state.
+## 目的
 
-Before `v0.1.0`, the product had no Git tag or GitHub Release and could only be
-identified by commit. The published `v0.1.0` release now provides the reproducible
-baseline of the centralized-Feed product. Local acquisition remains a planned
-capability until its per-source migration gates pass.
+本文定义 Follow-up 的版本身份、可信发布、安装布局和后续升级方向。`v0.1.0` 建立了
+可复现的中心化 Feed 基线；`v0.2.0` 在该基线上完成可验证安装、`doctor`、统一
+`follow-up` 入口、滚动候选池、跨源 Digest 选择与投递去重。
 
-## User-facing release policy
+本文凡涉及本地采集、认证 Sidecar、自动更新和自动回滚的内容，均为后续版本设计，
+不是 `v0.2.0` 的能力声明。
 
-- GitHub Releases are the canonical distribution source.
-- The Follow-up Skill is the primary install and upgrade entry point.
-- Only a Stable channel is maintained.
-- The Skill may check for a newer release, but it must explain the change and obtain
-  user confirmation before downloading or switching versions.
-- Update checks must not upload the installed configuration, source list, credentials,
-  login state, or usage telemetry.
-- Users see one product version. Internal component versions and compatibility checks
-  are handled by the release manifest and `doctor`.
+## v0.2.0 发布身份
 
-## Version model
+- 产品版本：`0.2.0`
+- 发布冻结日期：`2026-09-07`
+- 发布渠道：Stable
+- 规范入口：`set up follow-up` 与 `/follow-up`
+- 用户数据目录：继续使用 `~/.follow-builders/`
+- 上游归属：保留 `zarazhangrui/follow-builders` attribution 与 provenance
+- 运行时：Node.js 20 或更高版本
+- 采集模式：6 类中心化公共 Feed
 
-The user-facing product uses Semantic Versioning while the project is below `1.0`:
+`VERSION`、`release-manifest.json`、`scripts/package.json`、
+`scripts/package-lock.json` 与 `CHANGELOG.md` 必须对版本号和日期保持一致。
 
-- Patch releases contain compatible fixes, source-protocol repairs, and security
-  updates that preserve configuration meaning.
-- Minor releases add compatible product capabilities, sources, or configuration.
-- Major releases may require an explicit product choice or remove compatibility.
-- Before `1.0`, minor releases may still contain substantial changes. Every such
-  change must preserve old behavior through migration or require explicit consent.
+## 当前能力边界
 
-The product version coordinates independently versioned internals:
+`v0.2.0` 已实现：
 
-| Component | Version form | Compatibility owner |
-|---|---|---|
-| Skill and Follow-up Core | SemVer | Product release |
-| Acquisition Runtime | SemVer | Release manifest |
-| Adapter Bundle | `YYYY.MM.revision` | Acquisition Runtime compatibility range |
-| Managed Tools | Exact upstream version and artifact hash | Tool manifest |
-| Xiaohongshu/WeChat Sidecar wrapper | SemVer | Versioned local proxy protocol |
-| Upstream Sidecar | Exact release, commit, or image digest | Sidecar manifest |
-| Configuration Schema | Monotonic integer | Migration engine |
-| Signal Batch Contract | Major/minor schema version | Producer/consumer compatibility |
+- 17 个官网 Blog 的生产采集与来源级完整性状态；
+- `enabledChannels` 对 6 个 live channel 的真实过滤；
+- 有界滚动 candidate Feed 与 candidate history；
+- 100 分跨源事件评分、60 分门槛和 6-10 条目标组合；
+- daily、weekly 和按需 Digest；
+- append-only delivery ledger、pending outbox 与自动投递去重；
+- Codex、Claude Code 和 custom Skill 目录的 verified installer；
+- `doctor` 本地完整性、配置、注册、历史和网络诊断。
 
-Internal versions are diagnostic information, not independent choices presented
-during normal onboarding.
+`v0.2.0` 未实现：本地采集、认证 Sidecar、长期反馈学习、行业报告正式 Feed、分页
+个人 Feed、显式已读/未读操作、自动更新发现和自动回滚。release manifest 对这些能力
+必须为 `false` 或不声明，文档不得将路线图描述为已交付事实。
 
-## Stable release manifest
+## Digest 时间与状态语义
 
-Every release contains `release-manifest.json`. It is the machine-readable authority
-for installation and upgrade and contains:
+官网 Blog 采集检查最近 **72 小时**，每个来源最多发现 12 个链接、每次最多接收 3 篇
+有效新文章。72 小时是发现恢复窗口，不是用户投递窗口。
 
-- product version, release date, channel, minimum supported prior product version,
-  and release notes URL;
-- each component's version, artifact, SHA-256 digest, supported operating systems and
-  architectures, license/provenance reference, compatibility constraints, minimum
-  secure version, and revoked versions;
-- configuration migrations and supported Signal Batch and Sidecar protocol versions;
-- whether a component requires user authorization, a login refresh, or sensitive-data
-  migration;
-- package-level integrity information and, when supported by that release's declared
-  trust mode, the release signing identity.
+daily 和 weekly 从滚动 candidate history 中选取符合资格的**未推**候选。成功投递后，
+候选进入**已推未读**状态；在显式已读能力尚未实现时，该状态只表达“已成功推送但没有
+阅读证据”，不会被普通自动任务重复发送。pending 或 `delivery-uncertain` attempt 也
+阻止自动重复投递。
 
-The manifest schema is versioned. Installers reject unknown required fields,
-unsupported platforms, signatures that are missing or invalid when the declared trust
-mode requires them, digest mismatches, incompatible or revoked component ranges, and
-missing migration paths before changing the active installation.
+所有启用来源共同参与跨源排序。候选按影响、用户相关性、来源权威性、新颖性和独立
+印证计算 100 分，达到 **60 分**才合格。组合目标是 **6-10** 条，并限制单一来源和
+频道占比；只有 1-5 条合格时不凑数。
 
-`v0.1.0` uses a transitional `github-tag-sha256` trust mode: the user obtains the
-release from the canonical `TheGoldenWave/Follow-up` repository over GitHub HTTPS and
-confirms that the release tag resolves to the commit declared by the Release. The
-manifest stored in the tag records a SHA-256 digest over the canonical, byte-order
-sorted `git ls-tree -r -z --full-tree` entries excluding `release-manifest.json`, plus
-SHA-256 hashes for required critical files. Excluding the manifest makes this tracked
-content digest non-circular. A separate checksums Release asset records the complete
-archive digest and is published by the tag-triggered workflow. An extracted archive has
-no Git object database, so it verifies the critical file hashes and complete-archive
-checksum rather than recomputing the tracked content digest. This detects corruption and accidental
-replacement within the stated GitHub trust boundary but does not protect against
-compromise of the GitHub repository or owner account. `v0.1.0` therefore distributes
-source and JavaScript only, not prebuilt native executables or Sidecar images.
+完整检查没有合格内容时，daily 发送“今日无重要更新”，weekly 发送“本周无重要更新”。
+`partial` 表示当前来源检查不完整，不能声称没有重要更新。`incomplete-history` 表示请求
+区间缺少可证明的连续候选历史；首次 weekly 在积累 7 个完整历史日以前保持 bootstrap，
+并披露实际覆盖范围。自动运行仅支持 daily 与 weekly，不提供官网发布即时 alert。
 
-Before distributing managed executable or Sidecar artifacts, a later release must
-introduce a stronger trust mode with a pinned verification identity, documented key or
-identity rotation, revocation handling, and CI-produced attestations or signatures.
-The upgrader applies the trust policy declared by the installed release; it must not
-silently downgrade from a signature-required mode to `github-tag-sha256`.
+## 版本模型
 
-## Installation layout and atomic activation
+用户只看到一个遵循 Semantic Versioning 的产品版本：
 
-Installed product and mutable user data are separated:
+- Patch：兼容修复、来源协议修复和安全更新；
+- Minor：兼容的新产品能力、来源或配置；
+- Major：可能需要明确产品选择或移除兼容性。
+
+在 `1.0` 前，Minor 仍可能包含较大变更，但必须迁移旧行为，或在行为不兼容时取得用户
+明确同意。内部组件版本只用于 manifest、兼容检查和 `doctor`，不作为 Onboarding 中的
+独立产品选择。
+
+## 稳定发布 Manifest
+
+每个发布包含 `release-manifest.json`，记录产品版本、日期、渠道、运行时、中心 Feed、
+能力边界及完整性信息。`v0.2.0` 继续使用 `github-tag-sha256` 信任模式：
+
+1. 受保护的 Git tag 指向待发布 commit；
+2. manifest 保存排除自身后的 non-circular tracked-content digest；
+3. manifest 保存完整关键文件集的 SHA-256；
+4. Release 另行发布完整归档 checksum；
+5. 归档在 `npm ci` 前运行 dependency-free `--archive-critical-only` 检查。
+
+tracked-content digest 基于 byte-order sorted `git ls-tree -r -z --full-tree` 的原始
+NUL 结尾记录，excluding `release-manifest.json` 以避免自引用。源码归档没有 `.git`
+object database，因此只能依靠完整归档 checksum 和 critical-file SHA-256 hashes
+验证；checkout/tag 验证才会重新计算 tracked digest。该模式能在既定 GitHub 信任边界
+内发现内容损坏或意外替换，但不能抵抗仓库或
+所有者账号本身被攻破。分发托管 executable 或 Sidecar 前必须引入更强的签名与证明。
+Archive verification combines critical file hashes with complete-archive checksums;
+任何单独一层都不能替代外部信任锚点。
+
+关键文件集合必须至少包含既有 release、license、Prompt 与 Feed contract，以及
+`v0.2.0` 的配置 contract、candidate contract、Digest selection、delivery transaction、
+schedule gate、registration、diagnostics、installer 和 `scripts/lib/install-worker.js`。
+缺失任一必需文件或任一哈希漂移都阻止发布。
+
+## v0.2.0 安装与激活
+
+用户从精确 GitHub Release 获取并验证归档，然后执行：
+
+```text
+node scripts/release/validate-release.js --archive-critical-only
+cd scripts && npm ci && cd ..
+node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <绝对路径>] --register
+node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
+```
+
+安装器先验证 archive-critical 文件，再进行任何 copy、npm lifecycle 或 registration
+写入。验证后的发布对象以随机不可变目录保存，`releases/0.2.0` 是指向它的不可变版本
+指针。只有用户提供 `--register` 时才创建 `follow-up` Skill 链接。
+
+重装同一版本必须保留 `~/.follow-builders/` 下所有 mutable 文件。若从 `v0.1.0`
+升级且存在旧 `follow-builders` 注册，必须显式提供 `--replace-follow-builders`；只有
+新链接创建成功且 `doctor` 没有本地失败后，才移除旧链接。`doctor` 退出码 0 表示健康，
+2 表示只有网络告警，1 表示本地失败；退出码 1 时不得激活。
+
+`v0.2.0` 不自动发现更新、不自动迁移到未来版本，也不自动回滚。后续升级仍需用户
+取得并验证精确版本，然后明确执行安装。
+
+## 发布流水线
+
+Stable 发布必须来自干净、已审查的 commit：
+
+1. 运行完整测试、syntax、JSON/Schema、Feed 与 Blog 验证；
+2. 运行 secret、license、provenance 与 release validator；
+3. 在内容完全冻结后一次性更新 critical-file hashes 和 tracked-content digest；
+4. 只从 tracked files 构建归档并生成独立 checksum；
+5. 从归档执行 clean install、reinstall、v0.1 upgrade、`doctor`、Digest 与 delivery smoke；
+6. 在受保护 tag 与 immutable GitHub Release 设置已被外部确认后创建 `v0.2.0` tag；
+7. 下载公开资产，复核 checksum、tag target 与最小安装流程。
+
+`.hermes/`、`docker/`、`docs/wechat-integration.md`、凭据、登录态和临时文件不得进入
+发布 commit 或归档。已有 tag 和 Release 资产不得替换；缺陷通过新的 patch 发布修复。
+
+## 后续安装布局方向
+
+后续本地采集版本将继续分离不可变程序和可变用户数据：
 
 ```text
 ~/.follow-builders/
-  active.json                 # atomic pointer to the active product/component set
-  releases/<product-version>/ # immutable Skill/Core release content
-  runtime/<version>/          # versioned Acquisition environments
-  adapters/<version>/         # immutable Adapter bundles
-  tools/<tool>/<version>/     # pinned managed tools
-  sidecars/<name>/<version>/  # wrappers and immutable program content
-  config/generations/<id>/    # immutable-at-activation configuration generations
-  config/current              # convenience pointer resolved from active.json
-  state/                      # user-owned state and reading history
-  credentials/                # local secret references/material
-  sidecar-data/<name>/        # persistent login/session data
-  backups/                    # bounded migration backups
+  active.json
+  releases/<product-version>/
+  runtime/<version>/
+  adapters/<version>/
+  tools/<tool>/<version>/
+  sidecars/<name>/<version>/
+  config/generations/<id>/
+  state/
+  credentials/
+  sidecar-data/<name>/
+  backups/
 ```
 
-An upgrade downloads into staging, verifies the manifest and artifacts, creates new
-immutable component directories, copies and migrates configuration into a new
-generation, and runs `doctor`. `active.json` identifies both the executable component
-set and its configuration generation; one atomic replacement activates them together.
-`config/current` is repaired from `active.json` and is not an independent source of
-truth. Mutable state, credentials, and Sidecar login data are never stored inside a
-release directory.
+上述 runtime、adapter、sidecar、配置 generation 与自动 rollback 机制属于后续设计。
+未来升级应采用 staging、校验、`doctor` 和原子 active pointer，并保证 mutable state、
+credential 与登录数据不进入 release 目录。授权必须按来源拆分，普通升级确认不得解释为
+Cookie、二维码登录、权限扩大或敏感数据迁移授权。
 
-The prior active manifest and release directories remain available through the
-post-upgrade observation window. Garbage collection retains at least the active and
-previous known-good product versions and never deletes user data or login state.
+## 路线图
 
-## Upgrade classes
-
-The Skill classifies an available update before asking for confirmation:
-
-| Class | Examples | Behavior after confirmation |
-|---|---|---|
-| Compatible | Skill text, Core fix, compatible Adapter fix | Stage, verify, switch, observe |
-| Migrating | Configuration or local metadata schema change | Back up, migrate copy, verify, switch |
-| Authorization required | QR login, broader Cookie/API scope, credential rewrite | Upgrade unaffected components; keep that source on its old component until separately authorized |
-| Incompatible/blocking | No valid migration, unsupported OS, contract mismatch | Refuse activation and keep the current version |
-
-Authorization is scoped to the affected source. A normal product-upgrade confirmation
-does not authorize scanning a QR code, reading browser cookies, expanding permissions,
-or moving sensitive data.
-
-## Partial component activation
-
-The product release manifest describes a compatible set, but components that require
-new authorization may remain on their previous compatible version. The active manifest
-records the effective version of every component, so diagnostics distinguish the
-desired release from the currently active source component.
-
-Partial activation is allowed only when the new product manifest explicitly declares
-the old component compatible. If it does not, the source stays disabled or the whole
-activation is refused. The installer must never guess compatibility.
-
-Compatibility cannot override security revocation. If the release manifest marks the
-installed component below its minimum secure version or lists it as revoked, the
-affected source is disabled until the secure component is installed and any required
-authorization is completed. Other sources may continue upgrading. The Skill explains
-that the source was disabled for security rather than presenting it as merely offline.
-
-After the user completes authorization, the new Sidecar is started against a copy or
-explicitly supported reuse of its data directory, checked through the authenticated
-localhost proxy, and switched independently. A failed authorization or health check
-leaves the old component and session untouched.
-
-## Configuration and data migrations
-
-- Configuration carries an integer `schema_version`.
-- Migrations are ordered, deterministic functions that advance exactly one version.
-- Every migration is tested against representative old fixtures and is idempotent or
-  protected from double execution by recorded migration state.
-- The upgrader creates a new configuration generation before migration; it never
-  mutates the active generation in place.
-- Rollback atomically restores the previous executable set and its previous
-  configuration generation from the old `active.json`. It does not attempt a lossy
-  reverse migration.
-- User edits made after activation remain preserved in the failed generation. They are
-  not silently replayed into the old schema; the Skill may offer an explicit,
-  compatibility-checked recovery after rollback.
-- Unknown user fields are preserved unless a documented migration explicitly replaces
-  them. Credentials remain references and must not appear in backups or logs as clear
-  text beyond their already protected local store.
-- Content cache migrations may discard reproducible cache entries, but must preserve
-  source subscriptions, feedback, reading state, delivery settings, and handoff records.
-
-## Health checks, observation, and rollback
-
-Before activation, `doctor` checks package integrity, runtime compatibility, manifest
-constraints, configuration validity, required local tools, Sidecar protocol support,
-and write access to owned directories. Network or platform authorization failures are
-reported per source and do not become a false global success.
-
-After activation, the first real run is an observation run. A crash, unreadable
-configuration, contract failure, manifest mismatch, or failure to start the core
-runtime automatically restores the previous `active.json`, which restores the prior
-executable and configuration generation together. Source-specific network,
-rate-limit, or expired-login states do not roll back unrelated components; they use
-the source status and fallback rules defined by the local-acquisition design.
-
-Automatic rollback does not silently restore stale content, roll credentials backward,
-or overwrite mutable user state outside the versioned configuration generation.
-
-## First installation
-
-`v0.1.0` does not depend on an updater that has not yet been built. Its supported first
-installation path is intentionally simple:
-
-1. The user opens the canonical GitHub Release and downloads the source archive and
-   checksum file for `v0.1.0`, or asks an Agent capable of installing a repository Skill
-   to install that exact tag.
-2. The user or Agent verifies the archive using the `github-tag-sha256` trust mode and
-   extracts it to a user-selected local directory.
-3. The Agent registers the tagged `SKILL.md` using its normal local Skill mechanism.
-   Follow-up does not modify an Agent's global Skill registry without user approval.
-4. When local Digest or delivery scripts are needed, the installer runs `npm ci` in
-   the tagged `scripts/` directory using Node.js 20 or a compatible supported runtime.
-5. The installation reports the product version from the root `VERSION` file and the
-   release manifest. A mismatch is an installation error.
-
-The `v0.1.0` release notes document these steps. `v0.2.0` adds a verified
-first-install entry point and user-facing `doctor`, but upgrades from `v0.1.0`
-remain explicit and user-confirmed. Automatic discovery, atomic activation, and
-rollback move to the local-acquisition foundation beginning in `v0.3.0`.
-
-## Runtime content compatibility
-
-Release code and executable Prompt behavior are immutable. `v0.1.0` loads Prompt files
-from its tagged local installation by default; it must not automatically replace them
-from a mutable `main` branch. An explicitly configured custom Prompt is user data and
-is reported separately in diagnostics.
-
-Central Feeds remain mutable content services during the migration period, but each
-Feed carries a schema version. The released consumer declares the Feed schema versions
-it supports, validates every Feed before use, and reports an incompatible future schema
-instead of guessing. A schema change that remains compatible may increment a minor Feed
-schema version; an incompatible schema requires a new product release with a transition
-window in which the central generator can publish both representations or the consumer
-can read both. Feed payload changes do not alter the installed product version.
-
-## Release pipeline
-
-A Stable release is produced only from a clean, reviewed commit:
-
-1. Verify repository tests, schemas, secret scanning, license/provenance manifests,
-   generated-file consistency, and clean-install fixtures.
-2. Validate `release-manifest.json` against its schema, the non-circular SHA-256 of
-   canonical sorted `git ls-tree` entries excluding `release-manifest.json`, and the
-   required critical-file SHA-256 hashes. In an extracted archive, validate the critical
-   file hashes; the tracked content digest remains a tag/checkout-only check.
-3. Build release archives from tracked files only and generate a separate checksums
-   Release asset for complete-archive verification. Archive verification relies on the
-   critical file hashes and this checksum because the archive contains no Git metadata.
-4. Install the built archive into a temporary home and run the release-specific
-   clean-install and reinstall-recovery gates before tagging. For `v0.2.0`, these
-   gates also cover the renamed Skill registration, channel-selection migration,
-   `doctor`, and preservation of pre-existing mutable data under
-   `~/.follow-builders`.
-5. Create the signed/annotated immutable `vX.Y.Z` tag.
-6. Let the tag-triggered workflow publish one GitHub Release with manifest, checksums,
-   release archive, release notes, compatibility notes, and any manual authorization
-   requirements; then download the public assets and repeat a checksum and minimal
-   installation smoke check. Executable and configuration rollback exercises become
-   mandatory when the upgrade foundation is introduced in `v0.3.0`.
-
-For `v0.1.0`, reinstall recovery means extracting the same tagged archive into a fresh
-program directory and running `npm ci` again while an existing test
-`~/.follow-builders` contains configuration, custom Prompts, and placeholder delivery
-credentials. The operation must leave that entire user directory byte-for-byte
-unchanged. It does not claim automatic rollback or migration.
-
-Tags and release assets are never replaced. A defective release is deprecated and
-superseded by a new patch version.
-
-## `v0.1.0` baseline
-
-`v0.1.0` establishes versioning without claiming the planned updater exists. It includes:
-
-- the current Skill-first product using centralized public Feeds;
-- the six currently described live Feed categories: X, podcasts, official blogs,
-  Newsletters, academic papers, and Chinese technology media;
-- Digest preparation and current delivery behavior;
-- `VERSION`, `CHANGELOG.md`, the first release manifest, manifest validation, a tracked
-  release archive/checksum build path, and a Stable GitHub Release;
-- release-local Prompt loading and versioned/validated central Feed contracts so the
-  tagged consumer does not execute mutable `main`-branch Prompt behavior;
-- documentation that local acquisition, Adapter management, authorized Sidecars,
-  automated configuration migration, and Skill-driven upgrades are planned rather
-  than present capabilities.
-
-The draft WeChat Docker integration is excluded from `v0.1.0`: it uses an unpinned
-image and exposes a host port outside the approved authenticated localhost-proxy model.
-It must be absent from `v0.1.0` release artifacts and replaced before WeChat is
-released as a supported capability.
-
-## Planned product milestones
-
-| Version | Scope |
+| 版本 | 范围 |
 |---|---|
-| `v0.1.0` | Reproducible centralized-Feed baseline and release metadata |
-| `v0.2.0` | Centralized product closure: 17 official Blogs, channel switches, verified install, `doctor`, and `/follow-up` onboarding |
-| `v0.3.0` | Acquisition Runtime, Signal Batch contract, source registry, controlled vendoring, and RSS/Blog shadow mode |
-| `v0.4.0` | GitHub, Hacker News, Reddit, Techmeme, and arXiv; source-level hybrid migration |
-| `v0.5.0` | YouTube, podcasts, Digg, and managed local tools |
-| `v0.6.0` | Authorized X Adapter with source-scoped consent and fallback |
-| `v0.7.0` | Xiaohongshu and WeChat Sidecars with local-only authenticated control plane |
-| `v0.8.0` | Local-first onboarding, cross-platform diagnostics, rollback, and migration completion |
-| `v0.9.0` | Configuration, Signal Batch, Sidecar, and upgrade contract freeze |
-| `v1.0.0` | Stable local-first product with documented compatibility commitments |
+| `v0.1.0` | 可复现的中心化 Feed 基线与发布元数据 |
+| `v0.2.0` | 17 个官网 Blog、channel switch、candidate pool、Digest/delivery transaction、verified installer、`doctor` 与 `/follow-up` |
+| `v0.3.0` | Acquisition Runtime、Signal Batch、source registry、受控 vendoring 与 RSS/Blog shadow mode |
+| `v0.4.0` | GitHub、Hacker News、Reddit、Techmeme、arXiv 与来源级混合迁移 |
+| `v0.5.0` | YouTube、播客、Digg 与 managed local tools |
+| `v0.6.0` | 获得授权的 X Adapter 与来源级 fallback |
+| `v0.7.0` | 小红书和微信公众号本地认证 Sidecar |
+| `v0.8.0` | local-first Onboarding、跨平台诊断、rollback 与迁移闭环 |
+| `v0.9.0` | 配置、Signal Batch、Sidecar 与升级 contract 冻结 |
+| `v1.0.0` | 稳定 local-first 产品与兼容承诺 |
 
-Central acquisition retirement is a gate-driven milestone, not a reserved version:
-it occurs only after every existing source completes its required shadow runs and
-14-day observation window without an active rollback condition. Reliability,
-security, recovery, and cross-platform checks are release gates throughout the
-roadmap rather than work deferred to a late hardening release.
+中心化采集下线由质量门禁决定，不由固定版本号决定。路线图表达计划，不是已实现能力。
 
-Milestones describe intended scope, not deadlines or already delivered capability.
+## v0.2.0 验收标准
 
-## Release support policy
-
-- Before `v1.0`, the project supports the latest Stable release and one previous minor
-  release for upgrade and rollback testing.
-- From `v1.0`, each minor release supports direct upgrade from the latest patch of the
-  previous two minor releases. Older installations upgrade through documented bridge
-  releases.
-- Security or platform breakage is fixed in a new patch release. Upstream Adapter and
-  Sidecar changes are reviewed, pinned, attributed, and tested before distribution.
-- Release notes separate user-visible changes, source behavior changes, migration
-  actions, authorization actions, security changes, and known limitations.
-
-## `v0.1.0` acceptance criteria
-
-- The release is built from tracked files at a clean, immutable commit.
-- The source archive, manifest, checksums, Tag, and GitHub Release all report `0.1.0`
-  consistently.
-- A clean installation can identify its product version offline and run the documented
-  centralized-Feed preparation path using release-local Prompts.
-- Every published central Feed has a declared schema version, and the released consumer
-  rejects unsupported schemas with an actionable error.
-- The six documented live Feed categories are present; planned local acquisition and
-  Sidecars are not represented as implemented.
-- The release archive contains no untracked files, local credentials, generated login
-  state, unsafe WeChat Docker draft, or unrelated development artifacts.
-- Release verification includes syntax/configuration checks, secret scanning, manifest
-  validation, checksum verification, and a clean-install smoke test.
-
-## Upgrade-foundation acceptance criteria
-
-These criteria become release gates when the upgrade foundation is introduced in
-`v0.3.0`; they do not block the `v0.1.0` baseline or the intentionally narrower
-`v0.2.0` product-closure release:
-
-- A clean installation can identify its product and component versions offline.
-- Upgrade discovery exposes only newer Stable releases and requires confirmation.
-- Failed verification or migration leaves the prior installation active.
-- Configuration, user state, credentials, and Sidecar login data survive compatible
-  upgrades and executable rollback.
-- An authorization-required source can remain on its previous compatible component
-  without blocking unrelated upgrades.
-- No manifest, log, archive, backup, or diagnostic output exposes source or delivery
-  credentials.
-- `v0.1.0` artifacts reproduce the documented centralized-Feed behavior and do not
-  include untracked development files.
+- 所有 version authority 为 `0.2.0`，日期为 `2026-09-07`；
+- manifest 只把当前能力标记为 true，后续能力保持 false；
+- 完整 critical set 和 tracked digest 与冻结 commit 匹配；
+- clean install、reinstall 和 v0.1 upgrade 保留 mutable 用户数据；
+- 新注册名为 `follow-up`，`set up follow-up` 与 `/follow-up` 是唯一用户入口；
+- 72 小时 Blog 发现窗口与 candidate history、daily/weekly 投递窗口明确区分；
+- 60 分门槛、6-10 条目标、跨源排序、不凑数和去重语义有文档与测试；
+- no-update、`partial`、`incomplete-history`、weekly bootstrap、已推未读和
+  `delivery-uncertain` 文案不互相冒充；
+- 不宣称即时 alert、本地采集、Sidecar、长期反馈、reports、分页、显式已读或自动回滚；
+- release archive 不包含未跟踪开发文件、凭据或临时状态。

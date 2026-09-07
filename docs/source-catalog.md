@@ -1,6 +1,6 @@
 # Follow-up 信源目录
 
-更新时间：2026-09-04
+更新时间：2026-09-07
 
 本文记录 Follow-up 的信源分类、当前真实实现和候选扩展范围。它回答“系统现在实际采集什么”和“后续准备接入什么”，不以 README 中的概括性名单代替运行时事实。
 
@@ -37,7 +37,26 @@ Follow-up 同时使用三个维度描述一个信源：
 
 “本次 Feed 中没有新内容”不等于“未实现”；Feed 文件只是一次时间窗内的运行结果。
 
-## 2. 七类用户信源现状
+## 2. v0.2 Digest 与信源时间窗
+
+用户通过 `set up follow-up` 完成 Onboarding，之后可使用 `/follow-up` 请求按需 Digest；
+兼容用户数据继续存放在 `~/.follow-builders/`。自动运行只有 daily 和 weekly，本版本
+**不会在官网发布内容时即时提醒**。
+
+官网 Blog 的 **72 小时**规则是中心采集的发现恢复窗口：每个来源最多检查 12 个发现
+链接并接收 3 篇有效新文章。它不是“只推最近 72 小时”的用户投递规则。投递使用滚动
+candidate Feed 的历史，daily 与 weekly 都只选择符合资格的**未推**候选；成功投递后，
+候选成为**已推未读**，不会在普通自动任务中重复发送。pending 或**投递不确定**同样
+阻止自动重复投递。
+
+所有启用来源进入同一个跨源事件排序，按影响、用户相关性、来源权威性、新颖性和交叉
+印证计分。重要性门槛为 **60 分**，每期目标 **6-10** 条；不足时不凑数，可以只发
+1-5 条。完整检查无达标内容时，daily 发送“今日无重要更新”，weekly 发送“本周无
+重要更新”。`partial` 表示当前来源检查不完整，`incomplete-history` 表示候选历史覆盖
+不足；首次 weekly 在积累并证明 7 个完整历史日之前处于 bootstrap，二者都不能冒充
+完整的无更新结论。
+
+## 3. 七类用户信源现状
 
 | 频道 | 当前有效信源 | 已配置未接入 | 待实现 | 候选 |
 |---|---|---|---|---|
@@ -83,7 +102,7 @@ Follow-up 同时使用三个维度描述一个信源：
 
 汇总：14 个来源通过本地 Node live validator；Google Antigravity、Google Research 和 Perplexity Research 通过浏览器验证了公开索引与真实文章内容，但本地 Node 路径受 DNS/连接路由限制。这里不声称 17 个来源均通过本地 Node live validator。
 
-## 3. 官方一手信源候选池
+## 4. 官方一手信源候选池
 
 下表把机构与具体入口拆开。状态描述 Follow-up 的接入情况，不评价网站本身是否仍在更新。候选 URL 在接入前仍需完成可访问性、RSS/Atom、Sitemap、结构化数据、许可和稳定性核验。
 
@@ -152,7 +171,7 @@ Follow-up 同时使用三个维度描述一个信源：
 | Xiaomi MiMo | [XiaomiMiMo GitHub](https://github.com/XiaomiMiMo) | C | 候选，代码与版本证据 |
 | ModelBest / OpenBMB | [OpenBMB GitHub](https://github.com/OpenBMB) | C | 候选，代码与版本证据 |
 
-## 4. Google Antigravity Blog
+## 5. Google Antigravity Blog
 
 | 字段 | 结论 |
 |---|---|
@@ -165,7 +184,7 @@ Follow-up 同时使用三个维度描述一个信源：
 
 Antigravity Blog 不应替代 Google Research 或 Google DeepMind Research。它适合提供 Agentic Development、产品能力、工程实践和开发者生态信号；涉及底层方法、论文或评测时，应继续关联对应的 R0/R1 原始来源。
 
-## 5. 跨频道发现与证据源
+## 6. 跨频道发现与证据源
 
 这些平台不新增用户可见频道，而是按内容语义归入七类频道。
 
@@ -180,7 +199,7 @@ Antigravity Blog 不应替代 Google Research 或 Google DeepMind Research。它
 | 小红书 | M | 中国 AI 产品、创作者工具和用户反馈 | 待实现，可选授权源 |
 | 微信公众号 | M/R2/P | 指定账号的公司公告、研究解读和行业观察；按账号与文章分类 | 待实现，可选授权源 |
 
-## 6. 推荐接入顺序
+## 7. 推荐接入顺序
 
 1. **继续核验候选入口**：按具体 URL 区分研究、论文、产品、开发文档和代码入口。
 2. **扩展讨论与证据层**：接入 Hacker News、Techmeme、GitHub 等跨频道发现源。
@@ -189,7 +208,7 @@ Antigravity Blog 不应替代 Google Research 或 Google DeepMind Research。它
 
 每个新来源仍须经过 shadow 模式、契约测试、离线 Fixture、来源健康检查和人工相关性抽查，达标后才能进入正式 Digest。
 
-## 7. 当前事实依据
+## 8. 当前事实依据
 
 - 有效来源加载：`scripts/generate-feed.js` 的 `loadSources()`。
 - 官网 Blog 生产配置：`config/feed-blogs.json`。

@@ -23,6 +23,10 @@ import {
 const execFileAsync = promisify(execFile);
 const repositoryRoot = new URL('../../', import.meta.url);
 const buildScript = new URL('../release/build-release.sh', import.meta.url);
+const productVersion = (await readFile(new URL('../../VERSION', import.meta.url), 'utf8')).trim();
+const archiveName = `Follow-up-v${productVersion}.tar.gz`;
+const checksumsName = `Follow-up-v${productVersion}-checksums.txt`;
+const archivePrefix = `Follow-up-v${productVersion}`;
 
 async function run(command, args, options = {}) {
   return execFileAsync(command, args, {
@@ -148,7 +152,7 @@ async function treeDigest(root) {
   return createHash('sha256').update(input).digest('hex');
 }
 
-test('release build creates a deterministic tracked-only v0.1.0 archive and checksum', async (t) => {
+test('release build creates a deterministic tracked-only v0.2.0 archive and checksum', async (t) => {
   const root = await createReleaseRepository(t);
   const firstOutput = join(root, 'dist-first');
   const secondOutput = join(root, 'dist-second');
@@ -156,20 +160,19 @@ test('release build creates a deterministic tracked-only v0.1.0 archive and chec
   await run('sh', [buildScript.pathname, 'HEAD', firstOutput], { cwd: root });
   await run('sh', [buildScript.pathname, 'HEAD', secondOutput], { cwd: root });
 
-  const archiveName = 'Follow-up-v0.1.0.tar.gz';
   const firstArchive = join(firstOutput, archiveName);
   const secondArchive = join(secondOutput, archiveName);
   assert.deepEqual(await readFile(firstArchive), await readFile(secondArchive));
 
-  const checksum = await readFile(join(firstOutput, 'Follow-up-v0.1.0-checksums.txt'), 'utf8');
+  const checksum = await readFile(join(firstOutput, checksumsName), 'utf8');
   assert.match(checksum, new RegExp(`^[a-f0-9]{64}  ${archiveName}\\n$`));
-  await run('shasum', ['-a', '256', '-c', basename(join(firstOutput, 'Follow-up-v0.1.0-checksums.txt'))], {
+  await run('shasum', ['-a', '256', '-c', basename(join(firstOutput, checksumsName))], {
     cwd: firstOutput,
   });
 
   const entries = await listArchive(firstArchive);
-  assert.ok(entries.includes('Follow-up-v0.1.0/VERSION'));
-  assert.ok(entries.includes('Follow-up-v0.1.0/release-manifest.json'));
+  assert.ok(entries.includes(`${archivePrefix}/VERSION`));
+  assert.ok(entries.includes(`${archivePrefix}/release-manifest.json`));
   for (const forbidden of ['.hermes/', 'docker/', '.env', 'node_modules/', 'dist/', 'wechat-integration.md']) {
     assert.equal(entries.some((entry) => entry.includes(forbidden)), false, forbidden);
   }
@@ -191,9 +194,9 @@ test('reinstalling the same archive leaves existing user configuration and crede
   await writeFile(join(userState, '.env'), 'TELEGRAM_BOT_TOKEN=placeholder-only\n');
   const before = await treeDigest(userState);
 
-  const archive = join(output, 'Follow-up-v0.1.0.tar.gz');
+  const archive = join(output, archiveName);
   await run('tar', ['-xzf', archive, '-C', installRoot]);
-  const program = join(installRoot, 'Follow-up-v0.1.0');
+  const program = join(installRoot, archivePrefix);
   await run('npm', ['ci'], {
     cwd: join(program, 'scripts'),
     env: { ...process.env, HOME: fixtureHome, npm_config_cache: join(root, '.npm-cache') },
@@ -218,11 +221,11 @@ test('the exact archive installs and passes archive-supported validation and con
   await run('sh', [buildScript.pathname, 'HEAD', output], { cwd: root });
   await run('tar', [
     '-xzf',
-    join(output, 'Follow-up-v0.1.0.tar.gz'),
+    join(output, archiveName),
     '-C',
     installRoot,
   ]);
-  const program = join(installRoot, 'Follow-up-v0.1.0');
+  const program = join(installRoot, archivePrefix);
   const { NODE_TEST_CONTEXT: _nodeTestContext, ...archiveEnvironment } = process.env;
   await assert.rejects(stat(join(program, '.git')));
   const preflight = await run('node', [
@@ -345,7 +348,7 @@ test('installation docs use archive-safe validation commands after extraction', 
     const documentation = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
     assert.match(documentation, /npm run validate-release:archive/);
     assert.match(documentation, /--archive-critical-only/);
-    assert.match(documentation, /releases\/download\/v0\.1\.0\/release-manifest\.json/);
+    assert.match(documentation, /releases\/download\/v0\.2\.0\/release-manifest\.json/);
     assert.match(documentation, /cmp release-manifest\.json/);
     assert.match(documentation, /npm run test:archive/);
     assert.match(documentation, /tracked content digest/i);

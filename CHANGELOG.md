@@ -2,6 +2,29 @@
 
 All notable changes to Follow-up are documented in this file.
 
+## [0.2.0] - 2026-09-07
+
+### Added
+
+- Added production collection for 17 official Blogs with source-level completeness
+  status and a 72-hour discovery-recovery window.
+- Added executable channel selection, a retained rolling candidate pool, cross-source
+  Digest scoring and selection, and daily or weekly schedule gates.
+- Added an append-only delivery ledger and outbox with at-most-once automatic delivery,
+  explicit resolution for uncertain attempts, and no duplicate automatic resend.
+- Added a verified three-platform installer, immutable installed release pointers,
+  preserved `~/.follow-builders/` user data, and the user-facing `doctor` command.
+- Renamed the installed Skill and user entry point to `follow-up`, with `set up follow-up`
+  and `/follow-up` as the supported onboarding and on-demand invocations.
+
+### Known limitations
+
+- Local acquisition, authenticated Sidecars, long-term feedback learning, industry
+  reports, a paginated personal Feed, explicit read-state interaction, automatic update
+  discovery, and automatic rollback are not implemented in this release.
+- Scheduled delivery is daily or weekly; this release does not send immediate alerts
+  when an official site publishes.
+
 ## [0.1.0] - 2026-09-02
 
 ### Added

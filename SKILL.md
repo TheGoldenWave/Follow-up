@@ -16,16 +16,20 @@ Combine Western and Chinese perspectives into a unified, low-noise attention fee
 centrally and served via public Feeds. Telegram or email delivery still requires the
 user's own delivery credentials, stored locally after explicit authorization.
 
-Release `v0.1.0` has no automatic updater. Its executable Prompt defaults are the
+Release `v0.2.0` has no automatic updater. Its executable Prompt defaults are the
 files bundled with the installed release, not files fetched from a mutable branch.
 Files under `~/.follow-builders/prompts/` remain the highest-priority user overrides.
-The six centralized Feed envelopes are schema-validated before Digest preparation;
-an invalid or unsupported Feed is reported as a source-specific error and contributes
-no payload.
+The six centralized category Feed envelopes and rolling candidate Feed are
+schema-validated before Digest preparation; invalid or unsupported input is reported
+as incomplete rather than becoming trusted payload.
 
-For `v0.1.0`, use only the exact GitHub Release or matching tag after verifying the
-separate checksum and manifest assets. Do not recommend or run `clawhub install` as a
-first-install path; no verified ClawHub artifact is part of this release baseline.
+For `v0.2.0`, use only the exact GitHub Release after verifying its separate checksum
+and manifest assets. Run `node scripts/release/validate-release.js
+--archive-critical-only` before `npm ci`, then use `node scripts/install.js --platform
+<codex|claude-code|custom> --register` and confirm the installed release with
+`doctor`. Upgrades from v0.1 with the legacy registration require
+`--replace-follow-builders`. Do not recommend or run `clawhub install`; no verified
+ClawHub artifact is part of this release.
 
 ## Product Boundary
 
@@ -86,6 +90,20 @@ official blogs, newsletters, academic papers, and Chinese tech. Industry reports
 a low-frequency source plan, not a stable live Feed. Personal Digest preparation
 enforces `enabledChannels` against the rolling `feed-candidates.json`; legacy configs
 without that field keep all six live channels enabled.
+
+Official Blog discovery looks back **72 hours** for collection recovery. That window
+does not define what is delivered. Daily and weekly runs use the eligible **unpushed**
+portion of retained candidate history. A delivered item is pushed, unseen until a
+future explicit read-state interface exists; pushed, unseen items are not normally
+resent. Pending and **delivery uncertain** attempts also suppress automatic duplicates.
+
+All enabled sources compete in one cross-source event ranking. A candidate must reach
+the **60 point threshold**. Target **6-10** selected items, but never pad below the
+threshold; 1-5 items are valid. The first weekly Digest reports
+`incomplete-history` during bootstrap until seven complete history days are proven.
+`partial` means current source coverage is incomplete. A complete run with no
+qualifying content sends the daily or weekly no-important-update message; neither
+`partial` nor `incomplete-history` may claim complete absence of updates. This release does not send immediate alerts for official-site publications.
 
 ## Detecting Platform
 

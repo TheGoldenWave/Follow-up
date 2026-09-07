@@ -1,495 +1,154 @@
 **English** | [中文](README.zh-CN.md)
 
-## Verified installation
+# Follow-up
 
-From a pristine, extracted, verified GitHub Release archive (Node.js 20+):
+Follow-up is a Skill-first personal AI Signal digest. Version `0.2.0` reads six
+centrally generated public Feed channels, ranks important updates across all enabled
+sources, and delivers a daily, weekly, or on-demand Digest. It is derived from
+[follow-builders](https://github.com/zarazhangrui/follow-builders) and keeps compatible
+user data under `~/.follow-builders/`.
 
-```text
-node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] [--register]
-node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
-```
+The supported user entry points are:
 
-`--register` is the explicit approval to create the `follow-up` Skill link. Re-running the command reinstalls the same release while preserving existing mutable user files. Upgrading from `follow-builders` requires `--replace-follow-builders`; the legacy link is removed only after the new link and local doctor checks succeed. The conversational entry point is `/follow-up` after registration.
+- say `set up follow-up` to start onboarding;
+- invoke `/follow-up` for onboarding or an on-demand Digest.
 
-The path `~/.follow-builders/releases/0.2.0` is an immutable version pointer to a verified, randomly named release object in the same `releases` directory. It can be used like a directory, but the installer never writes through that pointer.
+The former product-name invocation is migration history, not a supported user entry
+point in v0.2.
 
-```text
-node scripts/install.js --platform codex --register --replace-follow-builders
-```
+## Install v0.2.0
 
-# Follow-up: AI Signal & Attention Curation
-
-> Follow Builders, Not Influencers — and beyond.
-
-A **Skill-first, plugin-enhanced** personal AI curation system that aggregates content from
-**7 source categories** across the global AI & tech landscape, compresses it into actionable Signals, and delivers it through IM, email, or agent conversations. Built on the
-[follow-builders](https://github.com/zarazhangrui/follow-builders) architecture,
-extended with comprehensive coverage of academic research, newsletters, Chinese tech
-media, and industry reports.
-
-**Philosophy:** Follow people who build products, write original research, and have
-independent opinions — not influencers who regurgitate information. Combine Western
-and Chinese perspectives into a unified, low-noise attention feed.
-
-## Product Positioning
-
-> Follow-up is a Skill-first, plugin-enhanced Signal / Attention curation system. The Skill is the portable interface across agents; a DeepSeek Harness plugin is the planned rich information workspace; fetching, state, scheduling, and delivery remain separate runtime responsibilities.
-
-Follow-up outputs **Signals, not Knowledge** by default:
+Requirements: Node.js 20 or newer and a pristine, extracted, verified GitHub Release
+archive.
 
 ```text
-fetched ≠ trusted
-summarized ≠ read
-delivered ≠ understood
-saved ≠ practice-verified
-```
-
-### Product Structure
-
-| Component | Responsibility |
-|---|---|
-| Follow-up Skill | Installation, onboarding, configuration, on-demand digests, and conversational feedback |
-| DeepSeek Harness Plugin (planned) | Personalized multi-platform information center, topic clustering, recommendation explanations, and batch feedback |
-| Follow-up Core / Contract (planned) | Shared Signal, Topic, Digest, Feedback, Delivery, and Handoff semantics |
-| Feed Pipeline | Fetching, parsing, deduplication, caching, and source health |
-| Delivery Runtime | Scheduling, IM/email delivery, retries, and receipts |
-| Local User State (planned) | Open, ignore, read-later, and learning/project/memory proposal events |
-
-The DeepSeek Harness plugin only projects shared Follow-up Core / State. It does not refetch Feeds, maintain parallel reading state, or become another Knowledge authority.
-
-### Personal AI System Boundary
-
-| System | Responsibility |
-|---|---|
-| LifeSub | Evidence: what actually happened |
-| Follow-up | Signal / Attention: what in the outside world may deserve attention |
-| Malow | Work: which Signals enter a Project / Matter, action, or decision |
-| GoldenWave | Memory: what becomes long-term, governed personal context |
-
-Follow-up never directly or automatically writes authoritative Malow or GoldenWave state. Future integrations may only submit auditable proposals for downstream acceptance and promotion. See the [positioning design](docs/superpowers/specs/2026-08-28-skill-first-positioning-design.md).
-
-### Current Status and Target Direction
-
-The current release still consumes centrally generated public Feeds. This remains the
-documented runtime truth until each replacement source passes shadow-mode acceptance.
-
-The next architecture moves acquisition into each user's local environment:
-
-```text
-Local Scheduler -> Acquisition Runtime -> Source Adapters / Sidecars
-                -> Versioned Signal Batch -> Follow-up Core -> Digest / Delivery
-```
-
-- Users own source API keys, cookies, login sessions, quotas, and related platform risk.
-- Follow-up maintainers do not host shared source credentials or pay source API costs.
-- Mature, license-compatible implementations are reused through audited vendor snapshots;
-  Follow-up does not reimplement platform protocols without a concrete need.
-- GitHub, Hacker News, Reddit, RSS, YouTube, Techmeme, Digg AI 1000, and arXiv run
-  through local Adapters or managed local tools.
-- Xiaohongshu and WeChat Official Accounts use local-only Sidecars for persistent login
-  state. They never rely on a Follow-up-operated service.
-
-See the [local acquisition design](docs/superpowers/specs/2026-09-01-local-acquisition-adapters-design.md)
-and [implementation plan](docs/superpowers/plans/2026-09-02-local-acquisition-adapters.md).
-
-## The 7-Category Source Strategy
-
-Six live Feed categories are currently generated: X, podcasts, official blogs, newsletters, academic papers, and Chinese tech. Industry reports remain a low-frequency source plan and do not yet have a stable live Feed.
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                   Follow-up Signal Digest                           │
-├──────────────────────────────────────────────────────────────────┤
-│ Channel 1 │ AI Builders & Thought Leaders (X/Twitter)             │
-│ Channel 2 │ Top AI Podcasts & Videos                              │
-│ Channel 3 │ Company Official Blogs                                │
-│ Channel 4 │ High-Quality Newsletters                              │
-│ Channel 5 │ Academic Papers & Frontier Research                   │
-│ Channel 6 │ Chinese Tech Ecosystem                                │
-│ Channel 7 │ Industry Reports & Deep Analysis                      │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-### Channel 1: AI Builders & Thought Leaders (X/Twitter)
-
-Track the people actually building the future — researchers, founders, PMs, and
-engineers at leading AI labs and startups. Their tweets are the earliest signal of
-what's coming.
-
-**30+ curated builders** including:
-
-| Category | People |
-|----------|--------|
-| AI Lab Leaders | Sam Altman (OpenAI), Dario Amodei (Anthropic), Demis Hassabis (DeepMind) |
-| Researcher-Builders | Andrej Karpathy, Amanda Askell, Boris Cherny, Swyx |
-| Product Leaders | Josh Woodward (Google Labs), Thariq (Claude Code), Thibault Sottiaux (OpenAI) |
-| Founder-VCs | Amjad Masad (Replit), Guillermo Rauch (Vercel), Garry Tan (YC), Matt Turck (FirstMark) |
-| Independent Voices | Dan Shipper (Every), Zara Zhang, Peter Steinberger, Aaron Levie (Box) |
-
-### Channel 2: Top AI Podcasts & Videos
-
-Deep-dive conversations with the people building AI. Each episode transcript is
-summarized into key insights — no need to watch the full 2-hour video.
-
-**10+ podcasts** including:
-
-- **Latent Space** — the AI engineer's podcast
-- **Training Data** (Sequoia) — founder perspectives
-- **No Priors** (Elad Gil & Sarah Guo) — VC lens on AI
-- **Unsupervised Learning** (Redpoint) — AI startup deep dives
-- **The MAD Podcast** (Matt Turck) — data & AI ecosystem
-- **AI & I** (Dan Shipper / Every) — how AI changes work
-- **Lex Fridman Podcast** — long-form conversations with AI leaders
-- **The Cognitive Revolution** (Nathan Labenz) — AI builders & researchers
-- **Lightcone** (YC) — startup building advice
-- **Acquired** — deep dives into great tech companies
-
-### Channel 3: Company Official Blogs
-
-Primary sources directly from the labs and companies building AI. No middleman, no
-spin — just the technical details and product announcements.
-
-**17 official blogs are in production.** Verification details and the broader candidate inventory are maintained in the [source catalog](docs/source-catalog.md).
-
-| Company | Blog | Focus |
-|---------|------|-------|
-| Anthropic | [anthropic.com/engineering](https://www.anthropic.com/engineering) | Engineering deep-dives |
-| Anthropic | [claude.com/blog](https://claude.com/blog) | Claude product updates |
-| Anthropic | [Interpretability](https://www.anthropic.com/research/team/interpretability) | Interpretability research |
-| Anthropic | [Science](https://www.anthropic.com/science) | Science and research |
-| OpenAI | [Alignment Research](https://alignment.openai.com/) | Alignment research |
-| Google | [Antigravity Blog](https://antigravity.google/blog) | Agentic development and product engineering |
-| Google DeepMind | [deepmind.google/blog](https://deepmind.google/blog) | Research breakthroughs |
-| Google Research | [research.google/blog](https://research.google/blog/) | Applied AI research |
-| Microsoft Research | [microsoft.com/research](https://www.microsoft.com/en-us/research/blog) | Systems & applied AI |
-| Amazon | [Amazon Science](https://www.amazon.science/blog/) | Science and applied research |
-| IBM | [IBM Research](https://research.ibm.com/blog) | Research and engineering |
-| Perplexity | [Research](https://research.perplexity.ai/) | Research articles |
-| Alibaba | [Qwen Blog](https://qwen.ai/blog/) | Models, research, and products |
-| Moonshot AI | [Kimi Research & Tech](https://www.kimi.ai/blog/) | Research and engineering |
-| Baidu | [ERNIE Blog](https://ernie.baidu.com/blog/zh/) | Models, research, and products |
-| MiniMax | [MiniMax Blog](https://www.minimax.cn/blog) | Research and products |
-| Apple | [Machine Learning Research](https://machinelearning.apple.com/) | Machine learning research |
-
-### Channel 4: High-Quality Newsletters
-
-Curated newsletters that distill the firehose of AI news into structured, actionable
-briefs. These are written by domain experts who read everything so you don't have to.
-
-| Newsletter | Author | Cadence | Focus |
-|------------|--------|---------|-------|
-| **The Batch** | Andrew Ng / DeepLearning.AI | Weekly | AI news + expert commentary |
-| **Ben's Bites** | Ben Tossell | Daily | AI tools & products in 5 min |
-| **TLDR AI** | TLDR team | Daily | Structured AI news brief |
-| **Import AI** | Jack Clark (Anthropic) | Weekly | AI policy, research, industry |
-| **The Algorithmic Bridge** | Alberto Romero | Weekly | Critical AI analysis |
-| **AI Snake Oil** | Arvind Narayanan & Sayash Kapoor | Monthly | AI hype debunking |
-| **Stratechery** | Ben Thompson | Daily | Tech strategy analysis |
-| **The Gradient** | The Gradient team | Weekly | AI research overview |
-
-### Channel 5: Academic Papers & Frontier Research
-
-Track the bleeding edge of AI research — from arXiv preprints and top conference
-proceedings to major award announcements.
-
-**Sources:**
-
-- **arXiv** — cs.AI, cs.CL, cs.CV, cs.LG, cs.MA (multi-agent), stat.ML
-- **Papers With Code** — trending papers + state-of-the-art benchmarks
-- **Semantic Scholar** — highly-cited recent papers, author alerts
-- **Conference Proceedings** — NeurIPS, ICML, ICLR, CVPR, ACL, EMNLP, AAAI, SIGGRAPH
-- **Major Awards** — Turing Award, NeurIPS Best Paper, ICML Outstanding Paper
-
-**Filtering strategy:** Only surface papers that are:
-1. Highly cited or trending (top 5% in downloads/mentions)
-2. From top-tier venues (NeurIPS/ICML/ICLR/CVPR/ACL)
-3. From major labs (OpenAI, Anthropic, DeepMind, Meta FAIR, etc.)
-4. Directly relevant to AI product management, agents, LLMs, or multimodal AI
-
-### Channel 6: Chinese Tech Ecosystem
-
-The Chinese AI landscape moves at a different pace and often in different directions.
-Track the Chinese perspective through official media, independent blogs, and WeChat
-accounts.
-
-**Sources:**
-
-| Type | Source | Focus |
-|------|--------|-------|
-| 科技媒体 | 机器之心 (jiqizhixin) | AI news + technical analysis |
-| 科技媒体 | 量子位 (QbitAI) | AI industry news |
-| 科技媒体 | 少数派 (sspai) | Productivity & tools |
-| 深度分析 | 36氪 (36Kr) | Startup & tech industry |
-| 学术媒体 | 新智元 (AI Era) | AI research & industry |
-| 微信公众号 | 李开复、张一鸣、陆奇等 | Individual thought leaders |
-| 微信公众号 | 各AI公司官方号 | Company announcements |
-| 学术机构 | 清北AI实验室、中科院自动化所 | Chinese academic research |
-
-### Channel 7: Industry Reports & Deep Analysis
-
-Occasional deep-dive reports from investment banks, consulting firms, and research
-institutes that provide macro-level context.
-
-**Sources:**
-
-- VC annual reports: a16z, Sequoia, FirstMark, Bessemer
-- State of AI Report (Nathan Benaich / Air Street Capital)
-- McKinsey / BCG / Gartner AI reports
-- CB Insights AI trends
-- Stanford HAI AI Index Report
-- 亿欧智库 / 艾瑞咨询 (Chinese industry reports)
-
-## What You Get
-
-A daily or weekly actionable Signal digest delivered to your preferred messaging app with:
-
-- **AI Builders Pulse** — What top builders are saying on X (1-2 sentences each)
-- **Podcast Deep Dives** — Key takeaways from latest episodes (200-400 words)
-- **Official Blog Updates** — New product launches, research findings, policy changes
-- **Newsletter Roundup** — Cross-referenced highlights from all tracked newsletters
-- **Paper Spotlight** — 1-2 notable papers with plain-English explanations
-- **Chinese Tech Brief** — Curated highlights from Chinese AI media
-- **Report Alerts (planned)** — When major industry reports drop
-
-All with links to original content. Available in English, Chinese, or bilingual. A Digest is not automatically written to GoldenWave and does not imply that you have read, understood, or endorsed it.
-
-## Quick Start
-
-1. Install the exact verified GitHub Release using the instructions below
-2. Say "set up follow-up" or invoke `/follow-up`
-3. The agent walks you through setup conversationally
-
-The agent will ask you:
-- How often you want your digest (daily or weekly) and what time
-- What language you prefer (English, Chinese, or bilingual)
-- How you want it delivered (in-chat, Telegram, email)
-
-No source-fetching API keys are required from users because content is fetched centrally. Telegram or email delivery still requires the user's own delivery credentials.
-
-The unified `/follow-up` entry starts onboarding until configuration is complete, then
-runs an on-demand Digest. Automatic delivery supports daily or weekly schedules; this
-release does not send immediate alerts when an official site publishes.
-
-Scheduled delivery requires three independent approvals: completed onboarding, the
-schedule, and the exact delivery destination. Manual runs do not require schedule
-approval. Manual Telegram/email sends still require persistent destination approval or
-an immediate confirmation; stdout is allowed for the current operation. An empty channel
-selection is a configuration action, not a no-update notification.
-
-## Customizing Your Digest
-
-The skill uses plain-English prompt files to control how each channel is summarized.
-You can customize them through conversation or by editing directly.
-
-### Prompt Files
-
-| File | Controls |
-|------|----------|
-| `prompts/digest-intro.md` | Overall digest format and tone |
-| `prompts/summarize-tweets.md` | How X/Twitter posts are summarized |
-| `prompts/summarize-podcast.md` | How podcast episodes are summarized |
-| `prompts/summarize-blogs.md` | How blog posts are summarized |
-| `prompts/summarize-newsletter.md` | How newsletters are summarized |
-| `prompts/summarize-paper.md` | How academic papers are summarized |
-| `prompts/summarize-zh-sources.md` | How Chinese sources are summarized |
-| `prompts/translate.md` | How English content is translated to Chinese |
-
-### Channel Cadence (Target Strategy)
-
-The target cadence differs by source category:
-- **Daily:** Builders + Newsletters + Blogs (fast signals)
-- **Weekly:** Podcasts + Papers + Chinese Tech (deep dives)
-- **Monthly:** Industry Reports + Conference Roundups (macro context)
-
-## Default Sources
-
-### AI Builders on X (30+)
-[Andrej Karpathy](https://x.com/karpathy), [Swyx](https://x.com/swyx), [Josh Woodward](https://x.com/joshwoodward), [Boris Cherny](https://x.com/bcherny), [Thibault Sottiaux](https://x.com/thsottiaux), [Peter Yang](https://x.com/petergyang), [Nan Yu](https://x.com/thenanyu), [Madhu Guru](https://x.com/realmadhuguru), [Amanda Askell](https://x.com/AmandaAskell), [Cat Wu](https://x.com/_catwu), [Thariq](https://x.com/trq212), [Google Labs](https://x.com/GoogleLabs), [Amjad Masad](https://x.com/amasad), [Guillermo Rauch](https://x.com/rauchg), [Alex Albert](https://x.com/alexalbert__), [Aaron Levie](https://x.com/levie), [Ryo Lu](https://x.com/ryolu_), [Garry Tan](https://x.com/garrytan), [Matt Turck](https://x.com/mattturck), [Zara Zhang](https://x.com/zarazhangrui), [Nikunj Kothari](https://x.com/nikunj), [Peter Steinberger](https://x.com/steipete), [Dan Shipper](https://x.com/danshipper), [Aditya Agarwal](https://x.com/adityaag), [Sam Altman](https://x.com/sama), [Claude](https://x.com/claudeai), [Dario Amodei](https://x.com/dario_amodei_h), [Nathan Labenz](https://x.com/nathanlabenz), [Jack Clark](https://x.com/jackclarksf), [Ben Tossell](https://x.com/bentossell)
-
-### Podcasts (10+)
-- [Latent Space](https://www.youtube.com/@LatentSpacePod)
-- [Training Data](https://www.youtube.com/playlist?list=PLOhHNjZItNnMm5tdW61JpnyxeYH5NDDx8)
-- [No Priors](https://www.youtube.com/@NoPriorsPodcast)
-- [Unsupervised Learning](https://www.youtube.com/@RedpointAI)
-- [The MAD Podcast with Matt Turck](https://www.youtube.com/@DataDrivenNYC)
-- [AI & I by Every](https://www.youtube.com/playlist?list=PLuMcoKK9mKgHtW_o9h5sGO2vXrffKHwJL)
-- [Lex Fridman Podcast](https://www.youtube.com/@lexfridman)
-- [The Cognitive Revolution](https://www.youtube.com/@CognitiveRevolutionPodcast)
-- [Lightcone (YC)](https://www.youtube.com/@ycombinator)
-- [Acquired](https://www.youtube.com/@AcquiredFM)
-
-### Official Blogs (17)
-[Anthropic Engineering](https://www.anthropic.com/engineering), [Claude Blog](https://claude.com/blog), [Anthropic Interpretability](https://www.anthropic.com/research/team/interpretability), [Anthropic Science](https://www.anthropic.com/science), [OpenAI Alignment Research](https://alignment.openai.com/), [Google Antigravity](https://antigravity.google/blog), [Google DeepMind](https://deepmind.google/blog/), [Google Research](https://research.google/blog/), [Microsoft Research](https://www.microsoft.com/en-us/research/blog/), [Amazon Science](https://www.amazon.science/blog/), [IBM Research](https://research.ibm.com/blog), [Perplexity Research](https://research.perplexity.ai/), [Qwen Blog](https://qwen.ai/blog/), [Kimi Research & Tech](https://www.kimi.ai/blog/), [ERNIE Blog](https://ernie.baidu.com/blog/zh/), [MiniMax Blog](https://www.minimax.cn/blog), and [Apple Machine Learning Research](https://machinelearning.apple.com/). See the [source catalog](docs/source-catalog.md) for discovery and verification status.
-
-### Newsletters (8)
-- [The Batch by Andrew Ng](https://www.deeplearning.ai/the-batch)
-- [Ben's Bites](https://bensbites.beehiiv.com)
-- [TLDR AI](https://tldr.tech/ai)
-- [Import AI by Jack Clark](https://importai.substack.com)
-- [The Algorithmic Bridge](https://www.thealgorithmicbridge.com)
-- [AI Snake Oil](https://www.aisnakeoil.com)
-- [Stratechery by Ben Thompson](https://stratechery.com)
-- [The Gradient](https://thegradient.pub)
-
-### Academic Sources
-- [arXiv cs.AI / cs.CL / cs.LG / cs.CV](https://arxiv.org)
-- [Papers With Code](https://paperswithcode.com)
-- [Semantic Scholar](https://www.semanticscholar.org)
-- [NeurIPS Proceedings](https://proceedings.neurips.cc)
-- [ICML Proceedings](https://proceedings.mlr.press)
-- [ICLR Papers](https://openreview.net/group?id=ICLR.cc)
-- [CVPR / ACL / EMNLP / AAAI](https://openaccess.thecvf.com)
-
-### Chinese Tech Ecosystem
-- [机器之心 (jiqizhixin.com)](https://www.jiqizhixin.com)
-- [量子位 (QbitAI)](https://www.qbitai.com)
-- [少数派 (sspai.com)](https://sspai.com)
-- [36氪 (36kr.com)](https://36kr.com)
-- [新智元 (AI Era)](https://www.aiera.com.cn)
-
-### Industry Reports
-- [State of AI Report](https://www.stateof.ai)
-- [Stanford HAI AI Index](https://hai.stanford.edu/ai-index)
-- [a16z AI Canon](https://a16z.com/ai-canon)
-- [CB Insights AI Research](https://www.cbinsights.com/research/artificial-intelligence)
-
-## How It Works
-
-### Current release
-
-1. **Central Feed generation:** GitHub Actions run daily to fetch content from six
-   live categories (X/Twitter API, podcast RSS and Pod2Text transcripts,
-   configuration-driven RSS/Sitemap/HTML/JSON discovery for official blogs,
-   Newsletter RSS, arXiv RSS for papers, and Chinese technology RSS)
-2. **Your agent fetches the feed:** One HTTP request, no API keys needed
-3. **AI remixes Signals:** Your agent uses the prompt files to remix raw content
-   into a structured, scannable digest tailored to your preferences
-4. **Digest delivered:** To your messaging app or directly in chat
-5. **Feedback and handoff (planned):** A DeepSeek Harness information center supports deeper review and explicit actions, then submits proposals to Malow or GoldenWave
-
-### Development roadmap
-
-1. **Foundation:** introduce the Python Acquisition Runtime, versioned Signal Batch,
-   health taxonomy, local configuration, and audited upstream provenance.
-2. **Keyless sources:** migrate RSS, GitHub, Hacker News, and keyless Reddit into shadow mode.
-3. **Managed local tools:** add YouTube via `yt-dlp` and Digg, Techmeme, and arXiv via
-   pinned Printing Press CLIs.
-4. **Authorized sources:** add X, Xiaohongshu, and WeChat Official Accounts with explicit
-   user authorization and local Sidecar isolation.
-5. **Per-source cutover:** switch sources independently after quality, security, and
-   stability gates; retain a 14-day rollback window.
-6. **Central retirement:** remove the public Feed runtime only after all existing sources
-   complete local migration and observation.
-
-## Installation
-
-Follow-up `v0.1.0` requires Node.js 20 or newer. Install the exact tag and use
-`npm ci` so dependencies match the release lockfile. This release continues to consume
-the six centralized public Feeds, validates their schema before preparing a Digest,
-and uses Prompts from the installed tag unless a local user override exists. It does
-not include automatic update discovery or upgrading.
-
-### Verify the release archive
-
-```bash
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0.tar.gz
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/Follow-up-v0.1.0-checksums.txt
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.1.0/release-manifest.json
-shasum -a 256 -c Follow-up-v0.1.0-checksums.txt
-tar -xzf Follow-up-v0.1.0.tar.gz
-cmp release-manifest.json Follow-up-v0.1.0/release-manifest.json
-cd Follow-up-v0.1.0/scripts
-node release/validate-release.js --archive-critical-only
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/Follow-up-v0.2.0.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/Follow-up-v0.2.0-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/release-manifest.json
+shasum -a 256 -c Follow-up-v0.2.0-checksums.txt
+tar -xzf Follow-up-v0.2.0.tar.gz
+cmp release-manifest.json Follow-up-v0.2.0/release-manifest.json
+cd Follow-up-v0.2.0
+node scripts/release/validate-release.js --archive-critical-only
+cd scripts
 npm ci
 npm run validate-release:archive
 npm run test:archive
+cd ..
+node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] --register
+node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
 ```
 
-The checksums asset authenticates the complete archive within the declared GitHub
-trust boundary. The manifest inside the tag separately records a non-circular digest
-of tracked Git entries and SHA-256 hashes for critical release files. Specifically,
-`git-ls-tree-sha256-v1` hashes the raw, NUL-terminated records from
-`git ls-tree -r -z --full-tree`, preserving each path's Git mode, type, blob object ID,
-and byte-order position while excluding only `release-manifest.json` to avoid
-self-reference.
+`--register` explicitly approves creation of the `follow-up` Skill link. The installer
+supports Codex, Claude Code, and a custom absolute Skill directory. Reinstalling the
+same verified release preserves mutable configuration, custom Prompts, credentials,
+delivery history, and candidate state under `~/.follow-builders/` byte for byte.
 
-Archive validation checks the schema, version, package lock, runtime, changelog, Feed
-and Prompt contracts, and every critical-file SHA-256. The tracked content digest is
-tag/checkout-only because an exact source archive intentionally contains no `.git`
-object database; validate it from the matching tag checkout with `npm run validate-release`.
-The dependency-free critical-file preflight runs before `npm ci`, but it necessarily
-executes the validator while checking the validator's own hash. That self-verification
-cannot establish trust by itself; the separately downloaded manifest asset, checksum,
-and resolved protected tag are the external trust anchors.
+To upgrade from v0.1 when an old `follow-builders` registration exists, add
+`--replace-follow-builders`. The installer removes the old link only after the new
+link and local `doctor` checks succeed; it never renames or removes the user-data
+directory.
 
-### Release maintainer precondition
+`doctor` verifies the installed version and manifest, Node runtime, dependencies,
+configuration, Skill registration, candidate Feed history, unresolved delivery
+attempts, and network freshness. A network-only warning uses exit code 2; a local
+integrity or configuration failure uses exit code 1.
 
-The tag workflow does not make GitHub assets or tags immutable by itself. Before Task 6
-publishes a release, a repository administrator must enable a ruleset that protects
-`v*` tags and enable GitHub immutable releases, verify both settings externally, then
-set repository variable `RELEASE_IMMUTABILITY_CONFIRMED` to `true`. The workflow refuses
-publication without that confirmation and still refuses any already-existing release
-as defense in depth. Task 6 must re-check the external settings rather than treating the
-repository variable as proof.
+The dependency-free `--archive-critical-only` check must run before `npm ci`. The
+separate release checksum authenticates the complete archive within the declared
+GitHub trust boundary; archive validation then checks every manifest-declared critical
+file. The tracked content digest is recomputed only from the matching Git checkout
+because an extracted archive contains no Git object database. This release has no
+verified ClawHub first-install path and no automatic updater.
 
-After verification, register the extracted `Follow-up-v0.1.0` directory through your
-agent's local Skill mechanism. This exact GitHub Release archive is the only documented
-first-install source for Hermes, OpenClaw, Claude Code, and other supported agents in
-`v0.1.0`. The project does not provide a verified ClawHub installation path.
+For maintainers, the release workflow is enabled only after an administrator has
+externally confirmed a ruleset that protects `v*` tags and GitHub immutable releases,
+then set `RELEASE_IMMUTABILITY_CONFIRMED=true`. The variable is a gate, not proof by
+itself. Running the validator while checking the validator's own hash is
+self-verification and cannot establish trust alone; the protected tag, separately
+downloaded manifest, and complete-archive checksum remain the external anchors.
 
-To move to a later release, verify and install that release's exact tag manually.
-`v0.1.0` never replaces program files or changes `~/.follow-builders` automatically.
+## What v0.2.0 Includes
+
+Six live centralized channels are available:
+
+| Channel | Current source path |
+|---|---|
+| X builders | Curated builder accounts |
+| Podcasts | RSS and available transcripts |
+| Official Blogs | 17 production official sites |
+| Newsletters | Configured newsletter Feeds |
+| Academic | arXiv-based research Feed |
+| Chinese tech | Configured Chinese technology Feeds |
+
+Industry reports remain planned and are not a seventh live Feed. The complete factual
+inventory, including [Google Antigravity Blog](https://antigravity.google/blog), is in
+the [source catalog](docs/source-catalog.md).
+
+## Discovery, History, and Ranking
+
+Official Blog collection inspects the most recent **72 hours** and up to 12 discovered
+links per source, then accepts at most three valid new posts per source in one run.
+This is a discovery-recovery window, not the user's delivery window.
+
+The rolling candidate Feed retains history independently. Daily and weekly Digests
+consider the eligible **unpushed** portion of that history, not simply everything
+published in the last 72 hours. A successfully delivered item becomes pushed, unseen
+until richer read-state interaction exists; pushed, unseen items are not automatically
+resent. Pending or delivery-uncertain attempts also block automatic duplicates.
+
+All enabled sources compete in one cross-source ranking. Candidates are clustered by
+event and scored out of 100 for impact, user relevance, source authority, novelty, and
+corroboration. The importance threshold is **60 points**. Selection targets **6-10**
+items, caps concentration by source and channel, and never pads a Digest: 1-5 items are
+valid when only that many qualify.
+
+## Delivery Outcomes
+
+Automatic delivery runs only after onboarding, schedule approval, and approval of the
+exact destination. v0.2 supports daily and weekly schedules; it **does not send immediate alerts**
+when an official site publishes.
+
+- A complete run with qualifying items sends the ranked Digest.
+- A complete daily run without qualifying items sends "Today: no important updates";
+  a complete weekly run sends "This week: no important updates".
+- `partial` means one or more enabled sources were not checked completely. Available
+  qualifying items may be sent, but Follow-up does not claim that no important update
+  exists.
+- `incomplete-history` means the requested interval is not fully covered. The first
+  weekly Digest remains in this bootstrap state until seven complete history days are
+  proven; the available interval is disclosed instead.
+- `delivery-uncertain` (delivery uncertain) means a provider handoff may have happened but cannot be
+  confirmed. Follow-up keeps the attempt pending and requires explicit manual
+  resolution; it does not retry or fall back automatically.
+
+An empty channel selection produces `no-channels`, not a no-update message.
 
 ## Configuration
 
-All settings are stored in `~/.follow-builders/config.json`:
+Onboarding writes `~/.follow-builders/config.json`. The six stable `enabledChannels`
+values are `x`, `podcasts`, `blogs`, `newsletters`, `academic`, and `zh-tech`. A missing
+field keeps all six enabled for v0.1 compatibility; an empty array is valid and pauses
+Digest generation.
 
-```json
-{
-  "platform": "other",
-  "language": "bilingual",
-  "onboardingComplete": true,
-  "enabledChannels": ["blogs", "academic", "zh-tech"],
-  "schedule": {
-    "frequency": "daily",
-    "time": "08:00",
-    "timezone": "Asia/Shanghai",
-    "approved": true,
-    "approvedAt": "2026-09-06T07:00:00.000Z"
-  },
-  "delivery": {
-    "method": "stdout",
-    "approved": true,
-    "approvedAt": "2026-09-06T07:00:00.000Z"
-  }
-}
-```
+Scheduled runs require separate, current approvals for onboarding, schedule, and the
+exact delivery destination. Manual `/follow-up` runs do not require schedule approval;
+manual Telegram or email delivery still requires destination approval or immediate
+confirmation.
 
-The nested `schedule` object is the v0.2 canonical form. Legacy top-level `frequency`,
-`deliveryTime`, `timezone`, and `weeklyDay` fields remain readable for migration.
-Existing user data stays in `~/.follow-builders/`; upgrading the Skill registration
-must not rename or delete that directory.
+## Product Boundary
 
-## Privacy
+v0.2.0 uses centralized public Feeds. It does **not** implement local acquisition,
+authenticated Sidecars, long-term feedback learning, industry-report ingestion, a
+paginated personal Feed, explicit read/unread actions, automatic update discovery, or
+automatic rollback. These remain later-version work. A Signal or delivered Digest is
+not evidence that the user read, understood, or endorsed it, and Follow-up never
+automatically writes authoritative Malow or GoldenWave state.
 
-- Current release: no source-fetching API keys are provided to the Skill because public content is fetched centrally
-- Target local acquisition: source credentials and costs belong to the user and remain on the user's machine
-- Follow-up will not operate shared login sessions, source credentials, or acquisition Sidecars
-- Xiaohongshu and WeChat Sidecars bind only to the local machine and expose no credential-export API
-- If you use Telegram/email delivery, those keys are stored locally in `~/.follow-builders/.env`
-- The skill only reads public content
-- Your configuration and custom prompts stay on your machine
-- Reading and feedback state is not implemented yet; future state must remain local and separate from public Feeds and product code
+## License and Authorization
 
-## License and authorization
-
-Follow-up is distributed under the MIT terms in [LICENSE](LICENSE). Upstream-derived code from
-`zarazhangrui/follow-builders` is included under confirmed MIT authorization recorded
-through maintainer attestation on 2026-09-02. The public upstream GitHub repository had
-no license file when reviewed; this project does not claim that repository itself is
+Follow-up is distributed under the MIT terms in [LICENSE](LICENSE). Upstream-derived
+code from `zarazhangrui/follow-builders` is included under confirmed MIT authorization
+recorded through maintainer attestation on 2026-09-02. The public upstream repository
+had no license file when reviewed, so this project does not claim that repository was
 publicly MIT licensed. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
----
-
-*Original project: [follow-builders](https://github.com/zarazhangrui/follow-builders) by Zara Zhang*
-*Extended by GoldenWave with multi-source Signal / Attention curation*

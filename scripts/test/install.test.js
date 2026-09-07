@@ -12,6 +12,12 @@ import { parseInstallArgs, runInstaller, runReleaseDoctor } from '../install.js'
 
 const execFileAsync = promisify(execFile);
 
+test('dependency installation has no product installer lifecycle', async () => {
+  const packageJson = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(Object.hasOwn(packageJson.scripts, 'install'), false);
+  assert.equal(packageJson.scripts['install:follow-up'], 'node install.js');
+});
+
 async function fixture() {
   const base = await fs.realpath(await fs.mkdtemp(join(tmpdir(), 'follow-install-')));
   const root = join(base, 'archive'); const home = join(base, 'home');
