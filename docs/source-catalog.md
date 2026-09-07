@@ -82,23 +82,23 @@ candidate Feed 的历史，daily 与 weekly 都只选择符合资格的**未推*
 
 | ID | 来源 | 发现方式 | 状态 | 联网验证 |
 |---|---|---|---|---|
-| `anthropic-engineering` | Anthropic Engineering | Sitemap + HTML | 已实现 | Node-live |
-| `claude-blog` | Claude Blog | HTML | 已实现 | Node-live |
-| `anthropic-interpretability` | Anthropic Interpretability | HTML | 已实现 | Node-live |
-| `anthropic-science` | Anthropic Science | HTML | 已实现 | Node-live |
-| `openai-alignment` | OpenAI Alignment Research Blog | RSS + HTML | 已实现 | Node-live |
-| `google-antigravity` | Google Antigravity Blog | RSS + HTML | 已实现 | Browser-live；本地 Node 网络路由受阻 |
-| `google-deepmind` | Google DeepMind Blog | Sitemap + HTML | 已实现 | Node-live |
-| `google-research` | Google Research Blog | RSS + HTML | 已实现 | Browser-live；本地 Node 网络路由受阻 |
-| `microsoft-research` | Microsoft Research Blog | HTML + RSS | 已实现 | Node-live |
-| `amazon-science` | Amazon Science Blog | RSS + HTML | 已实现 | Node-live |
-| `ibm-research` | IBM Research Blog | RSS + HTML | 已实现 | Node-live；12 个候选、3 篇有效文章，另有 1 个非致命禁止重定向 |
-| `perplexity-research` | Perplexity Research Articles | 根索引 HTML + Sitemap | 已实现 | Browser-live；本地 Node 网络路由受阻 |
-| `qwen-blog` | Qwen Blog | JSON + HTML | 已实现 | Node-live；12 个候选、3 篇有效文章 |
-| `kimi-blog` | Kimi Research & Tech Blog | HTML + Sitemap | 已实现 | Node-live；9 个候选、3 篇有效文章 |
-| `ernie-blog` | ERNIE Blog | RSS + HTML | 已实现 | Node-live |
-| `minimax-blog` | MiniMax Blog | Sitemap + HTML | 已实现 | Node-live |
-| `apple-ml-research` | Apple Machine Learning Research | RSS + Sitemap | 已实现 | Node-live |
+| `blog:anthropic-engineering` | Anthropic Engineering | Sitemap + HTML | 已实现 | Node-live |
+| `blog:claude-blog` | Claude Blog | HTML | 已实现 | Node-live |
+| `blog:anthropic-interpretability` | Anthropic Interpretability | HTML | 已实现 | Node-live |
+| `blog:anthropic-science` | Anthropic Science | HTML | 已实现 | Node-live |
+| `blog:openai-alignment` | OpenAI Alignment Research Blog | RSS + HTML | 已实现 | Node-live |
+| `blog:google-antigravity` | Google Antigravity Blog | RSS + HTML | 已实现 | Browser-live；本地 Node 网络路由受阻 |
+| `blog:google-deepmind` | Google DeepMind Blog | Sitemap + HTML | 已实现 | Node-live |
+| `blog:google-research` | Google Research Blog | RSS + HTML | 已实现 | Browser-live；本地 Node 网络路由受阻 |
+| `blog:microsoft-research` | Microsoft Research Blog | HTML + RSS | 已实现 | Node-live |
+| `blog:amazon-science` | Amazon Science Blog | RSS + HTML | 已实现 | Node-live |
+| `blog:ibm-research` | IBM Research Blog | RSS + HTML | 已实现 | Node-live；12 个候选、3 篇有效文章，另有 1 个非致命禁止重定向 |
+| `blog:perplexity-research` | Perplexity Research Articles | 根索引 HTML + Sitemap | 已实现 | Browser-live；本地 Node 网络路由受阻 |
+| `blog:qwen-blog` | Qwen Blog | JSON + HTML | 已实现 | Node-live；12 个候选、3 篇有效文章 |
+| `blog:kimi-blog` | Kimi Research & Tech Blog | HTML + Sitemap | 已实现 | Node-live；9 个候选、3 篇有效文章 |
+| `blog:ernie-blog` | ERNIE Blog | RSS + HTML | 已实现 | Node-live |
+| `blog:minimax-blog` | MiniMax Blog | Sitemap + HTML | 已实现 | Node-live |
+| `blog:apple-ml-research` | Apple Machine Learning Research | RSS + Sitemap | 已实现 | Node-live |
 
 汇总：14 个来源通过本地 Node live validator；Google Antigravity、Google Research 和 Perplexity Research 通过浏览器验证了公开索引与真实文章内容，但本地 Node 路径受 DNS/连接路由限制。这里不声称 17 个来源均通过本地 Node live validator。
 

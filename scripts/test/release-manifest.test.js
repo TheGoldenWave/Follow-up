@@ -114,6 +114,7 @@ test('manifest records non-circular tracked content and critical-file integrity'
     'contracts/digest-curation-request.schema.json',
     'contracts/digest-selection.schema.json',
     'contracts/release-manifest.schema.json',
+    'docs/source-catalog.md',
     'docs/third-party/v0.1.0-dependencies.md',
     'prompts/curate-digest.md',
     'prompts/digest-intro.md',
@@ -213,6 +214,27 @@ test('frozen user documentation states the v0.2 product boundary in both languag
     assert.match(content, /(?:codex|claude-code|custom)/i, path);
     assert.match(content, /--archive-critical-only/, path);
   }
+});
+
+test('source catalog production Blog IDs exactly match the namespaced runtime config', async () => {
+  const catalog = await readFile(new URL('docs/source-catalog.md', repositoryRoot), 'utf8');
+  const productionSection = catalog.match(
+    /^### 生产 Blog 来源\n([\s\S]*?)(?=^##\s)/m,
+  )?.[1];
+  assert.ok(productionSection, 'production Blog section');
+
+  const catalogIds = [...productionSection.matchAll(/^\| `([^`]+)` \|/gm)]
+    .map((match) => match[1]);
+  const config = await readJson('config/feed-blogs.json');
+  const configuredIds = config.sources.map((source) => source.id);
+
+  assert.equal(catalogIds.length, 17);
+  assert.equal(new Set(catalogIds).size, catalogIds.length);
+  assert.ok(catalogIds.every((id) => /^blog:[a-z0-9-]+$/.test(id)));
+  assert.deepEqual(
+    catalogIds.toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right))),
+    configuredIds.toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right))),
+  );
 });
 
 test('tracked content digest changes for tracked add, remove, content, and mode changes', {

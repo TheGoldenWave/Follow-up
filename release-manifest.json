@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "00268732ad44f161de3fdb2fe5e1babc68bd8256981607ce782edef18bd01ec8"
+      "digest": "abb5bcfe9677d5e702cafc3f44c19d792107eb3c608be52fdbd6a3b841ca36aa"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -56,7 +56,8 @@
         "contracts/central-feed.schema.json": "555b2fa536db5a90989eea416ac01651d419e92934bbc11cc9b404694ab058d2",
         "contracts/digest-curation-request.schema.json": "bb77723741fccaf3c1bcd08845a321d4f0c105477e633ea4d49dcce58e36f19a",
         "contracts/digest-selection.schema.json": "a11a2e794f123f29db9189ebffb5588f79b081db2971589a6a6b9e88afdb9db1",
-        "contracts/release-manifest.schema.json": "73cb59262a6c2eca0a42b1be8d45724b5856b1ffa36719e2c20c090e0e951d2d",
+        "contracts/release-manifest.schema.json": "ff86823ea1cc877bc64eed8b745828fe1820060c81055a60f6802a1fd29a6998",
+        "docs/source-catalog.md": "3c89a975ba88bb1b69b1178a04fe230df49759b540ac72c96832e909a825a7bf",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
         "prompts/digest-intro.md": "5d25f2184b8bbacd910fcbe4547f02b83af76eb03f57f3b0bef02c8d2e1b91c5",
@@ -96,7 +97,7 @@
         "scripts/release/build-release.sh": "a96dd85222d22237986caaa198a390b511bf96f46885224f4a78e5b1257178c8",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
         "scripts/release/scan-secrets.js": "5879411abcf32c30609d336b1a28cf2323b4df51964cdead3d12274d5e5b2ada",
-        "scripts/release/validate-release.js": "7740f876acddf8b51d46de03637d1fe0614a4b21f4df65c78cbe50bd5c7050a2",
+        "scripts/release/validate-release.js": "3e526ca5e030b5b32faa4df013dd91986301f88ac9473b6e4cfa3e2ab36ce72d",
         "scripts/release/verify-dependency-licenses.js": "f4b2603095df4651a54f7deeee741b697301a9672ee1c48cf61f8419325f1572",
         "scripts/resolve-delivery.js": "fa66059a2f6724bc64c13e932d2e59228748b27522df2d3ac35be810ae9fdbd9",
         "scripts/schedule-gate.js": "7ecca129f6cf6654fa27886b76a21f055b62717fb070a4ee932b3ae6a189901a",
