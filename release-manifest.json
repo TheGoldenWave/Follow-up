@@ -42,13 +42,13 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "63a9bd5c3e3dbffd189f0c4226e175e84028190879291ed8345c1f09cd02a3a0"
+      "digest": "31790963d27e75e5fbc321ff919cca42fdeb34d77c3b19e6cf1b046f50d4e6dc"
     },
     "criticalFiles": {
       "algorithm": "sha256",
       "files": {
         "LICENSE": "3b1d30c9384a70f0f163fec07b83b0d410b3d7ab1273f1f9dd4a060e105f4da2",
-        "SKILL.md": "95a7053a60ce43dda195072c5f51d47069d26e9232104a88d9e0e7daa674ac3c",
+        "SKILL.md": "c3e480b7471525a504af2c0b685f626490b8cbf4e43cc2898c045b2ad911bf2c",
         "THIRD_PARTY_NOTICES.md": "b167f01a0e79c75fe212f9c07ce8b8d113db7124aa11dce40abe8bc950104d2c",
         "VERSION": "1f930dd1f133c1f97a94fe3acb8db34372cf4c01ffdb2b3ff4ca72f9494121e9",
         "config/config-schema.json": "47a13ddeef25f6a2856d963f1402bcf81dd6a6b97a007882b307fcd5df37da9b",
