@@ -54,11 +54,16 @@ test('release doctor resolves dependencies from the staged release, not the pris
 
 test('pristine archive completes real npm ci and target-local doctor on clean install and reinstall', { timeout: 120_000 }, async () => {
   const f = await pristineRepositoryArchive(); await assert.rejects(fs.lstat(join(f.root, 'scripts', 'node_modules')), { code: 'ENOENT' });
-  const errors = []; const reports = []; const clean = await runInstaller(['--platform', 'codex'], { ...f, stdout: () => {}, stderr: (message) => errors.push(message), doctorImpl: async (options) => { const result = await runReleaseDoctor(options); reports.push(result.report); return result; } });
-  assert.equal(clean.exitCode, 0, `${errors.join('; ')} ${JSON.stringify(reports)}`); assert.equal(clean.reused, false); assert.equal((await fs.lstat(clean.releaseRoot)).isSymbolicLink(), true);
-  const objectRoot = await fs.realpath(clean.releaseRoot); assert.match(objectRoot, /\.0\.1\.0\.object-[A-Za-z0-9_-]+$/); assert.ok(await fs.lstat(join(objectRoot, 'scripts', 'node_modules', 'ajv')));
-  const reinstall = await runInstaller(['--platform', 'codex'], { ...f, stdout: () => {}, stderr: () => {} });
-  assert.equal(reinstall.exitCode, 0); assert.equal(reinstall.reused, true); assert.equal(reinstall.releaseRoot, clean.releaseRoot);
+  const installer = join(f.root, 'scripts', 'install.js'); const env = { ...process.env, HOME: f.home };
+  await execFileAsync(process.execPath, [installer, '--platform', 'codex', '--register'], { cwd: f.root, env });
+  const releaseRoot = join(f.home, '.follow-builders', 'releases', f.version); assert.equal((await fs.lstat(releaseRoot)).isSymbolicLink(), true);
+  const objectRoot = await fs.realpath(releaseRoot); assert.match(objectRoot, new RegExp(`\\.${f.version.replaceAll('.', '\\.')}\\.object-[A-Za-z0-9_-]+$`)); assert.ok(await fs.lstat(join(objectRoot, 'scripts', 'node_modules', 'ajv')));
+  const firstObjects = (await fs.readdir(join(releaseRoot, '..'))).filter((name) => name.startsWith(`.${f.version}.object-`));
+  await execFileAsync(process.execPath, [installer, '--platform', 'codex', '--register'], { cwd: f.root, env });
+  const secondObjects = (await fs.readdir(join(releaseRoot, '..'))).filter((name) => name.startsWith(`.${f.version}.object-`)); assert.deepEqual(secondObjects, firstObjects);
+  const doctor = spawn(process.execPath, [join(releaseRoot, 'scripts', 'doctor.js'), '--json'], { env, stdio: ['ignore', 'pipe', 'pipe'] }); let doctorStdout = '';
+  doctor.stdout.on('data', (chunk) => { doctorStdout += chunk; }); const doctorExit = await new Promise((resolve) => doctor.on('close', resolve));
+  assert.equal(doctorExit, 0); assert.equal(JSON.parse(doctorStdout).exitCode, 0);
 });
 
 test('strict CLI supports three adapters and requires explicit registration authorization', () => {
@@ -113,9 +118,10 @@ test('doctor exit 2 is accepted and local exit 1 removes newly published release
 });
 
 test('reinstall validates and reuses immutable release without copy or npm', async () => {
-  const f = await fixture(); const installed = await runInstaller(['--platform', 'codex'], injected(f)); assert.equal(installed.exitCode, 0); const objectRoot = await fs.realpath(f.releaseRoot); await fs.writeFile(join(objectRoot, 'SKILL.md'), 'immutable'); const calls = [];
-  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, validateReleaseImpl: async (root) => { calls.push(root); return []; }, npmCiImpl: async () => calls.push('npm') }));
-  assert.equal(result.exitCode, 0); assert.equal(await fs.readFile(join(f.releaseRoot, 'SKILL.md'), 'utf8'), 'immutable'); assert.deepEqual(calls, [f.root, objectRoot]);
+  const f = await fixture(); const installed = await runInstaller(['--platform', 'codex'], injected(f)); assert.equal(installed.exitCode, 0); const objectRoot = await fs.realpath(f.releaseRoot); const calls = [];
+  const result = await runInstaller(['--platform', 'codex'], injected({ ...f, validateReleaseImpl: async (root, options) => { calls.push(`release:${root}:${options.validateSchema}`); return []; }, validateArchiveCriticalFilesImpl: async (root) => { calls.push(`critical:${root}`); return []; }, doctorImpl: async ({ releaseRoot }) => { calls.push(`doctor:${releaseRoot}`); return { exitCode: 0 }; }, npmCiImpl: async () => calls.push('npm') }));
+  assert.equal(result.exitCode, 0); assert.equal(await fs.readFile(join(f.releaseRoot, 'SKILL.md'), 'utf8'), '# Follow-up\n');
+  assert.deepEqual(calls, [`release:${f.root}:false`, `critical:${f.root}`, `release:${objectRoot}:false`, `critical:${objectRoot}`, `doctor:${objectRoot}`]);
 });
 
 test('invalid existing release and symlinked release parents are rejected without overwrite', async () => {
@@ -195,6 +201,12 @@ test('post-copy snapshot rejects a source replacement after trusted preflight', 
     },
   });
   assert.equal(result.exitCode, 1); assert.match(errors.join('\n'), /snapshot|payload/i); await assert.rejects(fs.lstat(f.releaseRoot), { code: 'ENOENT' });
+});
+
+test('worker failures expose only stable stage and code without paths or secrets', async () => {
+  const f = await fixture(); const errors = [];
+  const result = await runInstaller(['--platform', 'codex'], { ...f, validateReleaseImpl: async () => [], validateArchiveCriticalFilesImpl: async () => [], stdout: () => {}, stderr: (message) => errors.push(message), onObjectWorkerReady: async () => fs.rm(f.root, { recursive: true }) });
+  assert.equal(result.exitCode, 1); assert.match(errors.join('\n'), /copy.*WORKER_COPY_FAILED/i); assert.doesNotMatch(errors.join('\n'), new RegExp(f.base.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&'))); assert.doesNotMatch(errors.join('\n'), /token|secret/i);
 });
 
 test('trusted object validation rejects snapshot A, preflight B, copy A switching', async () => {
@@ -304,7 +316,7 @@ test('mutable config, prompts, env, and state remain byte-for-byte unchanged', a
 
 test('module has a main guard and README invokes installer directly with upgrade flag', async () => {
   const script = `import ${JSON.stringify(new URL('../install.js', import.meta.url).href)}; console.log('imported')`; const child = spawn(process.execPath, ['--input-type=module', '--eval', script], { stdio: ['ignore', 'pipe', 'pipe'] }); let output = ''; child.stdout.on('data', (chunk) => { output += chunk; }); assert.equal(await new Promise((resolve) => child.on('close', resolve)), 0); assert.equal(output.trim(), 'imported');
-  for (const readme of ['README.md', 'README.zh-CN.md']) { const text = await fs.readFile(new URL(`../../${readme}`, import.meta.url), 'utf8'); assert.match(text, /node scripts\/install\.js --platform/); assert.doesNotMatch(text, /npm ci --prefix scripts/); assert.match(text, /--replace-follow-builders/); }
+  for (const readme of ['README.md', 'README.zh-CN.md']) { const text = await fs.readFile(new URL(`../../${readme}`, import.meta.url), 'utf8'); assert.match(text, /node scripts\/install\.js --platform/); assert.doesNotMatch(text, /npm ci --prefix scripts/); assert.match(text, /--replace-follow-builders/); assert.match(text, /node ~\/\.follow-builders\/releases\/0\.2\.0\/scripts\/doctor\.js --json/); }
 });
 
 test('Task 12 plan requires the stable-cwd installer worker in the critical set', async () => {

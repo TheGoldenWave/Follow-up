@@ -6,7 +6,7 @@ From a pristine, extracted, verified GitHub Release archive (Node.js 20+):
 
 ```text
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] [--register]
-node scripts/doctor.js [--network] [--json]
+node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
 ```
 
 `--register` is the explicit approval to create the `follow-up` Skill link. Re-running the command reinstalls the same release while preserving existing mutable user files. Upgrading from `follow-builders` requires `--replace-follow-builders`; the legacy link is removed only after the new link and local doctor checks succeed. The conversational entry point is `/follow-up` after registration.

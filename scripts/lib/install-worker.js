@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const OWNER_FILE = '.install-owner';
 const COMPLETE_FILE = '.install-complete.json';
+let currentStage = 'copy';
 
 function fail(message) { throw new Error(message); }
 
@@ -56,13 +57,17 @@ async function syncTree(path) {
 }
 
 async function buildObject(sourceRoot, version, transactionId) {
+  currentStage = 'copy';
   await fs.writeFile(OWNER_FILE, `${transactionId}\n`, { flag: 'wx', mode: 0o600 });
   await copyTree(sourceRoot);
+  currentStage = 'npm-ci';
   await execFileAsync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['ci', '--ignore-scripts'], { cwd: 'scripts', timeout: 120_000 });
+  currentStage = 'doctor';
   const releaseRoot = process.cwd();
   const doctor = await import(pathToFileURL(resolve('scripts/doctor.js')).href);
   const result = await doctor.runDoctor(['--json'], { home: process.env.HOME, releaseRoot, requireRegistration: false, stdout: () => {}, stderr: () => {} });
   if (result.exitCode !== 0 && result.exitCode !== 2) fail('Local doctor checks failed');
+  currentStage = 'fsync';
   await syncTree('.');
   const manifestSha256 = createHash('sha256').update(await fs.readFile('release-manifest.json')).digest('hex');
   const payload = { schemaVersion: 1, version, manifestSha256, transactionId };
@@ -74,6 +79,7 @@ async function buildObject(sourceRoot, version, transactionId) {
 }
 
 async function publishPointer(objectName, versionName) {
+  currentStage = 'pointer';
   if (dirname(objectName) !== '.' || dirname(versionName) !== '.' || !objectName.startsWith(`.${versionName}.object-`)) fail('Invalid release pointer names');
   await fs.symlink(objectName, versionName, 'dir');
   process.send({ type: 'created' });
@@ -82,6 +88,7 @@ async function publishPointer(objectName, versionName) {
 }
 
 async function removePointer(objectName, versionName) {
+  currentStage = 'pointer';
   if (await fs.readlink(versionName) !== objectName) fail('Release pointer ownership changed');
   await fs.unlink(versionName);
   process.send({ type: 'created' });
@@ -105,5 +112,7 @@ try {
   else fail('Unknown installer worker mode');
   process.send({ type: 'done' });
 } catch (error) {
-  process.stderr.write(`${error.message}\n`); process.exitCode = 1;
+  const code = `WORKER_${currentStage.toUpperCase().replaceAll('-', '_')}_FAILED`;
+  process.send?.({ type: 'failed', stage: currentStage, code });
+  process.exitCode = 1;
 }

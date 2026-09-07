@@ -269,7 +269,7 @@ async function runInternalWorker(mode, args, { cwd, capability, env = process.en
     stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
   });
   let stderr = ''; child.stderr.on('data', (chunk) => { if (stderr.length < 8192) stderr += chunk; });
-  let ready = false; let created = false; let durable = false; let done = false;
+  let ready = false; let created = false; let durable = false; let done = false; let failure;
   const completion = new Promise((accept, reject) => {
     child.once('error', reject);
     child.on('message', (message) => {
@@ -277,11 +277,13 @@ async function runInternalWorker(mode, args, { cwd, capability, env = process.en
       else if (message?.type === 'created' && ready && !created && !durable && !done) created = true;
       else if (message?.type === 'durable' && created && !durable && !done) durable = true;
       else if (message?.type === 'done' && ready && !done && (mode === 'object' || durable)) done = true;
+      else if (message?.type === 'failed' && ready && /^(copy|npm-ci|doctor|fsync|pointer)$/u.test(message.stage)
+          && /^WORKER_(COPY|NPM_CI|DOCTOR|FSYNC|POINTER)_FAILED$/u.test(message.code) && !done && !failure) failure = message;
       else { child.kill(); reject(new Error('Invalid installer worker message sequence')); }
     });
     child.once('close', (code) => {
       if (code === 0 && done) accept({ created, durable });
-      else { const error = new Error('Installer internal worker failed'); error.created = created; error.durable = durable; reject(error); }
+      else { const error = new Error(`Installer internal worker failed at ${failure?.stage ?? 'unknown'} (${failure?.code ?? 'WORKER_FAILED'})`); error.created = created; error.durable = durable; error.stage = failure?.stage; error.code = failure?.code; reject(error); }
     });
   });
   await new Promise((accept, reject) => {
@@ -339,8 +341,11 @@ export async function runInstaller(args, options = {}) {
       ({ objectRoot, objectIdentity, pointerTarget } = existing);
       await validateCompletion(objectRoot, version, fsImpl);
       await inspectTree(objectRoot, fsImpl, { skipDependencies: true });
-      const errors = await validateReleaseImpl(objectRoot, { mode: 'archive', verifyIntegrity: true });
+      const errors = await validateReleaseImpl(objectRoot, { mode: 'archive', verifyIntegrity: true, validateSchema: false });
       if (errors.length) throw new Error(`Existing immutable release is invalid: ${errors.join('; ')}`);
+      const criticalErrors = await validateArchiveCriticalFilesImpl(objectRoot);
+      if (criticalErrors.length) throw new Error(`Existing immutable release critical files are invalid: ${criticalErrors.join('; ')}`);
+      await verifyPayloadSnapshot(payloadSnapshot, objectRoot, fsImpl);
       reused = true;
     } else {
       objectRoot = await fsImpl.mkdtemp(join(releasesDir, `${objectPrefix(version)}${transactionId}-`));
