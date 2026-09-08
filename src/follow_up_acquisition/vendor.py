@@ -8,6 +8,7 @@ silently lose its provenance.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -115,3 +116,35 @@ def _validate_entry(entry: Any, index: int, seen_ids: set[str]) -> None:
 def load_vendor_manifest(path: str | Path) -> list[dict[str, Any]]:
     with open(path, encoding="utf-8") as handle:
         return validate_vendor_manifest(json.load(handle))
+
+
+def _imported_sha256(entry_dir: Path, imported_paths: list[str]) -> str:
+    """SHA-256 of the concatenated imported file bytes in sorted path order."""
+    digest = hashlib.sha256()
+    for relative in sorted(imported_paths):
+        digest.update((entry_dir / relative).read_bytes())
+    return digest.hexdigest()
+
+
+def verify_vendor_hashes(manifest: Any, vendor_root: str | Path) -> None:
+    """Verify every synced entry's recorded ``sha256`` against the files on disk.
+
+    ``imported_paths`` entries are resolved relative to ``vendor/<entry id>/``.
+    Raises :class:`VendorManifestError` when a synced entry has a missing or
+    stale hash, so a vendored file can never silently lose or diverge from its
+    provenance.
+    """
+    entries = manifest.get("entries") if isinstance(manifest, dict) else []
+    root = Path(vendor_root)
+    for entry in entries:
+        imported = entry.get("imported_paths") or []
+        if not imported:
+            continue
+        entry_dir = root / entry.get("id", "")
+        recorded = entry.get("sha256")
+        actual = _imported_sha256(entry_dir, imported)
+        if not recorded or actual != recorded:
+            raise VendorManifestError(
+                f"{entry.get('id')}: sha256 mismatch "
+                f"(recorded {recorded!r}, actual {actual!r})"
+            )

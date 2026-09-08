@@ -8,10 +8,12 @@
       "commit": "fcebe321c22e5e97e3ef5712e4bc00f2b33bba37",
       "license": "MIT",
       "license_file": "vendor/licenses/last30days-MIT.txt",
-      "imported_paths": [],
-      "sha256": null,
+      "imported_paths": [
+        "cjk.py"
+      ],
+      "sha256": "92279dd6d6643b1d4e95793f23e082579c18392114ee19b27a3cdb48cb67d890",
       "patches": [],
-      "synced_at": null
+      "synced_at": "2026-09-08T08:37:39+00:00"
     },
     {
       "id": "we-mp-rss",

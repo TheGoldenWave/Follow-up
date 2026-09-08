@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import importlib.util
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -12,9 +15,11 @@ from follow_up_acquisition.vendor import (
     VendorManifestError,
     load_vendor_manifest,
     validate_vendor_manifest,
+    verify_vendor_hashes,
 )
 
 MANIFEST_PATH = Path(__file__).resolve().parents[2] / "vendor" / "manifest.json"
+VENDOR_ROOT = MANIFEST_PATH.parent
 
 VALID_ENTRY = {
     "id": "upstream",
@@ -44,7 +49,8 @@ class VendorManifestTests(unittest.TestCase):
     def test_real_manifest_is_valid(self):
         entries = load_vendor_manifest(MANIFEST_PATH)
         self.assertEqual(len(entries), 3)
-        self.assertTrue(all(e["imported_paths"] == [] for e in entries))
+        synced = {entry["id"] for entry in entries if entry["imported_paths"]}
+        self.assertEqual(synced, {"last30days"})
 
     def test_valid_unsynced_entry_passes(self):
         validate_vendor_manifest(_manifest([VALID_ENTRY]))
@@ -87,6 +93,66 @@ class VendorManifestTests(unittest.TestCase):
     def test_approved_licenses_are_known(self):
         self.assertIn("MIT", APPROVED_LICENSES)
         self.assertIn("Apache-2.0", APPROVED_LICENSES)
+
+
+class VendorHashTests(unittest.TestCase):
+    def test_real_manifest_hashes_match_files(self):
+        manifest = json.loads(MANIFEST_PATH.read_text())
+        verify_vendor_hashes(manifest, VENDOR_ROOT)
+
+    def test_matching_hash_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            content = b"def f(): pass"
+            (root / "upstream").mkdir()
+            (root / "upstream" / "cjk.py").write_bytes(content)
+            entry = _entry(
+                imported_paths=["cjk.py"],
+                sha256=hashlib.sha256(content).hexdigest(),
+                synced_at="2026-09-08T00:00:00Z",
+            )
+            verify_vendor_hashes(_manifest([entry]), root)
+
+    def test_stale_hash_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "upstream").mkdir()
+            (root / "upstream" / "cjk.py").write_bytes(b"def f(): pass")
+            entry = _entry(
+                imported_paths=["cjk.py"],
+                sha256="0" * 64,
+                synced_at="2026-09-08T00:00:00Z",
+            )
+            with self.assertRaises(VendorManifestError):
+                verify_vendor_hashes(_manifest([entry]), root)
+
+    def test_synced_entry_without_hash_fails_verification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "upstream").mkdir()
+            (root / "upstream" / "cjk.py").write_bytes(b"def f(): pass")
+            entry = _entry(
+                imported_paths=["cjk.py"],
+                sha256=None,
+                synced_at="2026-09-08T00:00:00Z",
+            )
+            with self.assertRaises(VendorManifestError):
+                verify_vendor_hashes(_manifest([entry]), root)
+
+
+class VendoredModuleTests(unittest.TestCase):
+    def test_vendored_cjk_segments_chinese_text(self):
+        spec = importlib.util.spec_from_file_location(
+            "vendored_cjk", str(VENDOR_ROOT / "last30days" / "cjk.py")
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        self.assertTrue(module.has_cjk("大模型"))
+        self.assertFalse(module.has_cjk("hello world"))
+        tokens = module.segment("大模型")
+        self.assertIn("大模", tokens)
+        self.assertIn("模型", tokens)
 
 
 if __name__ == "__main__":
