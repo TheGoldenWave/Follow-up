@@ -33,6 +33,7 @@ import { loadSourceRegistry } from './source-registry.js';
 import { sanitizeDiagnostic } from './source-status.js';
 import { readJsonLimited } from './validate-digest-selection.js';
 import { validateFeed } from './feed-contract.js';
+import { combineAcquisitionInput, normalizeAcquisitionMode } from './lib/resolve-acquisition-input.js';
 
 const USER_DIR = join(homedir(), '.follow-builders');
 const CENTRAL_FEED_BASE = 'https://raw.githubusercontent.com/TheGoldenWave/Follow-up/main';
@@ -391,6 +392,8 @@ export async function prepareDigest({
   loadCandidateFeed,
   loadCurationPrompt: loadPrompt = loadCurationPrompt,
   randomUUID = systemRandomUUID,
+  mode,
+  loadLocalSignalBatches,
 } = {}) {
   const normalizedConfig = normalizeConfig(config ?? {});
   const resolvedFrequency = frequency
@@ -426,9 +429,24 @@ export async function prepareDigest({
     throw new Error('candidate Feed generatedAt is in the future');
   }
   const completeness = validateCandidateFeedCompleteness(feed, { expectedRegistry: expected });
+  const acquisitionMode = normalizeAcquisitionMode(mode ?? config?.acquisition?.mode);
+  let effectiveFeed = feed;
+  if (acquisitionMode !== 'central' && typeof loadLocalSignalBatches === 'function') {
+    const local = await loadLocalSignalBatches();
+    const combined = combineAcquisitionInput({
+      mode: acquisitionMode,
+      central: { candidates: feed.candidates, registry: feed.registry },
+      local,
+    });
+    effectiveFeed = {
+      ...feed,
+      candidates: combined.candidates,
+      registry: combined.sourceStatuses,
+    };
+  }
   const resolved = await resolveDigestCandidates({
     config: normalizedConfig, frequency: resolvedFrequency, now, deliveryEvents,
-    loadCandidateFeed: async () => feed,
+    loadCandidateFeed: async () => effectiveFeed,
   });
   const enabledRegistry = registry.filter(({ channel }) => normalizedConfig.enabledChannels.includes(channel));
   const enabledMissingSources = completeness.missingSources.filter(({ channel }) => (
@@ -448,7 +466,7 @@ export async function prepareDigest({
   ];
   const disabledExclusions = resolved.excluded.counts['channel-disabled'] ?? 0;
   const contentStats = {
-    candidateCount: feed.candidates.filter(({ channel }) => (
+    candidateCount: effectiveFeed.candidates.filter(({ channel }) => (
       normalizedConfig.enabledChannels.includes(channel)
     )).length,
     eligibleCount: resolved.eligibleCandidates.length,
