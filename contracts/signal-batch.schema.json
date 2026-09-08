@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/signal-batch.schema.json",
+  "title": "Follow-up Signal Batch",
+  "description": "A versioned batch of candidate signals produced by one Acquisition adapter. snake_case keys are the canonical contract; the Python runtime owns this shape and the Node.js digest layer maps it internally.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "batch_id",
+    "generated_at",
+    "adapter_id",
+    "adapter_version",
+    "source",
+    "request",
+    "source_status",
+    "items"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "batch_id": { "$ref": "#/$defs/nonEmptyString" },
+    "generated_at": { "$ref": "#/$defs/dateTime" },
+    "adapter_id": { "$ref": "#/$defs/nonEmptyString" },
+    "adapter_version": { "$ref": "#/$defs/nonEmptyString" },
+    "source": { "$ref": "#/$defs/nonEmptyString" },
+    "request": { "$ref": "#/$defs/request" },
+    "source_status": { "$ref": "#/$defs/sourceStatus" },
+    "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "$ref": "#/$defs/nonEmptyString" },
+        "topic": { "type": ["string", "null"] },
+        "subject": { "type": ["string", "null"] },
+        "window": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "start": { "$ref": "#/$defs/dateTime" },
+            "end": { "$ref": "#/$defs/dateTime" }
+          }
+        },
+        "depth": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "retryable"],
+      "properties": {
+        "status": {
+          "enum": [
+            "ok",
+            "no-results",
+            "partial",
+            "rate-limited",
+            "auth-failed",
+            "unreachable",
+            "timeout",
+            "schema-drift",
+            "skipped-unconfigured",
+            "error"
+          ]
+        },
+        "code": { "type": ["string", "null"] },
+        "message": { "type": ["string", "null"] },
+        "retryable": { "type": "boolean" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "source",
+        "source_type",
+        "url",
+        "date_confidence",
+        "fetched_at"
+      ],
+      "properties": {
+        "candidate_id": { "$ref": "#/$defs/nonEmptyString" },
+        "source": { "$ref": "#/$defs/nonEmptyString" },
+        "source_type": { "$ref": "#/$defs/nonEmptyString" },
+        "url": { "type": "string", "format": "uri" },
+        "author": { "type": ["string", "null"] },
+        "published_at": { "type": ["string", "null"], "format": "date-time" },
+        "date_confidence": { "enum": ["exact", "inferred", "unknown"] },
+        "title": { "type": ["string", "null"] },
+        "text": { "type": ["string", "null"] },
+        "native_metrics": { "type": "object" },
+        "provenance": { "type": "object" },
+        "fetched_at": { "$ref": "#/$defs/dateTime" },
+        "item_warnings": { "type": "array", "items": { "$ref": "#/$defs/itemWarning" } }
+      }
+    },
+    "itemWarning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "$ref": "#/$defs/nonEmptyString" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

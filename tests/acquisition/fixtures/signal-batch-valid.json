@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "00000000-0000-4000-8000-000000000001",
+  "generated_at": "2026-09-08T10:00:00Z",
+  "adapter_id": "rss",
+  "adapter_version": "0.3.0",
+  "source": "blog:anthropic-engineering",
+  "request": {
+    "mode": "shadow",
+    "topic": "ai-safety",
+    "window": {
+      "start": "2026-09-01T00:00:00Z",
+      "end": "2026-09-08T00:00:00Z"
+    },
+    "depth": 12
+  },
+  "source_status": {
+    "status": "ok",
+    "code": null,
+    "message": null,
+    "retryable": false
+  },
+  "items": [
+    {
+      "candidate_id": "blog:anthropic-engineering:2026-09-08-example",
+      "source": "blog:anthropic-engineering",
+      "source_type": "rss",
+      "url": "https://www.anthropic.com/engineering/example",
+      "author": "Anthropic",
+      "published_at": "2026-09-08T08:00:00Z",
+      "date_confidence": "exact",
+      "title": "Example engineering post",
+      "text": "A short excerpt.",
+      "native_metrics": { "likes": 0 },
+      "provenance": { "query": "ai-safety" },
+      "fetched_at": "2026-09-08T10:00:00Z",
+      "item_warnings": []
+    }
+  ]
+}
