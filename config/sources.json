@@ -1,0 +1,1628 @@
+{
+  "schema_version": "1.0",
+  "sources": [
+    {
+      "id": "academic:arxiv-cs-ai",
+      "name": "arXiv cs.AI",
+      "channel": "academic",
+      "channel_policy": "fixed",
+      "adapter": "arxiv",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "rss_url": "https://rss.arxiv.org/rss/cs.AI",
+        "url": "https://arxiv.org/list/cs.AI/recent"
+      },
+      "legacy": {
+        "feed": "feed-academic.json"
+      }
+    },
+    {
+      "id": "academic:arxiv-cs-cl",
+      "name": "arXiv cs.CL",
+      "channel": "academic",
+      "channel_policy": "fixed",
+      "adapter": "arxiv",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "rss_url": "https://rss.arxiv.org/rss/cs.CL",
+        "url": "https://arxiv.org/list/cs.CL/recent"
+      },
+      "legacy": {
+        "feed": "feed-academic.json"
+      }
+    },
+    {
+      "id": "academic:arxiv-cs-cr",
+      "name": "arXiv cs.CR (AI Security)",
+      "channel": "academic",
+      "channel_policy": "fixed",
+      "adapter": "arxiv",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://rss.arxiv.org/rss/cs.CR",
+        "url": "https://arxiv.org/list/cs.CR/recent"
+      },
+      "legacy": {
+        "feed": "feed-academic.json"
+      }
+    },
+    {
+      "id": "academic:arxiv-cs-cv",
+      "name": "arXiv cs.CV",
+      "channel": "academic",
+      "channel_policy": "fixed",
+      "adapter": "arxiv",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://rss.arxiv.org/rss/cs.CV",
+        "url": "https://arxiv.org/list/cs.CV/recent"
+      },
+      "legacy": {
+        "feed": "feed-academic.json"
+      }
+    },
+    {
+      "id": "academic:arxiv-cs-lg",
+      "name": "arXiv cs.LG",
+      "channel": "academic",
+      "channel_policy": "fixed",
+      "adapter": "arxiv",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://rss.arxiv.org/rss/cs.LG",
+        "url": "https://arxiv.org/list/cs.LG/recent"
+      },
+      "legacy": {
+        "feed": "feed-academic.json"
+      }
+    },
+    {
+      "id": "academic:arxiv-cs-ro",
+      "name": "arXiv cs.RO",
+      "channel": "academic",
+      "channel_policy": "fixed",
+      "adapter": "arxiv",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://rss.arxiv.org/rss/cs.RO",
+        "url": "https://arxiv.org/list/cs.RO/recent"
+      },
+      "legacy": {
+        "feed": "feed-academic.json"
+      }
+    },
+    {
+      "id": "blog:amazon-science",
+      "name": "Amazon Science Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://www.amazon.science/blog/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "rss",
+            "url": "https://www.amazon.science/index.rss"
+          },
+          {
+            "type": "html",
+            "url": "https://www.amazon.science/blog/"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:anthropic-engineering",
+      "name": "Anthropic Engineering",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://www.anthropic.com/engineering",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "sitemap",
+            "url": "https://www.anthropic.com/sitemap.xml"
+          },
+          {
+            "type": "html",
+            "url": "https://www.anthropic.com/engineering"
+          }
+        ],
+        "parser": "anthropic-engineering"
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:anthropic-interpretability",
+      "name": "Anthropic Interpretability",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://www.anthropic.com/research/team/interpretability",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "html",
+            "url": "https://www.anthropic.com/research/team/interpretability"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:anthropic-science",
+      "name": "Anthropic Science",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://www.anthropic.com/science",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "html",
+            "url": "https://www.anthropic.com/science"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:apple-ml-research",
+      "name": "Apple Machine Learning Research",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://machinelearning.apple.com/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "rss",
+            "url": "https://machinelearning.apple.com/rss.xml"
+          },
+          {
+            "type": "sitemap",
+            "url": "https://machinelearning.apple.com/sitemap.xml"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:claude-blog",
+      "name": "Claude Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://claude.com/blog",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "html",
+            "url": "https://claude.com/blog"
+          }
+        ],
+        "parser": "claude-blog"
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:ernie-blog",
+      "name": "ERNIE Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://ernie.baidu.com/blog/zh/",
+        "language": "zh-CN",
+        "discovery": [
+          {
+            "type": "rss",
+            "url": "https://ernie.baidu.com/blog/zh/index.xml"
+          },
+          {
+            "type": "html",
+            "url": "https://ernie.baidu.com/blog/zh/"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:google-antigravity",
+      "name": "Google Antigravity Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://antigravity.google/blog",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "rss",
+            "url": "https://antigravity.google/blog/rss.xml"
+          },
+          {
+            "type": "html",
+            "url": "https://antigravity.google/blog"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:google-deepmind",
+      "name": "Google DeepMind Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://deepmind.google/blog/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "sitemap",
+            "url": "https://deepmind.google/sitemap.xml"
+          },
+          {
+            "type": "html",
+            "url": "https://deepmind.google/blog/"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:google-research",
+      "name": "Google Research Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://research.google/blog/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "rss",
+            "url": "https://research.google/blog/rss/"
+          },
+          {
+            "type": "html",
+            "url": "https://research.google/blog/"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:ibm-research",
+      "name": "IBM Research Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://research.ibm.com/blog",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "rss",
+            "url": "https://research.ibm.com/rss"
+          },
+          {
+            "type": "html",
+            "url": "https://research.ibm.com/blog"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:kimi-blog",
+      "name": "Kimi Research & Tech Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://www.kimi.ai/blog/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "html",
+            "url": "https://www.kimi.ai/blog/"
+          },
+          {
+            "type": "sitemap",
+            "url": "https://www.kimi.ai/sitemap.xml"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:microsoft-research",
+      "name": "Microsoft Research Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://www.microsoft.com/en-us/research/blog/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "html",
+            "url": "https://www.microsoft.com/en-us/research/blog/"
+          },
+          {
+            "type": "rss",
+            "url": "https://www.microsoft.com/en-us/research/feed/"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:minimax-blog",
+      "name": "MiniMax Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://www.minimax.cn/blog",
+        "language": "zh-CN",
+        "discovery": [
+          {
+            "type": "sitemap",
+            "url": "https://www.minimax.cn/sitemap.xml"
+          },
+          {
+            "type": "html",
+            "url": "https://www.minimax.cn/blog"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:openai-alignment",
+      "name": "OpenAI Alignment Research Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://alignment.openai.com/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "rss",
+            "url": "https://alignment.openai.com/rss.xml"
+          },
+          {
+            "type": "html",
+            "url": "https://alignment.openai.com/"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:perplexity-research",
+      "name": "Perplexity Research Articles",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://research.perplexity.ai/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "html",
+            "url": "https://research.perplexity.ai/"
+          },
+          {
+            "type": "sitemap",
+            "url": "https://research.perplexity.ai/sitemap.xml"
+          }
+        ],
+        "parser": null
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "blog:qwen-blog",
+      "name": "Qwen Blog",
+      "channel": "blogs",
+      "channel_policy": "fixed",
+      "adapter": "web-publication",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "url": "https://qwen.ai/blog/",
+        "language": "en",
+        "discovery": [
+          {
+            "type": "json",
+            "url": "https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US",
+            "publicUrl": "https://qwen.ai/blog?id={path}",
+            "detailUrl": "https://qwen.ai/api/v2/article/retrieval?type=qwen_ai&language=en-US&path={path}"
+          },
+          {
+            "type": "html",
+            "url": "https://qwen.ai/blog/"
+          }
+        ],
+        "parser": "qwen-blog"
+      },
+      "legacy": {
+        "feed": "feed-blogs.json"
+      }
+    },
+    {
+      "id": "newsletter:ai-snake-oil",
+      "name": "AI Snake Oil",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://aisnakeoil.substack.com/feed",
+        "url": "https://aisnakeoil.substack.com/"
+      },
+      "legacy": {
+        "feed": "feed-newsletters.json"
+      }
+    },
+    {
+      "id": "newsletter:algorithmic-bridge",
+      "name": "The Algorithmic Bridge",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://thealgorithmicbridge.com/feed",
+        "url": "https://thealgorithmicbridge.com/"
+      },
+      "legacy": {
+        "feed": "feed-newsletters.json"
+      }
+    },
+    {
+      "id": "newsletter:bens-bites",
+      "name": "Ben's Bites",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://bensbites.beehiiv.com/feed",
+        "url": "https://bensbites.beehiiv.com"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "newsletter:import-ai",
+      "name": "Import AI (Jack Clark)",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://importai.substack.com/feed",
+        "url": "https://importai.substack.com"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "newsletter:one-useful-thing",
+      "name": "One Useful Thing (Ethan Mollick)",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://oneusefulthing.org/feed",
+        "url": "https://oneusefulthing.org/"
+      },
+      "legacy": {
+        "feed": "feed-newsletters.json"
+      }
+    },
+    {
+      "id": "newsletter:stratechery",
+      "name": "Stratechery (Ben Thompson)",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://stratechery.com/feed/",
+        "url": "https://stratechery.com/"
+      },
+      "legacy": {
+        "feed": "feed-newsletters.json"
+      }
+    },
+    {
+      "id": "newsletter:the-batch",
+      "name": "The Batch (Andrew Ng)",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://www.deeplearning.ai/the-batch/rss/",
+        "url": "https://www.deeplearning.ai/the-batch"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "newsletter:the-gradient",
+      "name": "The Gradient",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://thegradient.pub/rss",
+        "url": "https://thegradient.pub"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "newsletter:tldr-ai",
+      "name": "TLDR AI",
+      "channel": "newsletters",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "weekly",
+      "budget": 2,
+      "input": {
+        "rss_url": "https://tldr.tech/ai/rss",
+        "url": "https://tldr.tech/ai"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "podcast:acquired",
+      "name": "Acquired",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://acquired.libsyn.com/rss",
+        "url": "https://www.youtube.com/@AcquiredFM"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:ai-and-i",
+      "name": "AI & I by Every",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://anchor.fm/s/ed1f5584/podcast/rss",
+        "url": "https://www.youtube.com/playlist?list=PLuMcoKK9mKgHtW_o9h5sGO2vXrffKHwJL"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:cognitive-revolution",
+      "name": "The Cognitive Revolution",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://feeds.megaphone.fm/cognitiverevolution",
+        "url": "https://www.youtube.com/@CognitiveRevolutionPodcast"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:latent-space",
+      "name": "Latent Space",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://pod2txt.vercel.app/api/feed?url=https://api.substack.com/feed/podcast/1084089.rss",
+        "url": "https://www.youtube.com/@LatentSpacePod"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:lex-fridman",
+      "name": "Lex Fridman Podcast",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://lexfridman.com/feed/podcast/",
+        "url": "https://www.youtube.com/@lexfridman"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:lightcone",
+      "name": "Lightcone (YC)",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://feeds.simplecast.com/JGq5e7qP",
+        "url": "https://www.youtube.com/@ycombinator"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:mad-podcast",
+      "name": "The MAD Podcast with Matt Turck",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://anchor.fm/s/f2ee4948/podcast/rss",
+        "url": "https://www.youtube.com/@DataDrivenNYC/videos"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:no-priors",
+      "name": "No Priors",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://feeds.megaphone.fm/nopriors",
+        "url": "https://www.youtube.com/@NoPriorsPodcast"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:training-data",
+      "name": "Training Data",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://feeds.megaphone.fm/trainingdata",
+        "url": "https://www.youtube.com/playlist?list=PLOhHNjZItNnMm5tdW61JpnyxeYH5NDDx8"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "podcast:unsupervised-learning",
+      "name": "Unsupervised Learning",
+      "channel": "podcasts",
+      "channel_policy": "fixed",
+      "adapter": "podcast",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://feeds.simplecast.com/dOSE_bdP",
+        "url": "https://www.youtube.com/@RedpointAI"
+      },
+      "legacy": {
+        "feed": "feed-podcasts.json"
+      }
+    },
+    {
+      "id": "report:a16z-ai-canon",
+      "name": "a16z AI Canon",
+      "channel": "reports",
+      "channel_policy": "fixed",
+      "adapter": "report",
+      "requires_credentials": false,
+      "default_enabled": false,
+      "cadence": "monthly",
+      "budget": 1,
+      "input": {
+        "url": "https://a16z.com/ai-canon"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "report:cbinsights-ai",
+      "name": "CB Insights AI Research",
+      "channel": "reports",
+      "channel_policy": "fixed",
+      "adapter": "report",
+      "requires_credentials": false,
+      "default_enabled": false,
+      "cadence": "monthly",
+      "budget": 1,
+      "input": {
+        "url": "https://www.cbinsights.com/research/artificial-intelligence"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "report:firstmark-mad",
+      "name": "FirstMark MAD Landscape",
+      "channel": "reports",
+      "channel_policy": "fixed",
+      "adapter": "report",
+      "requires_credentials": false,
+      "default_enabled": false,
+      "cadence": "monthly",
+      "budget": 1,
+      "input": {
+        "url": "https://mad.firstmark.com"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "report:stanford-ai-index",
+      "name": "Stanford HAI AI Index",
+      "channel": "reports",
+      "channel_policy": "fixed",
+      "adapter": "report",
+      "requires_credentials": false,
+      "default_enabled": false,
+      "cadence": "monthly",
+      "budget": 1,
+      "input": {
+        "url": "https://hai.stanford.edu/ai-index"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "report:state-of-ai",
+      "name": "State of AI Report",
+      "channel": "reports",
+      "channel_policy": "fixed",
+      "adapter": "report",
+      "requires_credentials": false,
+      "default_enabled": false,
+      "cadence": "monthly",
+      "budget": 1,
+      "input": {
+        "url": "https://www.stateof.ai"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "x:adityaag",
+      "name": "Aditya Agarwal",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "adityaag"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:alexalbert",
+      "name": "Alex Albert",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "alexalbert__"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:amandaaskell",
+      "name": "Amanda Askell",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "AmandaAskell"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:amasad",
+      "name": "Amjad Masad",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "amasad"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:bcherny",
+      "name": "Boris Cherny",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "bcherny"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:bentossell",
+      "name": "Ben Tossell",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "bentossell"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:catwu",
+      "name": "Cat Wu",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "_catwu"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:claudeai",
+      "name": "Claude",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "claudeai"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:danshipper",
+      "name": "Dan Shipper",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "danshipper"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:dario-amodei",
+      "name": "Dario Amodei",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "dario_amodei_h"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:garrytan",
+      "name": "Garry Tan",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "garrytan"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:googlelabs",
+      "name": "Google Labs",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "GoogleLabs"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:jackclarksf",
+      "name": "Jack Clark",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "jackclarksf"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:joshwoodward",
+      "name": "Josh Woodward",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "joshwoodward"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:karpathy",
+      "name": "Andrej Karpathy",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "karpathy"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:levie",
+      "name": "Aaron Levie",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "levie"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:mattturck",
+      "name": "Matt Turck",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "mattturck"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:nathanlabenz",
+      "name": "Nathan Labenz",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "nathanlabenz"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:nikunj",
+      "name": "Nikunj Kothari",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "nikunj"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:petergyang",
+      "name": "Peter Yang",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "petergyang"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:rauchg",
+      "name": "Guillermo Rauch",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "rauchg"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:realmadhuguru",
+      "name": "Madhu Guru",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "realmadhuguru"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:ryolu",
+      "name": "Ryo Lu",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "ryolu_"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:sama",
+      "name": "Sam Altman",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "sama"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:steipete",
+      "name": "Peter Steinberger",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "steipete"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:swyx",
+      "name": "Swyx",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "swyx"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:thenanyu",
+      "name": "Nan Yu",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "thenanyu"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:thsottiaux",
+      "name": "Thibault Sottiaux",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "thsottiaux"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:trq212",
+      "name": "Thariq",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "trq212"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "x:zarazhangrui",
+      "name": "Zara Zhang",
+      "channel": "x",
+      "channel_policy": "fixed",
+      "adapter": "x",
+      "requires_credentials": true,
+      "default_enabled": false,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "handle": "zarazhangrui"
+      },
+      "legacy": {
+        "feed": "feed-x.json"
+      }
+    },
+    {
+      "id": "zh-tech:36kr",
+      "name": "36氪",
+      "channel": "zh-tech",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://36kr.com/feed",
+        "url": "https://36kr.com/",
+        "language": "zh"
+      },
+      "legacy": {
+        "feed": "feed-zh-tech.json"
+      }
+    },
+    {
+      "id": "zh-tech:aiera",
+      "name": "新智元",
+      "channel": "zh-tech",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://www.aiera.com.cn/feed",
+        "url": "https://www.aiera.com.cn",
+        "language": "zh"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "zh-tech:jiqizhixin",
+      "name": "机器之心",
+      "channel": "zh-tech",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://www.jiqizhixin.com/rss",
+        "url": "https://www.jiqizhixin.com",
+        "language": "zh"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
+      "id": "zh-tech:qbitai",
+      "name": "量子位",
+      "channel": "zh-tech",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://www.qbitai.com/rss",
+        "url": "https://www.qbitai.com/",
+        "language": "zh"
+      },
+      "legacy": {
+        "feed": "feed-zh-tech.json"
+      }
+    },
+    {
+      "id": "zh-tech:sspai",
+      "name": "少数派",
+      "channel": "zh-tech",
+      "channel_policy": "fixed",
+      "adapter": "rss",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 3,
+      "input": {
+        "rss_url": "https://sspai.com/feed",
+        "url": "https://sspai.com/",
+        "language": "zh"
+      },
+      "legacy": {
+        "feed": "feed-zh-tech.json"
+      }
+    }
+  ]
+}
