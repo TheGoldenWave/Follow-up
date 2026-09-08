@@ -7,6 +7,11 @@ Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.2.0` 
 Digest。项目基于 [follow-builders](https://github.com/zarazhangrui/follow-builders)
 演进，兼容用户数据继续保存在 `~/.follow-builders/`。
 
+当前版本：`0.2.0` Stable。查看 [项目进度](docs/project-progress.md)、
+[完整信源目录](docs/source-catalog.md) 和
+[版本变更](CHANGELOG.md)。公开安装包以
+[GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases) 为准。
+
 当前支持的用户入口是：
 
 - 输入 `set up follow-up` 开始 Onboarding；
@@ -36,6 +41,10 @@ cd ..
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <绝对路径>] --register
 node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
 ```
+
+安装并通过 `doctor` 后，输入 `set up follow-up`，依次选择关注频道、daily 或 weekly
+频率和投递目标。完成 Onboarding、schedule 与确切 destination 授权后，定时推送才会
+运行；随时输入 `/follow-up` 可以请求一次按需 Digest。
 
 `--register` 表示明确授权创建 `follow-up` Skill 链接。安装器支持 Codex、Claude Code
 以及用户指定的绝对 Skill 目录。重装同一个已验证版本时，安装器会逐字节保留

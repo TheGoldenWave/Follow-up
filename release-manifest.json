@@ -57,6 +57,7 @@
         "contracts/digest-curation-request.schema.json": "bb77723741fccaf3c1bcd08845a321d4f0c105477e633ea4d49dcce58e36f19a",
         "contracts/digest-selection.schema.json": "a11a2e794f123f29db9189ebffb5588f79b081db2971589a6a6b9e88afdb9db1",
         "contracts/release-manifest.schema.json": "ff86823ea1cc877bc64eed8b745828fe1820060c81055a60f6802a1fd29a6998",
+        "docs/project-progress.md": "0000000000000000000000000000000000000000000000000000000000000000",
         "docs/source-catalog.md": "960d81b8ac76bd89495b56ee2b70a867648600f19c94ff56dfe9a8e91c4528d0",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",

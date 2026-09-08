@@ -8,6 +8,11 @@ sources, and delivers a daily, weekly, or on-demand Digest. It is derived from
 [follow-builders](https://github.com/zarazhangrui/follow-builders) and keeps compatible
 user data under `~/.follow-builders/`.
 
+Current version: `0.2.0` Stable. See [project progress](docs/project-progress.md), the
+[complete source catalog](docs/source-catalog.md), and the [changelog](CHANGELOG.md).
+Public installation assets are published through
+[GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases).
+
 The supported user entry points are:
 
 - say `set up follow-up` to start onboarding;
@@ -38,6 +43,11 @@ cd ..
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] --register
 node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
 ```
+
+After installation and a successful `doctor` check, say `set up follow-up` to select
+channels, a daily or weekly frequency, and a delivery destination. Scheduled delivery
+runs only after onboarding, schedule, and exact-destination approval; invoke
+`/follow-up` at any time for an on-demand Digest.
 
 `--register` explicitly approves creation of the `follow-up` Skill link. The installer
 supports Codex, Claude Code, and a custom absolute Skill directory. Reinstalling the
