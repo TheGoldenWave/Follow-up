@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "5ec87e6214106acb524610196af5cb660ce532bd3bf52e0f6272c3dcc1791589"
+      "digest": "636e5837aca0cc83b5e24757b8a93e1fbe49a8d847d4f5003263f9ae03d87f6f"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -57,7 +57,7 @@
         "contracts/digest-curation-request.schema.json": "bb77723741fccaf3c1bcd08845a321d4f0c105477e633ea4d49dcce58e36f19a",
         "contracts/digest-selection.schema.json": "a11a2e794f123f29db9189ebffb5588f79b081db2971589a6a6b9e88afdb9db1",
         "contracts/release-manifest.schema.json": "ff86823ea1cc877bc64eed8b745828fe1820060c81055a60f6802a1fd29a6998",
-        "docs/project-progress.md": "0000000000000000000000000000000000000000000000000000000000000000",
+        "docs/project-progress.md": "6093968f336d68db8953f298bab8e80d38d727b50680fdb28434b1e35fd5fa6a",
         "docs/source-catalog.md": "960d81b8ac76bd89495b56ee2b70a867648600f19c94ff56dfe9a8e91c4528d0",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
@@ -98,7 +98,7 @@
         "scripts/release/build-release.sh": "a96dd85222d22237986caaa198a390b511bf96f46885224f4a78e5b1257178c8",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
         "scripts/release/scan-secrets.js": "5879411abcf32c30609d336b1a28cf2323b4df51964cdead3d12274d5e5b2ada",
-        "scripts/release/validate-release.js": "3e526ca5e030b5b32faa4df013dd91986301f88ac9473b6e4cfa3e2ab36ce72d",
+        "scripts/release/validate-release.js": "b4be4bd44b6c07e29fd116a62246a02c702f5611ada3aeddda5d04acb0387ee8",
         "scripts/release/verify-dependency-licenses.js": "f4b2603095df4651a54f7deeee741b697301a9672ee1c48cf61f8419325f1572",
         "scripts/resolve-delivery.js": "e628e7696ac09dc0645039b1ea182cb5ceea3eaa62fa7d7051682e3a63834e7e",
         "scripts/schedule-gate.js": "b01b23e2d700098c6977e7b9f4e4c10f2c13febc25b88d95a814840394e43cf5",
