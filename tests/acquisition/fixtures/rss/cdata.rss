@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>CDATA Feed</title>
+    <link>https://example.com/cdata</link>
+    <description>Feed exercising CDATA bodies</description>
+    <item>
+      <title>CDATA entry</title>
+      <link>https://example.com/cdata/1</link>
+      <guid>cdata-1</guid>
+      <pubDate>Mon, 01 Sep 2026 12:00:00 GMT</pubDate>
+      <description><![CDATA[<p>This has <b>bold</b>, &amp; ampersands, and < raw > angle brackets that would break plain XML.</p>]]></description>
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>示例中文科技媒体</title>
+    <link>https://example.com/zh</link>
+    <description>中文科技资讯</description>
+    <item>
+      <title>AI 模型发布</title>
+      <link>https://example.com/zh/ai-model</link>
+      <pubDate>Mon, 08 Sep 2026 08:08:11 +0800</pubDate>
+      <description><![CDATA[<p><strong>文｜作者</strong></p><p>正文内容，含特殊字符 &amp; 与 &lt;标签&gt;。</p>]]></description>
+    </item>
+    <item>
+      <title>大模型评测</title>
+      <link>https://example.com/zh/benchmark</link>
+      <pubDate>Mon, 08 Sep 2026 07:00:00 +0800</pubDate>
+      <description>评测摘要</description>
+    </item>
+  </channel>
+</rss>

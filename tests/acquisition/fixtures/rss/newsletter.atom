@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example Newsletter</title>
+  <id>urn:uuid:feed-newsletter-1</id>
+  <link href="https://example.com/newsletter" rel="alternate"/>
+  <updated>2026-09-08T10:00:00Z</updated>
+  <entry>
+    <title>Edition 1</title>
+    <id>tag:example.com,2026:edition-1</id>
+    <link href="https://example.com/newsletter/edition-1"/>
+    <updated>2026-09-07T10:00:00Z</updated>
+    <author><name>Alice Author</name></author>
+    <content type="html">&lt;p&gt;Newsletter body&lt;/p&gt;</content>
+  </entry>
+  <entry>
+    <title>Edition 2</title>
+    <id>tag:example.com,2026:edition-2</id>
+    <link href="https://example.com/newsletter/edition-2"/>
+    <updated>2026-09-06T10:00:00Z</updated>
+    <author><name>Alice Author</name></author>
+    <summary>Edition 2 summary</summary>
+  </entry>
+</feed>

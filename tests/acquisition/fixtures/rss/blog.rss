@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Example Blog</title>
+    <link>https://example.com/blog</link>
+    <description>Example engineering blog feed</description>
+    <item>
+      <title>First post</title>
+      <link>https://example.com/blog/first</link>
+      <guid isPermaLink="false">post-001</guid>
+      <pubDate>Mon, 01 Sep 2026 12:00:00 GMT</pubDate>
+      <author>alice@example.com (Alice)</author>
+      <description><![CDATA[<p>First post body with <b>markup</b>.</p>]]></description>
+    </item>
+    <item>
+      <title>Second post</title>
+      <link>https://example.com/blog/second</link>
+      <guid isPermaLink="false">post-002</guid>
+      <pubDate>Tue, 02 Sep 2026 09:30:00 GMT</pubDate>
+      <description>Second post summary</description>
+    </item>
+  </channel>
+</rss>

@@ -11,6 +11,11 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-cov>=5"]
+# The core (contracts/runtime/config/cache/redaction) stays stdlib-only; the
+# RSS and Blog adapters pull in their parsers lazily and are declared as extras
+# so the foundation remains install-free and offline-runnable.
+rss = ["feedparser==6.0.14"]
+blog = ["feedparser==6.0.14", "trafilatura==2.2.0"]
 
 [project.scripts]
 follow-up-acquisition = "follow_up_acquisition.cli:main"
