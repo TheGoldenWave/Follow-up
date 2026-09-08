@@ -120,6 +120,7 @@ test('manifest records non-circular tracked content and critical-file integrity'
     'contracts/digest-curation-request.schema.json',
     'contracts/digest-selection.schema.json',
     'contracts/release-manifest.schema.json',
+    'docs/project-progress.md',
     'docs/source-catalog.md',
     'docs/third-party/v0.1.0-dependencies.md',
     'prompts/curate-digest.md',
