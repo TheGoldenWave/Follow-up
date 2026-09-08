@@ -36,20 +36,27 @@ canonical 方向见
 
 ## v0.3.0 进行中
 
-首批已落地（对应 Task 1–2）：
+已落地（对应 Task 1、2、4、5）：
 
 - 新增 Python 3.12 包 `follow_up_acquisition`（`src/`、`pyproject.toml`），纯标准库、
   离线可跑；提供 `--version`、`doctor`、`run` 命令骨架。
 - 新增版本化 Signal Batch 契约：`contracts/signal-batch.schema.json`（JSON Schema
   2020-12）+ 纯标准库校验器 `src/follow_up_acquisition/contracts.py`，含 10 种来源
   状态分类与凭据键名递归拒绝。
+- 新增 Acquisition Runtime（`src/follow_up_acquisition/runtime.py`）：窄 Adapter
+  协议、候选标准化、跨源去重（原生 ID → canonical URL）、来源状态聚合与契约序列化；
+  附带 TTL 缓存（7/90 天）与日志/产物脱敏。
+- 新增权威 source registry（`config/sources.json`，82 个 namespaced 来源、70 个
+  live），由 `scripts/build-source-registry.py` 从 legacy 配置生成；`config.py`
+  校验唯一不可变 ID、channel policy、adapter 引用与凭据引用约束。
 - 新增 `scripts/bootstrap-acquisition.js`，负责探测 Python 3.12 并写入
   `~/.follow-builders/runtime.json`。
-- 测试：Python 23 例 + Node 5 例全绿；secret 扫描无命中。
+- 测试：Python 77 例 + Node 5 例全绿；secret 扫描无命中。
 
-后续仍待开发：受控 vendoring、Acquisition Runtime 编排/去重/缓存、source registry、
-RSS Adapter 与官网 Blog shadow mode。其中 vendoring 与 feedparser/trafilatura 依赖
-需要联网拉取，当前环境外网受限，需恢复网络后推进。
+后续仍待开发（Task 3、6、7）：受控 vendoring、共享 RSS Adapter 与官网 Blog shadow
+mode。其中 vendoring 需从 GitHub 拉取上游快照，RSS/Blog 需联网安装
+feedparser/trafilatura；当前环境外网受限（PyPI 与 GitHub 连接均超时），需恢复网络
+后推进。
 
 ## 使用路径
 
