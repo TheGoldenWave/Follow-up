@@ -36,27 +36,37 @@ canonical 方向见
 
 ## v0.3.0 进行中
 
-已落地（对应 Task 1、2、4、5）：
+核心范围已全部落地（Task 1–7）：
 
-- 新增 Python 3.12 包 `follow_up_acquisition`（`src/`、`pyproject.toml`），纯标准库、
-  离线可跑；提供 `--version`、`doctor`、`run` 命令骨架。
+- 新增 Python 3.12 包 `follow_up_acquisition`（`src/`、`pyproject.toml`）：核心层
+  （contracts/runtime/config/cache/redaction）纯标准库、离线可跑；`rss`/`blog` 额外
+  依赖 `feedparser==6.0.14`/`trafilatura==2.2.0` 以 optional extras 声明，保持基础层
+  可离线安装。CLI 提供 `--version`、`doctor`、`run`。
 - 新增版本化 Signal Batch 契约：`contracts/signal-batch.schema.json`（JSON Schema
-  2020-12）+ 纯标准库校验器 `src/follow_up_acquisition/contracts.py`，含 10 种来源
-  状态分类与凭据键名递归拒绝。
-- 新增 Acquisition Runtime（`src/follow_up_acquisition/runtime.py`）：窄 Adapter
-  协议、候选标准化、跨源去重（原生 ID → canonical URL）、来源状态聚合与契约序列化；
-  附带 TTL 缓存（7/90 天）与日志/产物脱敏。
-- 新增权威 source registry（`config/sources.json`，82 个 namespaced 来源、70 个
-  live），由 `scripts/build-source-registry.py` 从 legacy 配置生成；`config.py`
-  校验唯一不可变 ID、channel policy、adapter 引用与凭据引用约束。
-- 新增 `scripts/bootstrap-acquisition.js`，负责探测 Python 3.12 并写入
-  `~/.follow-builders/runtime.json`。
-- 测试：Python 77 例 + Node 5 例全绿；secret 扫描无命中。
+  2020-12）+ 纯标准库校验器 `contracts.py`，含 10 种来源状态分类与凭据键名递归拒绝。
+- 新增 Acquisition Runtime（`runtime.py`）：窄 Adapter 协议、候选标准化、跨源去重
+  （原生 ID → canonical URL）、来源状态聚合与契约序列化；附带 7/90 天 TTL 缓存与脱敏。
+- 新增权威 source registry（`config/sources.json`，82 来源 / 70 live / 7 频道），由
+  `scripts/build-source-registry.py` 生成；`config.py` 校验唯一不可变 ID、channel
+  policy、adapter 引用与凭据引用约束。
+- 新增受控 vendoring：`vendor/manifest.json` + `vendor.py` 校验器（结构 + 哈希比对，
+  哈希过期即失败）+ `scripts/vendor/sync-last30days.sh` + 溯源文档；已复刻
+  `last30days-skill@3.22.0`（commit `fcebe321`）的 MIT 许可证与 `cjk.py`（CJK 分词，
+  jieba 可选、无 jieba 时退化为二元字符）。
+- 新增共享 RSS Adapter（`adapters/rss.py`，feedparser）：覆盖 blog/newsletter/
+  podcast/中文科技 fixture，以及缺失 GUID、畸形日期、CDATA、播客 enclosure 等边界，
+  缺失日期/无稳定 ID 时产出 item_warning。
+- 新增官网 Blog Adapter（`adapters/web_publication.py`，feedparser + trafilatura）：
+  发现顺序固定为 RSS → sitemap → 索引页；索引布局漂移→`schema-drift`、单篇抽取
+  失败→`item_warnings`、整体不可达→`unreachable`。
+- `run` 命令接通 shadow mode（`collect.py`）：按注册表构造 rss/web-publication
+  Adapter，产出写入隔离的 `~/.follow-builders/acquisition/`；`doctor` 报告注册表摘要。
+- 测试：Python 124 例 + Node 5 例全绿；secret 扫描零命中；`git diff --check` 干净；
+  实网 smoke test（36kr / apple-ml / openai-alignment）产出的 batch 均通过契约校验。
 
-后续仍待开发（Task 3、6、7）：受控 vendoring、共享 RSS Adapter 与官网 Blog shadow
-mode。其中 vendoring 需从 GitHub 拉取上游快照，RSS/Blog 需联网安装
-feedparser/trafilatura；当前环境外网受限（PyPI 与 GitHub 连接均超时），需恢复网络
-后推进。
+尚未纳入 v0.3.0（按冻结范围归入后续版本）：GitHub/HN/Reddit/Techmeme/arXiv（v0.4.0）、
+YouTube/播客/Digg（v0.5.0）、X（v0.6.0）、小红书/微信公众号 Sidecar（v0.7.0），以及
+Digest 集成与中心 Feed 下线（Task 17–21，由质量门禁驱动）。
 
 ## 使用路径
 

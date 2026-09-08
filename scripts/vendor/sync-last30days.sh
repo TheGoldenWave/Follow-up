@@ -8,9 +8,12 @@ set -euo pipefail
 
 UPSTREAM="https://github.com/mvanhorn/last30days-skill"
 COMMIT="fcebe321c22e5e97e3ef5712e4bc00f2b33bba37"
-# Paths approved for import, relative to the upstream repo root. Populate after
-# reviewing the upstream layout; leaving this empty is a deliberate stop-gate.
-IMPORT_PATHS=()
+# Paths approved for import, relative to the upstream repo root. Files are
+# copied flat (by basename) into vendor/last30days/ so imported_paths in
+# vendor/manifest.json stays short and stable.
+IMPORT_PATHS=(
+  "skills/last30days/scripts/lib/cjk.py"
+)
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VENDOR_DIR="$ROOT/vendor/last30days"
@@ -38,7 +41,7 @@ echo "importing approved paths into $VENDOR_DIR" >&2
 rm -rf "$VENDOR_DIR"
 mkdir -p "$VENDOR_DIR"
 for path in "${IMPORT_PATHS[@]}"; do
-  cp -R "$TMP_DIR/src/$path" "$VENDOR_DIR/"
+  cp "$TMP_DIR/src/$path" "$VENDOR_DIR/$(basename "$path")"
 done
 
 echo "recording file hashes" >&2
