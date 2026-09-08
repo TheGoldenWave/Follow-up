@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "entries": [
+    {
+      "id": "last30days",
+      "upstream": "https://github.com/mvanhorn/last30days-skill",
+      "ref": "3.22.0",
+      "commit": "fcebe321c22e5e97e3ef5712e4bc00f2b33bba37",
+      "license": "MIT",
+      "license_file": "vendor/licenses/last30days-MIT.txt",
+      "imported_paths": [],
+      "sha256": null,
+      "patches": [],
+      "synced_at": null
+    },
+    {
+      "id": "we-mp-rss",
+      "upstream": "https://github.com/rachelos/we-mp-rss",
+      "ref": "commit-pinned",
+      "commit": "f54aba50cbf349ed7e4ee1dae8bfe9990d0c5894",
+      "license": "MIT",
+      "license_file": "vendor/licenses/we-mp-rss-MIT.txt",
+      "imported_paths": [],
+      "sha256": null,
+      "patches": [],
+      "synced_at": null
+    },
+    {
+      "id": "xiaohongshu-mcp",
+      "upstream": "https://github.com/xpzouying/xiaohongshu-mcp",
+      "ref": "commit-pinned",
+      "commit": "332d196854a9eac0d2b8c2c0e3d0cc43139d724c",
+      "license": "Apache-2.0",
+      "license_file": null,
+      "imported_paths": [],
+      "sha256": null,
+      "patches": [],
+      "synced_at": null
+    }
+  ]
+}
