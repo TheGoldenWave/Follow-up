@@ -132,6 +132,10 @@
             "url": "https://www.amazon.science/blog/"
           }
         ],
+        "article_url_patterns": [
+          "^https://www\\.amazon\\.science/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -161,6 +165,10 @@
             "url": "https://www.anthropic.com/engineering"
           }
         ],
+        "article_url_patterns": [
+          "^https://www\\.anthropic\\.com/engineering/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": "anthropic-engineering"
       },
       "legacy": {
@@ -186,6 +194,10 @@
             "url": "https://www.anthropic.com/research/team/interpretability"
           }
         ],
+        "article_url_patterns": [
+          "^https://www\\.anthropic\\.com/research/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -211,6 +223,10 @@
             "url": "https://www.anthropic.com/science"
           }
         ],
+        "article_url_patterns": [
+          "^https://www\\.anthropic\\.com/research/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -240,6 +256,10 @@
             "url": "https://machinelearning.apple.com/sitemap.xml"
           }
         ],
+        "article_url_patterns": [
+          "^https://machinelearning\\.apple\\.com/research/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -265,6 +285,10 @@
             "url": "https://claude.com/blog"
           }
         ],
+        "article_url_patterns": [
+          "^https://claude\\.com/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": "claude-blog"
       },
       "legacy": {
@@ -294,6 +318,10 @@
             "url": "https://ernie.baidu.com/blog/zh/"
           }
         ],
+        "article_url_patterns": [
+          "^https://ernie\\.baidu\\.com/blog/zh/posts/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -323,6 +351,10 @@
             "url": "https://antigravity.google/blog"
           }
         ],
+        "article_url_patterns": [
+          "^https://antigravity\\.google/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -352,6 +384,10 @@
             "url": "https://deepmind.google/blog/"
           }
         ],
+        "article_url_patterns": [
+          "^https://deepmind\\.google/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -381,6 +417,10 @@
             "url": "https://research.google/blog/"
           }
         ],
+        "article_url_patterns": [
+          "^https://research\\.google/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -410,6 +450,10 @@
             "url": "https://research.ibm.com/blog"
           }
         ],
+        "article_url_patterns": [
+          "^https://research\\.ibm\\.com/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -439,6 +483,10 @@
             "url": "https://www.kimi.ai/sitemap.xml"
           }
         ],
+        "article_url_patterns": [
+          "^https://www\\.kimi\\.ai/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -468,6 +516,10 @@
             "url": "https://www.microsoft.com/en-us/research/feed/"
           }
         ],
+        "article_url_patterns": [
+          "^https://www\\.microsoft\\.com/en-us/research/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -497,6 +549,10 @@
             "url": "https://www.minimax.cn/blog"
           }
         ],
+        "article_url_patterns": [
+          "^https://www\\.minimax\\.cn/blog/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -526,6 +582,10 @@
             "url": "https://alignment.openai.com/"
           }
         ],
+        "article_url_patterns": [
+          "^https://alignment\\.openai\\.com/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -555,6 +615,10 @@
             "url": "https://research.perplexity.ai/sitemap.xml"
           }
         ],
+        "article_url_patterns": [
+          "^https://research\\.perplexity\\.ai/articles/[^/?#]+/?$"
+        ],
+        "exclude_url_patterns": [],
         "parser": null
       },
       "legacy": {
@@ -586,6 +650,10 @@
             "url": "https://qwen.ai/blog/"
           }
         ],
+        "article_url_patterns": [
+          "^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$"
+        ],
+        "exclude_url_patterns": [],
         "parser": "qwen-blog"
       },
       "legacy": {

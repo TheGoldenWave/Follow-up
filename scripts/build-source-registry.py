@@ -87,6 +87,8 @@ def build() -> dict:
                 "url": blog["url"],
                 "language": blog.get("language", "en"),
                 "discovery": blog.get("discovery", []),
+                "article_url_patterns": blog.get("articleUrlPatterns", []),
+                "exclude_url_patterns": blog.get("excludeUrlPatterns", []),
                 "parser": blog.get("parser"),
             },
             feed="feed-blogs.json",
