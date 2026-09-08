@@ -13,6 +13,7 @@
     "validate-blog-sources": "node validate-blog-sources.js",
     "generate-feed": "node generate-feed.js",
     "prepare-digest": "node prepare-digest.js",
+    "collect-and-prepare": "node collect-and-prepare.js",
     "finalize-digest": "node finalize-digest.js",
     "resolve-delivery": "node resolve-delivery.js",
     "test:release": "node --test test/release-manifest.test.js test/release-build.test.js",
