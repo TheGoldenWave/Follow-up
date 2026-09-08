@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import subprocess
 import sys
@@ -23,6 +24,32 @@ class CliTests(unittest.TestCase):
             code = main(["doctor"])
         self.assertEqual(code, 0)
         self.assertIn("doctor", stdout.getvalue())
+
+    def test_doctor_reports_registry_summary(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["doctor"])
+        self.assertEqual(code, 0)
+        out = stdout.getvalue()
+        self.assertIn("sources:", out)
+        self.assertIn("channels:", out)
+
+    def test_doctor_json_emits_machine_readable_summary(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["doctor", "--json"])
+        self.assertEqual(code, 0)
+        summary = json.loads(stdout.getvalue())
+        self.assertTrue(summary["ok"])
+        self.assertIn("totals", summary)
+        self.assertIn("channels", summary)
+
+    def test_doctor_missing_registry_returns_one(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["doctor", "--registry", "/nonexistent/sources.json"])
+        self.assertEqual(code, 1)
+        self.assertIn("failed to load registry", stdout.getvalue())
 
     def test_run_exits_zero(self):
         stdout = io.StringIO()

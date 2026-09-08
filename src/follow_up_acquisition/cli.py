@@ -3,9 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from collections import Counter
+from pathlib import Path
 
 from . import __version__
+
+
+def _default_registry_path() -> Path:
+    # Repo-relative default for the source checkout; a wheel install must pass
+    # --registry explicitly (mirrors contracts.py schema resolution).
+    return Path(__file__).resolve().parents[2] / "config" / "sources.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -20,7 +29,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("doctor", help="validate the runtime and report per-source status")
+    doctor = sub.add_parser(
+        "doctor",
+        help="validate the registry and report per-source status",
+    )
+    doctor.add_argument(
+        "--registry",
+        help="path to config/sources.json (defaults to the repo checkout)",
+    )
+    doctor.add_argument(
+        "--json",
+        action="store_true",
+        help="emit a machine-readable JSON summary",
+    )
 
     run_parser = sub.add_parser(
         "run",
@@ -34,10 +55,55 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _cmd_doctor() -> int:
-    # The doctor subcommand gains real behavior once the runtime and source
-    # registry land (v0.3.0 later tasks). Until then it reports honestly.
-    print("doctor: acquisition runtime not yet bootstrapped (no sources configured)")
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from .config import ConfigError, load_source_registry
+
+    path = Path(args.registry) if args.registry else _default_registry_path()
+    try:
+        sources = load_source_registry(path)
+    except (ConfigError, OSError) as exc:
+        if args.json:
+            print(json.dumps({"ok": False, "error": str(exc)}))
+        else:
+            print(f"doctor: failed to load registry: {exc}")
+        return 1
+
+    live = [s for s in sources if s["legacy"]["feed"] is not None]
+    enabled = [s for s in sources if s["default_enabled"]]
+    credentialed = [s for s in sources if s["requires_credentials"]]
+    by_channel = Counter(s["channel"] for s in sources)
+
+    summary = {
+        "ok": True,
+        "registry": str(path),
+        "totals": {
+            "sources": len(sources),
+            "live": len(live),
+            "planned": len(sources) - len(live),
+            "enabled_by_default": len(enabled),
+            "require_credentials": len(credentialed),
+        },
+        "channels": {channel: by_channel[channel] for channel in sorted(by_channel)},
+    }
+
+    if args.json:
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    else:
+        totals = summary["totals"]
+        print(f"doctor: registry {path}")
+        print(
+            f"  sources: {totals['sources']} "
+            f"(live {totals['live']}, planned {totals['planned']})"
+        )
+        print(
+            f"  enabled by default: {totals['enabled_by_default']}; "
+            f"require credentials: {totals['require_credentials']}"
+        )
+        print(
+            "  channels: "
+            + ", ".join(f"{channel}={count}" for channel, count in sorted(by_channel.items()))
+        )
+        print("  per-source runtime health requires the acquisition adapters.")
     return 0
 
 
@@ -49,7 +115,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "doctor":
-        return _cmd_doctor()
+        return _cmd_doctor(args)
     if args.command == "run":
         return _cmd_run(args)
     # No subcommand: a CLI must be told what to do rather than silently exit 0.
