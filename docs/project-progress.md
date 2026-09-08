@@ -8,6 +8,12 @@ Follow-up 当前产品版本为 `0.2.0`。本版本的功能开发、文档、�
 完成；公开发布状态以 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases)
 中的 `v0.2.0` 为准。
 
+`v0.3.0` 规划已于 2026-09-08 启动：范围冻结为 Acquisition Runtime、Signal Batch、
+source registry、受控 vendoring 与 RSS/Blog shadow mode。规划文档见
+[superpowers/plans/2026-09-08-v0.3.0-acquisition-runtime.md](superpowers/plans/2026-09-08-v0.3.0-acquisition-runtime.md)，
+canonical 方向见
+[2026-09-01 本地采集与 Adapter 设计](superpowers/specs/2026-09-01-local-acquisition-adapters-design.md)。
+
 ## v0.2.0 已完成
 
 - 统一用户入口为 `set up follow-up` 和 `/follow-up`，继续兼容
@@ -27,6 +33,23 @@ Follow-up 当前产品版本为 `0.2.0`。本版本的功能开发、文档、�
 
 完整信源清单见 [信源目录](source-catalog.md)，详细行为边界见
 [v0.2.0 产品设计](superpowers/specs/2026-09-05-v0.2.0-product-closure-design.md)。
+
+## v0.3.0 进行中
+
+首批已落地（对应 Task 1–2）：
+
+- 新增 Python 3.12 包 `follow_up_acquisition`（`src/`、`pyproject.toml`），纯标准库、
+  离线可跑；提供 `--version`、`doctor`、`run` 命令骨架。
+- 新增版本化 Signal Batch 契约：`contracts/signal-batch.schema.json`（JSON Schema
+  2020-12）+ 纯标准库校验器 `src/follow_up_acquisition/contracts.py`，含 10 种来源
+  状态分类与凭据键名递归拒绝。
+- 新增 `scripts/bootstrap-acquisition.js`，负责探测 Python 3.12 并写入
+  `~/.follow-builders/runtime.json`。
+- 测试：Python 23 例 + Node 5 例全绿；secret 扫描无命中。
+
+后续仍待开发：受控 vendoring、Acquisition Runtime 编排/去重/缓存、source registry、
+RSS Adapter 与官网 Blog shadow mode。其中 vendoring 与 feedparser/trafilatura 依赖
+需要联网拉取，当前环境外网受限，需恢复网络后推进。
 
 ## 使用路径
 
