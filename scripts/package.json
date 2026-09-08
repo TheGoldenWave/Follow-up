@@ -14,6 +14,7 @@
     "generate-feed": "node generate-feed.js",
     "prepare-digest": "node prepare-digest.js",
     "collect-and-prepare": "node collect-and-prepare.js",
+    "report-shadow": "node report-shadow.js",
     "finalize-digest": "node finalize-digest.js",
     "resolve-delivery": "node resolve-delivery.js",
     "test:release": "node --test test/release-manifest.test.js test/release-build.test.js",
