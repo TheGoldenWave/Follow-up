@@ -10,6 +10,14 @@
 
 **Canonical design:** `docs/superpowers/specs/2026-09-01-local-acquisition-adapters-design.md`
 
+**Roadmap assignment:** This plan begins in `v0.3.0`. The former `v0.2.0`
+assignment was too broad and has been replaced by the focused product-closure plan
+in `docs/superpowers/plans/2026-09-05-v0.2.0-product-closure.md`. Execute the
+runtime, contract, registry, and RSS/Blog shadow work first; later chunks map to the
+subsequent milestones in the version-release design. Central acquisition retirement
+remains conditional on source-level observation gates and is not tied to a fixed
+product version.
+
 ---
 
 ## Chunk 1: Runtime Foundation

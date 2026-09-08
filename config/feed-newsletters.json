@@ -2,6 +2,7 @@
   "lookbackHours": 72,
   "sources": [
     {
+      "id": "newsletter:stratechery",
       "name": "Stratechery (Ben Thompson)",
       "rss": "https://stratechery.com/feed/",
       "url": "https://stratechery.com/",
@@ -10,6 +11,7 @@
       "maxArticles": 2
     },
     {
+      "id": "newsletter:one-useful-thing",
       "name": "One Useful Thing (Ethan Mollick)",
       "rss": "https://oneusefulthing.org/feed",
       "url": "https://oneusefulthing.org/",
@@ -18,6 +20,7 @@
       "maxArticles": 2
     },
     {
+      "id": "newsletter:algorithmic-bridge",
       "name": "The Algorithmic Bridge",
       "rss": "https://thealgorithmicbridge.com/feed",
       "url": "https://thealgorithmicbridge.com/",
@@ -26,6 +29,7 @@
       "maxArticles": 2
     },
     {
+      "id": "newsletter:ai-snake-oil",
       "name": "AI Snake Oil",
       "rss": "https://aisnakeoil.substack.com/feed",
       "url": "https://aisnakeoil.substack.com/",

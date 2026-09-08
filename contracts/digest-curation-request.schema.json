@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/digest-curation-request.schema.json",
+  "title": "Follow-up Digest Curation Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "digestId",
+    "requestHash",
+    "frequency",
+    "coverage",
+    "eligibleCandidates",
+    "sourceStatuses",
+    "sourceCompleteness",
+    "contentStats",
+    "selectionRules",
+    "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "digestId": { "$ref": "#/$defs/stableId" },
+    "requestHash": { "$ref": "#/$defs/hashId" },
+    "frequency": { "$ref": "#/$defs/frequency" },
+    "coverage": { "$ref": "#/$defs/coverage" },
+    "eligibleCandidates": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/curationCandidate" }
+    },
+    "interests": {
+      "type": "array",
+      "maxItems": 50,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "sourceStatuses": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/sourceStatus" }
+    },
+    "sourceCompleteness": { "$ref": "#/$defs/sourceCompleteness" },
+    "contentStats": { "$ref": "#/$defs/contentStats" },
+    "selectionRules": { "$ref": "#/$defs/selectionRules" },
+    "generatedAt": { "$ref": "#/$defs/dateTime" }
+  },
+  "$defs": {
+    "dateTime": { "type": "string", "format": "date-time", "maxLength": 35 },
+    "hashId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "channel": {
+      "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
+    },
+    "sourceId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$"
+    },
+    "stableId": {
+      "type": "string",
+      "anyOf": [
+        { "pattern": "^[a-f0-9]{64}$" },
+        { "format": "uuid" }
+      ]
+    },
+    "frequency": { "enum": ["daily", "weekly"] },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/$defs/dateTime" },
+        "end": { "$ref": "#/$defs/dateTime" }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frequency", "status", "complete", "requestedInterval",
+        "actualInterval", "bounds", "reasons"
+      ],
+      "properties": {
+        "frequency": { "$ref": "#/$defs/frequency" },
+        "status": { "enum": ["complete", "incomplete-history"] },
+        "complete": { "type": "boolean" },
+        "requestedInterval": { "$ref": "#/$defs/interval" },
+        "actualInterval": { "$ref": "#/$defs/interval" },
+        "bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["startInclusive", "endInclusive"],
+          "properties": {
+            "startInclusive": { "const": true },
+            "endInclusive": { "type": "boolean" }
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+        }
+      }
+    },
+    "sourceCompleteness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status", "complete", "feedFresh", "expectedSourceCount", "reportedSourceCount",
+        "totalSourceCount", "okSourceCount", "noResultsSourceCount",
+        "partialSourceCount", "errorSourceCount", "missingSourceCount"
+      ],
+      "properties": {
+        "status": { "enum": ["complete", "incomplete"] },
+        "complete": { "type": "boolean" },
+        "feedFresh": { "type": "boolean" },
+        "expectedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "reportedSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "totalSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "okSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "noResultsSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "partialSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "errorSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "missingSourceCount": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      }
+    },
+    "contentStats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateCount", "eligibleCount", "excludedCount", "selectedCount"],
+      "properties": {
+        "candidateCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "eligibleCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "excludedCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "selectedCount": { "const": 0 }
+      }
+    },
+    "selectionRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "qualificationThreshold", "maxSelected", "maxLeadsPerSource",
+        "channelPositionLimit", "channelLimitAppliesAtQualifyingChannelCount",
+        "ordering", "sourceDiversityFirst"
+      ],
+      "properties": {
+        "qualificationThreshold": { "const": 60 },
+        "maxSelected": { "const": 10 },
+        "maxLeadsPerSource": { "const": 2 },
+        "channelPositionLimit": { "const": 4 },
+        "channelLimitAppliesAtQualifyingChannelCount": { "const": 3 },
+        "ordering": {
+          "const": "totalScore-desc,evidence-desc,publishedAt-desc,candidateId-asc"
+        },
+        "sourceDiversityFirst": { "const": true }
+      }
+    },
+    "curationCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateId", "channel", "sourceId", "canonicalUrl", "title", "author",
+        "publishedAt", "firstSeenAt", "lastSeenAt", "contentFingerprint",
+        "summarizationContent", "contentTruncated"
+      ],
+      "properties": {
+        "candidateId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "channel": { "$ref": "#/$defs/channel" },
+        "sourceId": { "$ref": "#/$defs/sourceId" },
+        "sourceNativeId": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "canonicalUrl": {
+          "type": "string", "format": "uri", "pattern": "^https?://", "maxLength": 2048
+        },
+        "title": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "author": { "type": "string", "maxLength": 200 },
+        "publishedAt": {
+          "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }]
+        },
+        "firstSeenAt": { "$ref": "#/$defs/dateTime" },
+        "lastSeenAt": { "$ref": "#/$defs/dateTime" },
+        "contentFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "summarizationContent": { "type": "string", "maxLength": 12000 },
+        "contentTruncated": { "type": "boolean" }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "channel", "sourceName", "status", "candidateCount"],
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/sourceId" },
+        "channel": { "$ref": "#/$defs/channel" },
+        "sourceName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "status": { "enum": ["ok", "no-results", "partial", "error"] },
+        "candidateCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "failedCandidateCount": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "warnings": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+        },
+        "errorSummary": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["partial", "error"] } } },
+          "then": { "required": ["errorSummary"] }
+        }
+      ]
+    }
+  }
+}

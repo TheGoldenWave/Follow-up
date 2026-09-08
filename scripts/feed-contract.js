@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { validateCandidateFeed } from './candidate-feed-contract.js';
+import { recoverFeedPublication, withFeedPublicationLock } from './feed-publication.js';
+import { loadSourceRegistry } from './source-registry.js';
 
 export const FEED_SCHEMA_VERSION = '1.0';
 export const CENTRAL_FEED_FILES = [
@@ -14,6 +17,7 @@ export const CENTRAL_FEED_FILES = [
   { category: 'academic', filename: 'feed-academic.json' },
   { category: 'zh-tech', filename: 'feed-zh-tech.json' },
 ];
+export const CANDIDATE_FEED_FILE = 'feed-candidates.json';
 
 const PAYLOAD_KEYS = {
   x: 'x',
@@ -71,6 +75,7 @@ export async function validateFeedFiles({
     new URL(`../${filename}`, import.meta.url),
     'utf8',
   )),
+  expectedRegistry,
 } = {}) {
   const errors = [];
   for (const { category, filename } of CENTRAL_FEED_FILES) {
@@ -81,17 +86,39 @@ export async function validateFeedFiles({
       errors.push(`${filename}: ${error.message}`);
     }
   }
+  try {
+    const registry = expectedRegistry ?? await loadSourceRegistry();
+    const result = validateCandidateFeed(await readJson(CANDIDATE_FEED_FILE), {
+      expectedRegistry: registry,
+    });
+    errors.push(...result.errors.map((error) => `${CANDIDATE_FEED_FILE}: ${error}`));
+  } catch (error) {
+    errors.push(`${CANDIDATE_FEED_FILE}: ${error.message}`);
+  }
   return errors;
 }
 
+export async function validateFeedFilesLocked({
+  rootDir = fileURLToPath(new URL('../', import.meta.url)),
+  withLockImpl = withFeedPublicationLock,
+  recoverImpl = recoverFeedPublication,
+  validateImpl = validateFeedFiles,
+  ...validateOptions
+} = {}) {
+  return withLockImpl(rootDir, async () => {
+    await recoverImpl(rootDir);
+    return validateImpl(validateOptions);
+  });
+}
+
 async function main() {
-  const errors = await validateFeedFiles();
+  const errors = await validateFeedFilesLocked();
   if (errors.length > 0) {
     for (const error of errors) console.error(error);
     process.exitCode = 1;
     return;
   }
-  console.log('All six central feeds are valid.');
+  console.log('All six central feeds and the candidate Feed are valid.');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -4,6 +4,7 @@
   "papers": [],
   "sources": [
     {
+      "id": "academic:arxiv-cs-ai",
       "name": "arXiv cs.AI",
       "rss": "https://rss.arxiv.org/rss/cs.AI",
       "url": "https://arxiv.org/list/cs.AI/recent",
@@ -12,6 +13,7 @@
       "maxArticles": 5
     },
     {
+      "id": "academic:arxiv-cs-cl",
       "name": "arXiv cs.CL",
       "rss": "https://rss.arxiv.org/rss/cs.CL",
       "url": "https://arxiv.org/list/cs.CL/recent",
@@ -20,6 +22,7 @@
       "maxArticles": 5
     },
     {
+      "id": "academic:arxiv-cs-cv",
       "name": "arXiv cs.CV",
       "rss": "https://rss.arxiv.org/rss/cs.CV",
       "url": "https://arxiv.org/list/cs.CV/recent",
@@ -28,6 +31,7 @@
       "maxArticles": 3
     },
     {
+      "id": "academic:arxiv-cs-lg",
       "name": "arXiv cs.LG",
       "rss": "https://rss.arxiv.org/rss/cs.LG",
       "url": "https://arxiv.org/list/cs.LG/recent",
@@ -36,6 +40,7 @@
       "maxArticles": 3
     },
     {
+      "id": "academic:arxiv-cs-ro",
       "name": "arXiv cs.RO",
       "rss": "https://rss.arxiv.org/rss/cs.RO",
       "url": "https://arxiv.org/list/cs.RO/recent",
@@ -44,6 +49,7 @@
       "maxArticles": 2
     },
     {
+      "id": "academic:arxiv-cs-cr",
       "name": "arXiv cs.CR (AI Security)",
       "rss": "https://rss.arxiv.org/rss/cs.CR",
       "url": "https://arxiv.org/list/cs.CR/recent",

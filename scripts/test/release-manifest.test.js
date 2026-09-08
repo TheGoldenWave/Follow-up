@@ -10,6 +10,7 @@ import {
   computeCriticalFileHashes,
   computeTrackedContentDigest,
   EXPECTED_FEEDS,
+  REQUIRED_CRITICAL_FILES,
   validateArchiveCriticalFiles,
   validateManifest,
   validateRelease,
@@ -43,22 +44,34 @@ async function createReleaseFixture(t) {
   return root;
 }
 
-test('repository release identity agrees on version 0.1.0', async () => {
+test('repository release identity is frozen at version 0.2.0 on 2026-09-07', async () => {
   const version = (await readFile(new URL('VERSION', repositoryRoot), 'utf8')).trim();
   const packageJson = await readJson('scripts/package.json');
   const packageLock = await readJson('scripts/package-lock.json');
   const manifest = await readJson('release-manifest.json');
   const changelog = await readFile(new URL('CHANGELOG.md', repositoryRoot), 'utf8');
+  const releaseDesign = await readFile(
+    new URL('docs/superpowers/specs/2026-09-02-version-release-upgrade-design.md', repositoryRoot),
+    'utf8',
+  );
 
-  assert.equal(version, '0.1.0');
+  assert.equal(version, '0.2.0');
+  assert.equal(packageJson.name, 'follow-builders-scripts');
+  assert.equal(
+    packageJson.description,
+    'Scripts for Follow-up - feed generation, digest preparation, and delivery',
+  );
+  assert.doesNotMatch(packageJson.description, /Follow Builders skill/i);
   assert.equal(packageJson.version, version);
   assert.equal(packageLock.version, version);
   assert.equal(packageLock.packages[''].version, version);
   assert.equal(manifest.productVersion, version);
-  assert.match(changelog, /^## \[0\.1\.0\] - \d{4}-\d{2}-\d{2}$/m);
+  assert.equal(manifest.releaseDate, '2026-09-07');
+  assert.match(changelog, /^## \[0\.2\.0\] - 2026-09-07$/m);
+  assert.match(releaseDesign, /^Release freeze date: 2026-09-07$/m);
 });
 
-test('manifest describes only the stable centralized six-feed baseline', async () => {
+test('manifest declares only implemented v0.2 capabilities', async () => {
   const manifest = await readJson('release-manifest.json');
 
   assert.equal(manifest.channel, 'stable');
@@ -67,9 +80,21 @@ test('manifest describes only the stable centralized six-feed baseline', async (
   assert.equal(manifest.acquisition.mode, 'centralized');
   assert.deepEqual(manifest.acquisition.feeds, EXPECTED_FEEDS);
   assert.deepEqual(manifest.capabilities, {
+    officialBlogs: true,
+    channelSelection: true,
+    candidatePool: true,
+    digestSelection: true,
+    deliveryLedger: true,
+    atMostOnceDelivery: true,
+    installer: true,
+    doctor: true,
     localAcquisition: false,
     sidecars: false,
-    feedbackState: false,
+    longTermFeedback: false,
+    reports: false,
+    paginatedFeed: false,
+    explicitReadState: false,
+    automaticRollback: false,
     updater: false,
   });
   assert.deepEqual(validateManifest(manifest, manifest.productVersion), []);
@@ -87,15 +112,18 @@ test('manifest records non-circular tracked content and critical-file integrity'
   const requiredCriticalFiles = [
     'LICENSE',
     'THIRD_PARTY_NOTICES.md',
+    'SKILL.md',
+    'VERSION',
+    'config/config-schema.json',
+    'contracts/candidate-feed.schema.json',
+    'contracts/central-feed.schema.json',
+    'contracts/digest-curation-request.schema.json',
+    'contracts/digest-selection.schema.json',
+    'contracts/release-manifest.schema.json',
+    'docs/project-progress.md',
+    'docs/source-catalog.md',
     'docs/third-party/v0.1.0-dependencies.md',
-    'scripts/release/check-provenance.js',
-    'scripts/release/scan-secrets.js',
-    'scripts/release/verify-dependency-licenses.js',
-    'scripts/release/validate-release.js',
-    'scripts/release/build-release.sh',
-    'scripts/package.json',
-    'scripts/package-lock.json',
-    'scripts/validate-feed-artifact.js',
+    'prompts/curate-digest.md',
     'prompts/digest-intro.md',
     'prompts/summarize-blogs.md',
     'prompts/summarize-newsletter.md',
@@ -104,7 +132,45 @@ test('manifest records non-circular tracked content and critical-file integrity'
     'prompts/summarize-tweets.md',
     'prompts/summarize-zh-sources.md',
     'prompts/translate.md',
+    'scripts/candidate-feed-contract.js',
+    'scripts/candidate-feed-store.js',
+    'scripts/candidate-identity.js',
+    'scripts/candidate-normalization.js',
+    'scripts/command-line.js',
+    'scripts/config-contract.js',
+    'scripts/deliver.js',
+    'scripts/delivery-ledger.js',
+    'scripts/delivery-message.js',
+    'scripts/delivery-outbox.js',
+    'scripts/delivery-providers.js',
+    'scripts/digest-candidates.js',
+    'scripts/digest-selection-contract.js',
+    'scripts/digest-selection.js',
+    'scripts/digest-window.js',
+    'scripts/doctor.js',
+    'scripts/feed-contract.js',
+    'scripts/finalize-digest.js',
+    'scripts/install.js',
+    'scripts/lib/diagnostics.js',
+    'scripts/lib/install-worker.js',
+    'scripts/lib/paths.js',
+    'scripts/lib/skill-registration.js',
+    'scripts/package-lock.json',
+    'scripts/package.json',
+    'scripts/prepare-digest.js',
+    'scripts/release/build-release.sh',
+    'scripts/release/check-provenance.js',
+    'scripts/release/scan-secrets.js',
+    'scripts/release/validate-release.js',
+    'scripts/release/verify-dependency-licenses.js',
+    'scripts/resolve-delivery.js',
+    'scripts/schedule-gate.js',
+    'scripts/source-registry.js',
+    'scripts/source-status.js',
+    'scripts/validate-digest-selection.js',
+    'scripts/validate-feed-artifact.js',
   ];
+  assert.deepEqual(REQUIRED_CRITICAL_FILES, requiredCriticalFiles);
   for (const path of requiredCriticalFiles) {
     assert.ok(Object.hasOwn(manifest.integrity.criticalFiles.files, path), path);
   }
@@ -118,6 +184,68 @@ test('manifest records non-circular tracked content and critical-file integrity'
       repositoryRoot,
       Object.keys(manifest.integrity.criticalFiles.files),
     ),
+  );
+});
+
+test('frozen user documentation states the v0.2 product boundary in both languages', async () => {
+  const documents = await Promise.all([
+    'README.md',
+    'README.zh-CN.md',
+    'SKILL.md',
+    'docs/source-catalog.md',
+  ].map(async (path) => [path, await readFile(new URL(path, repositoryRoot), 'utf8')]));
+
+  for (const [path, content] of documents) {
+    assert.match(content, /set up follow-up/i, path);
+    assert.match(content, /\/follow-up(?:\s|`|$)/i, path);
+    assert.match(content, /~\/\.follow-builders\//, path);
+    assert.match(content, /72\s*(?:hours?|小时)/i, path);
+    assert.match(content, /60\s*(?:point|分|门槛|threshold)/i, path);
+    assert.match(content, /6\s*[-–]\s*10/, path);
+    assert.match(content, /partial/i, path);
+    assert.match(content, /incomplete-history/i, path);
+    assert.match(content, /weekly/i, path);
+    assert.match(content, /(?:pushed,? unseen|已推未读)/i, path);
+    assert.match(content, /(?:un pushed|unpushed|未推)/i, path);
+    assert.match(content, /(?:delivery uncertain|投递不确定|不确定状态)/i, path);
+    assert.match(content, /(?:no immediate official-site alerts|does not send immediate alerts|不会.*即时)/i, path);
+  }
+
+  const english = documents.find(([path]) => path === 'README.md')[1];
+  const chinese = documents.find(([path]) => path === 'README.zh-CN.md')[1];
+  for (const [path, content] of [['README.md', english], ['README.zh-CN.md', chinese]]) {
+    assert.match(content, /(?:reinstall|重装)/i, path);
+    assert.match(content, /(?:upgrade from v?0\.1|从 v?0\.1.*升级)/i, path);
+    assert.match(content, /doctor/i, path);
+    assert.match(content, /(?:today|今日).*no important updates|(?:this week|本周).*no important updates|今日无重要更新|本周无重要更新/i, path);
+    assert.match(content, /(?:codex|claude-code|custom)/i, path);
+    assert.match(content, /--archive-critical-only/, path);
+  }
+});
+
+test('source catalog production Blog IDs exactly match the namespaced runtime config', async () => {
+  const catalog = await readFile(new URL('docs/source-catalog.md', repositoryRoot), 'utf8');
+  assert.doesNotMatch(catalog, /README[^\n]*Papers With Code/i);
+  assert.match(
+    catalog,
+    /本目录[^\n]*Papers With Code[^\n]*Semantic Scholar[^\n]*会议论文入口[^\n]*候选[^\n]*当前学术采集实际只有 arXiv RSS/,
+  );
+  const productionSection = catalog.match(
+    /^### 生产 Blog 来源\n([\s\S]*?)(?=^##\s)/m,
+  )?.[1];
+  assert.ok(productionSection, 'production Blog section');
+
+  const catalogIds = [...productionSection.matchAll(/^\| `([^`]+)` \|/gm)]
+    .map((match) => match[1]);
+  const config = await readJson('config/feed-blogs.json');
+  const configuredIds = config.sources.map((source) => source.id);
+
+  assert.equal(catalogIds.length, 17);
+  assert.equal(new Set(catalogIds).size, catalogIds.length);
+  assert.ok(catalogIds.every((id) => /^blog:[a-z0-9-]+$/.test(id)));
+  assert.deepEqual(
+    catalogIds.toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right))),
+    configuredIds.toSorted((left, right) => Buffer.from(left).compare(Buffer.from(right))),
   );
 });
 

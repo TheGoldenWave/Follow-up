@@ -1,7 +1,7 @@
 {
   "name": "follow-builders-scripts",
-  "version": "0.1.0",
-  "description": "Scripts for Follow Builders skill — feed generation, digest preparation, delivery",
+  "version": "0.2.0",
+  "description": "Scripts for Follow-up - feed generation, digest preparation, and delivery",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
@@ -10,17 +10,22 @@
     "test": "node --test test/*.test.js",
     "test:archive": "FOLLOW_UP_RELEASE_MODE=archive node --test test/feed-contract.test.js test/prepare-digest.test.js test/release-manifest.test.js",
     "validate-feeds": "node feed-contract.js",
+    "validate-blog-sources": "node validate-blog-sources.js",
     "generate-feed": "node generate-feed.js",
     "prepare-digest": "node prepare-digest.js",
+    "finalize-digest": "node finalize-digest.js",
+    "resolve-delivery": "node resolve-delivery.js",
     "test:release": "node --test test/release-manifest.test.js test/release-build.test.js",
     "validate-release": "node release/validate-release.js",
     "validate-release:archive-critical": "node release/validate-release.js --archive-critical-only",
-    "validate-release:archive": "node release/validate-release.js --archive"
+    "validate-release:archive": "node release/validate-release.js --archive",
+    "install:follow-up": "node install.js"
   },
   "dependencies": {
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "dotenv": "^16.4.0",
+    "fast-xml-parser": "5.11.1",
     "proper-lockfile": "^4.1.0"
   }
 }

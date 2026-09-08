@@ -1,0 +1,8 @@
+{
+  "platform": "other",
+  "language": "zh",
+  "frequency": "daily",
+  "enabledChannels": ["blogs"],
+  "delivery": { "method": "stdout" },
+  "onboardingComplete": true
+}

@@ -1,0 +1,205 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/candidate-feed.schema.json",
+  "title": "Follow-up Rolling Candidate Feed",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "initializedAt",
+    "continuousHistorySince",
+    "retention",
+    "historyTruncated",
+    "truncation",
+    "registry",
+    "candidates"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "generatedAt": { "$ref": "#/$defs/dateTime" },
+    "initializedAt": { "$ref": "#/$defs/dateTime" },
+    "continuousHistorySince": { "$ref": "#/$defs/dateTime" },
+    "retention": { "$ref": "#/$defs/retention" },
+    "historyTruncated": { "type": "boolean" },
+    "truncation": { "$ref": "#/$defs/truncation" },
+    "registry": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sourceStatus" }
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/candidate" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "historyTruncated": { "const": false } } },
+      "then": {
+        "properties": {
+          "truncation": {
+            "properties": {
+              "affectedSourceIds": { "maxItems": 0 },
+              "oldestRetainedAt": { "type": "null" },
+              "oldestRetainedFirstSeenAtBySource": { "maxProperties": 0 },
+              "oldestRemovedFirstSeenAtBySource": { "maxProperties": 0 },
+              "newestRemovedFirstSeenAtBySource": { "maxProperties": 0 },
+              "removedCount": { "const": 0 }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "truncation": {
+            "properties": {
+              "affectedSourceIds": { "minItems": 1 },
+              "oldestRetainedAt": { "$ref": "#/$defs/dateTime" },
+              "removedCount": { "minimum": 1 }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "channel": {
+      "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
+    },
+    "sourceId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$"
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["defaultDays", "podcastDays", "minimumPerSource", "maxCandidates"],
+      "properties": {
+        "defaultDays": { "const": 15 },
+        "podcastDays": { "const": 30 },
+        "minimumPerSource": { "const": 50 },
+        "maxCandidates": { "const": 1000 }
+      }
+    },
+    "truncation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["affectedSourceIds", "oldestRetainedAt", "removedCount"],
+      "properties": {
+        "affectedSourceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/sourceId" }
+        },
+        "oldestRetainedAt": {
+          "oneOf": [
+            { "$ref": "#/$defs/dateTime" },
+            { "type": "null" }
+          ]
+        },
+        "oldestRetainedFirstSeenAtBySource": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/sourceId" },
+          "additionalProperties": { "$ref": "#/$defs/dateTime" }
+        },
+        "oldestRemovedFirstSeenAtBySource": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/sourceId" },
+          "additionalProperties": { "$ref": "#/$defs/dateTime" }
+        },
+        "newestRemovedFirstSeenAtBySource": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/sourceId" },
+          "additionalProperties": { "$ref": "#/$defs/dateTime" }
+        },
+        "removedCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "channel", "sourceName", "status", "candidateCount"],
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/sourceId" },
+        "channel": { "$ref": "#/$defs/channel" },
+        "sourceName": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["ok", "no-results", "partial", "error"] },
+        "candidateCount": { "type": "integer", "minimum": 0 },
+        "failedCandidateCount": { "type": "integer", "minimum": 1 },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "errorSummary": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "enum": ["partial", "error"] } } },
+          "then": { "required": ["errorSummary"] }
+        }
+      ]
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateId",
+        "channel",
+        "sourceId",
+        "canonicalUrl",
+        "title",
+        "author",
+        "publishedAt",
+        "firstSeenAt",
+        "lastSeenAt",
+        "contentFingerprint",
+        "summarizationContent",
+        "contentTruncated"
+      ],
+      "properties": {
+        "candidateId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "channel": { "$ref": "#/$defs/channel" },
+        "sourceId": { "$ref": "#/$defs/sourceId" },
+        "sourceNativeId": { "type": "string", "minLength": 1 },
+        "canonicalUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https?://"
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "author": { "type": "string" },
+        "publishedAt": {
+          "oneOf": [
+            { "$ref": "#/$defs/dateTime" },
+            { "type": "null" }
+          ]
+        },
+        "firstSeenAt": { "$ref": "#/$defs/dateTime" },
+        "lastSeenAt": { "$ref": "#/$defs/dateTime" },
+        "contentFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "summarizationContent": { "type": "string" },
+        "contentTruncated": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "channel": { "const": "podcasts" } } },
+          "then": {
+            "properties": {
+              "summarizationContent": { "maxLength": 80000 }
+            }
+          },
+          "else": {
+            "properties": {
+              "summarizationContent": { "maxLength": 24000 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

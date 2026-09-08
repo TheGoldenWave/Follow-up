@@ -1,0 +1,97 @@
+{
+  "schemaVersion": "1.0",
+  "digestId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "requestHash": "8cfa82e881b2ca8e8d86e5f2ff073d378e168ef4d6fdfb82364ea678f9c1d966",
+  "frequency": "daily",
+  "coverage": {
+    "frequency": "daily",
+    "status": "complete",
+    "complete": true,
+    "requestedInterval": {
+      "start": "2026-09-01T00:00:00.000Z",
+      "end": "2026-09-06T08:00:00.000Z"
+    },
+    "actualInterval": {
+      "start": "2026-09-01T00:00:00.000Z",
+      "end": "2026-09-06T08:00:00.000Z"
+    },
+    "bounds": { "startInclusive": true, "endInclusive": true },
+    "reasons": []
+  },
+  "eligibleCandidates": [
+    {
+      "candidateId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "channel": "blogs",
+      "sourceId": "blog:official",
+      "canonicalUrl": "https://official.example/model-launch",
+      "title": "Model launch",
+      "author": "Official Lab",
+      "publishedAt": "2026-09-06T07:00:00.000Z",
+      "firstSeenAt": "2026-09-06T07:01:00.000Z",
+      "lastSeenAt": "2026-09-06T07:01:00.000Z",
+      "contentFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+      "summarizationContent": "Official release details.",
+      "contentTruncated": false
+    },
+    {
+      "candidateId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "channel": "x",
+      "sourceId": "x:reporter",
+      "canonicalUrl": "https://x.example/reporter/status/1",
+      "title": "Independent launch report",
+      "author": "Reporter",
+      "publishedAt": "2026-09-06T07:10:00.000Z",
+      "firstSeenAt": "2026-09-06T07:11:00.000Z",
+      "lastSeenAt": "2026-09-06T07:11:00.000Z",
+      "contentFingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "summarizationContent": "Independent confirmation.",
+      "contentTruncated": false
+    }
+  ],
+  "interests": ["private roadmap"],
+  "sourceStatuses": [
+    {
+      "sourceId": "blog:official",
+      "channel": "blogs",
+      "sourceName": "Official Lab",
+      "status": "ok",
+      "candidateCount": 1
+    },
+    {
+      "sourceId": "x:reporter",
+      "channel": "x",
+      "sourceName": "Reporter",
+      "status": "ok",
+      "candidateCount": 1
+    }
+  ],
+  "sourceCompleteness": {
+    "status": "complete",
+    "complete": true,
+    "feedFresh": true,
+    "expectedSourceCount": 2,
+    "reportedSourceCount": 2,
+    "totalSourceCount": 2,
+    "okSourceCount": 2,
+    "noResultsSourceCount": 0,
+    "partialSourceCount": 0,
+    "errorSourceCount": 0,
+    "missingSourceCount": 0
+  },
+  "contentStats": {
+    "candidateCount": 2,
+    "eligibleCount": 2,
+    "excludedCount": 0,
+    "selectedCount": 0
+  },
+  "selectionRules": {
+    "qualificationThreshold": 60,
+    "maxSelected": 10,
+    "maxLeadsPerSource": 2,
+    "channelPositionLimit": 4,
+    "channelLimitAppliesAtQualifyingChannelCount": 3,
+    "ordering": "totalScore-desc,evidence-desc,publishedAt-desc,candidateId-asc",
+    "sourceDiversityFirst": true
+  },
+  "generatedAt": "2026-09-06T08:00:00.000Z"
+}

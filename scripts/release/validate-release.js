@@ -23,9 +23,16 @@ export const REQUIRED_CRITICAL_FILES = [
   'THIRD_PARTY_NOTICES.md',
   'SKILL.md',
   'VERSION',
+  'config/config-schema.json',
+  'contracts/candidate-feed.schema.json',
   'contracts/central-feed.schema.json',
+  'contracts/digest-curation-request.schema.json',
+  'contracts/digest-selection.schema.json',
   'contracts/release-manifest.schema.json',
+  'docs/project-progress.md',
+  'docs/source-catalog.md',
   'docs/third-party/v0.1.0-dependencies.md',
+  'prompts/curate-digest.md',
   'prompts/digest-intro.md',
   'prompts/summarize-blogs.md',
   'prompts/summarize-newsletter.md',
@@ -34,16 +41,43 @@ export const REQUIRED_CRITICAL_FILES = [
   'prompts/summarize-tweets.md',
   'prompts/summarize-zh-sources.md',
   'prompts/translate.md',
+  'scripts/candidate-feed-contract.js',
+  'scripts/candidate-feed-store.js',
+  'scripts/candidate-identity.js',
+  'scripts/candidate-normalization.js',
+  'scripts/command-line.js',
+  'scripts/config-contract.js',
+  'scripts/deliver.js',
+  'scripts/delivery-ledger.js',
+  'scripts/delivery-message.js',
+  'scripts/delivery-outbox.js',
+  'scripts/delivery-providers.js',
+  'scripts/digest-candidates.js',
+  'scripts/digest-selection-contract.js',
+  'scripts/digest-selection.js',
+  'scripts/digest-window.js',
+  'scripts/doctor.js',
   'scripts/feed-contract.js',
+  'scripts/finalize-digest.js',
+  'scripts/install.js',
+  'scripts/lib/diagnostics.js',
+  'scripts/lib/install-worker.js',
+  'scripts/lib/paths.js',
+  'scripts/lib/skill-registration.js',
   'scripts/package-lock.json',
   'scripts/package.json',
   'scripts/prepare-digest.js',
-  'scripts/validate-feed-artifact.js',
   'scripts/release/build-release.sh',
   'scripts/release/check-provenance.js',
   'scripts/release/scan-secrets.js',
   'scripts/release/validate-release.js',
   'scripts/release/verify-dependency-licenses.js',
+  'scripts/resolve-delivery.js',
+  'scripts/schedule-gate.js',
+  'scripts/source-registry.js',
+  'scripts/source-status.js',
+  'scripts/validate-digest-selection.js',
+  'scripts/validate-feed-artifact.js',
 ];
 
 const PRODUCT_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
@@ -61,12 +95,27 @@ const TOP_LEVEL_FIELDS = [
   'capabilities',
   'integrity',
 ];
+const IMPLEMENTED_CAPABILITIES = [
+  'officialBlogs',
+  'channelSelection',
+  'candidatePool',
+  'digestSelection',
+  'deliveryLedger',
+  'atMostOnceDelivery',
+  'installer',
+  'doctor',
+];
 const PLANNED_CAPABILITIES = [
   'localAcquisition',
   'sidecars',
-  'feedbackState',
+  'longTermFeedback',
+  'reports',
+  'paginatedFeed',
+  'explicitReadState',
+  'automaticRollback',
   'updater',
 ];
+const CAPABILITIES = [...IMPLEMENTED_CAPABILITIES, ...PLANNED_CAPABILITIES];
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -275,13 +324,18 @@ export function validateManifest(manifest, repositoryVersion) {
   if (validateFields(
     manifest.capabilities,
     'manifest.capabilities',
-    PLANNED_CAPABILITIES,
-    PLANNED_CAPABILITIES,
+    CAPABILITIES,
+    CAPABILITIES,
     errors,
   )) {
+    for (const capability of IMPLEMENTED_CAPABILITIES) {
+      if (manifest.capabilities[capability] !== true) {
+        errors.push(`manifest.capabilities.${capability} must be true in v0.2.0`);
+      }
+    }
     for (const capability of PLANNED_CAPABILITIES) {
       if (manifest.capabilities[capability] !== false) {
-        errors.push(`manifest.capabilities.${capability} must be false in v0.1.0`);
+        errors.push(`manifest.capabilities.${capability} must be false in v0.2.0`);
       }
     }
   }
@@ -357,7 +411,7 @@ async function readJson(path, label, errors) {
 
 export async function validateRelease(
   root = resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
-  { treeish = 'HEAD', mode = 'checkout', verifyIntegrity = true } = {},
+  { treeish = 'HEAD', mode = 'checkout', verifyIntegrity = true, validateSchema = true } = {},
 ) {
   const rootPath = toPath(root);
   const errors = [];
@@ -391,7 +445,7 @@ export async function validateRelease(
     ),
   ]);
 
-  if (manifest && schema) {
+  if (manifest && schema && validateSchema) {
     try {
       const [{ default: Ajv2020 }, { default: addFormats }] = await Promise.all([
         import('ajv/dist/2020.js'),

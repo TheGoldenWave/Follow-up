@@ -13,12 +13,28 @@
 // Env vars needed: X_BEARER_TOKEN, POD2TXT_API_KEY
 // ============================================================================
 
-import { readFile, writeFile } from "fs/promises";
+import { readFile, rename, unlink, writeFile } from "fs/promises";
 import { existsSync } from "fs";
-import { join } from "path";
+import { basename, join } from "path";
 import { pathToFileURL } from "url";
+import { XMLParser, XMLValidator } from "fast-xml-parser";
 
-import { createFeedEnvelope } from "./feed-contract.js";
+import { createFeedEnvelope, validateFeed, validateFeedFiles } from "./feed-contract.js";
+import { fetchBlogContent } from "./blog-collector.js";
+import { validateBlogSources } from "./blog-source-config.js";
+import {
+  CANDIDATE_FEED_FILE,
+  initializeCandidateFeed,
+  loadCandidateFeed,
+  mergeCandidateFeed,
+} from "./candidate-feed-store.js";
+import { normalizeLegacyFeeds } from "./candidate-normalization.js";
+import { createSourceStatus, sanitizeDiagnostic } from "./source-status.js";
+import {
+  publishFeedTransaction,
+  recoverFeedPublication,
+  withFeedPublicationLock,
+} from "./feed-publication.js";
 
 // -- Constants ---------------------------------------------------------------
 
@@ -32,7 +48,6 @@ const TWEET_LOOKBACK_HOURS = 24;
 const PODCAST_LOOKBACK_HOURS = 336; // 14 days — podcasts publish weekly/biweekly, not daily
 const BLOG_LOOKBACK_HOURS = 72;
 const MAX_TWEETS_PER_USER = 3;
-const MAX_ARTICLES_PER_BLOG = 3;
 const NEWSLETTER_LOOKBACK_HOURS = 72;
 const ACADEMIC_LOOKBACK_HOURS = 168; // 7 days for papers
 const ZH_TECH_LOOKBACK_HOURS = 72;
@@ -42,10 +57,9 @@ const MAX_ZH_ARTICLES_PER_SOURCE = 3;
 const X_USER_LOOKUP_BATCH_SIZE = 5;
 const X_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const X_RETRY_ATTEMPTS = 3;
+const RSS_PARSE_FAILURE_COUNT = Symbol('rssParseFailureCount');
 
-// State file lives in the repo root so it gets committed by GitHub Actions
 const SCRIPT_DIR = decodeURIComponent(new URL(".", import.meta.url).pathname);
-const STATE_PATH = join(SCRIPT_DIR, "..", "state-feed.json");
 
 function normalizePublishedAt(value) {
   if (!value) return null;
@@ -57,25 +71,6 @@ function normalizePublishedAt(value) {
 
 function errorsSince(errors, startIndex) {
   return errors.slice(startIndex).filter((error) => error.startsWith("RSS"));
-}
-
-// -- State Management --------------------------------------------------------
-
-// Tracks which tweet IDs and video IDs we've already included in feeds
-// so we never send the same content twice across runs.
-
-async function loadState() {
-  if (!existsSync(STATE_PATH)) {
-    return { seenTweets: {}, seenVideos: {}, seenArticles: {} };
-  }
-  try {
-    const state = JSON.parse(await readFile(STATE_PATH, "utf-8"));
-    // Ensure seenArticles exists for older state files
-    if (!state.seenArticles) state.seenArticles = {};
-    return state;
-  } catch {
-    return { seenTweets: {}, seenVideos: {}, seenArticles: {} };
-  }
 }
 
 function pruneState(state, now = Date.now()) {
@@ -95,11 +90,6 @@ function pruneState(state, now = Date.now()) {
   return state;
 }
 
-async function saveState(state) {
-  pruneState(state);
-  await writeFile(STATE_PATH, JSON.stringify(state, null, 2));
-}
-
 // -- Load Sources ------------------------------------------------------------
 
 async function loadSources() {
@@ -110,6 +100,16 @@ async function loadSources() {
   const newslettersPath = join(SCRIPT_DIR, "..", "config", "feed-newsletters.json");
   const academicPath = join(SCRIPT_DIR, "..", "config", "feed-academic.json");
   const zhTechPath = join(SCRIPT_DIR, "..", "config", "feed-zh-tech.json");
+  const blogsPath = join(SCRIPT_DIR, "..", "config", "feed-blogs.json");
+
+  if (existsSync(blogsPath)) {
+    const blogConfig = JSON.parse(await readFile(blogsPath, "utf-8"));
+    const validation = validateBlogSources(blogConfig.sources);
+    if (!validation.valid) {
+      throw new Error(`Invalid blog source configuration: ${validation.errors.join('; ')}`);
+    }
+    sources.blogs = blogConfig.sources;
+  }
 
   sources.newsletters = existsSync(newslettersPath)
     ? JSON.parse(await readFile(newslettersPath, "utf-8")).sources
@@ -128,44 +128,63 @@ async function loadSources() {
 
 // Parses an RSS feed XML string and returns episode objects with
 // title, publishedAt, guid, and link. RSS feeds list newest first.
+function rssDiagnostic(message) {
+  return sanitizeDiagnostic(message);
+}
+
+const feedXmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  removeNSPrefix: true,
+  parseTagValue: false,
+  trimValues: true,
+  processEntities: true,
+  isArray: (_name, path) => ['rss.channel.item', 'feed.entry', 'feed.entry.link'].includes(path),
+});
+
+function textValue(value) {
+  if (typeof value === 'string' || typeof value === 'number') return String(value).trim();
+  return typeof value?.['#text'] === 'string' ? value['#text'].trim() : null;
+}
+
 function parseRssFeed(xml) {
   const episodes = [];
-  // Match each <item> block in the RSS feed
-  const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
-  let itemMatch;
-  while ((itemMatch = itemRegex.exec(xml)) !== null) {
-    const block = itemMatch[1];
-
-    // Extract title (inside CDATA or plain text)
-    const titleMatch =
-      block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
-      block.match(/<title>([\s\S]*?)<\/title>/);
-    const title = titleMatch ? titleMatch[1].trim() : "Untitled";
-
-    // Extract GUID (unique episode identifier), stripping CDATA wrapper if present
-    const guidMatch =
-      block.match(/<guid[^>]*><!\[CDATA\[([\s\S]*?)\]\]><\/guid>/) ||
-      block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/);
-    let guid = guidMatch ? guidMatch[1].trim() : null;
-
-    // Extract publish date
-    const pubDateMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
-    const publishedAt = normalizePublishedAt(pubDateMatch?.[1]?.trim());
-
-    // Extract item link (for the feed output URL and fallback GUID)
-    const linkMatch =
-      block.match(/<link><!\[CDATA\[([\s\S]*?)\]\]><\/link>/) ||
-      block.match(/<link>([\s\S]*?)<\/link>/);
-    const link = linkMatch ? linkMatch[1].trim() : null;
+  let failedItemCount = 0;
+  if (typeof xml !== 'string' || xml.trim() === '') throw new Error('Invalid feed XML: empty payload');
+  const validation = XMLValidator.validate(xml);
+  if (validation !== true) {
+    throw new Error(`Invalid feed XML: ${validation.err.msg} at line ${validation.err.line}`);
+  }
+  const document = feedXmlParser.parse(xml);
+  const isRss = document && Object.hasOwn(document, 'rss');
+  const isAtom = document && Object.hasOwn(document, 'feed');
+  if (!isRss && !isAtom) throw new Error('Invalid feed XML: root must be rss or feed');
+  if (isRss && (!document.rss || !Object.hasOwn(document.rss, 'channel'))) {
+    throw new Error('Invalid feed XML: RSS channel is required');
+  }
+  const items = isRss
+    ? (typeof document.rss.channel === 'object' ? document.rss.channel.item ?? [] : [])
+    : (typeof document.feed === 'object' ? document.feed.entry ?? [] : []);
+  for (const item of items) {
+    const title = textValue(item.title) || 'Untitled';
+    let guid = textValue(isRss ? item.guid : item.id);
+    const publishedAt = normalizePublishedAt(
+      textValue(isRss ? item.pubDate : item.published) ?? textValue(item.updated),
+    );
+    const atomLinks = isAtom ? item.link ?? [] : [];
+    const alternate = atomLinks.find((link) => link?.['@_rel'] === 'alternate')
+      ?? atomLinks.find((link) => !link?.['@_rel'])
+      ?? atomLinks[0];
+    const link = isRss ? textValue(item.link) : alternate?.['@_href'] ?? null;
 
     // Use link as GUID fallback when GUID is missing
     // Some RSS feeds (e.g. 少数派, 36kr) don't include GUID elements
     if (!guid) guid = link;
 
-    if (guid) {
-      episodes.push({ title, guid, publishedAt, link });
-    }
+    if (guid) episodes.push({ title, guid, publishedAt, link });
+    else failedItemCount += 1;
   }
+  Object.defineProperty(episodes, RSS_PARSE_FAILURE_COUNT, { value: failedItemCount });
   return episodes;
 }
 
@@ -426,148 +445,108 @@ async function fetchPod2txtTranscript(rssUrl, guid, apiKey) {
 // 1. Fetches the RSS feed to discover episodes
 // 2. Filters by lookback window and dedup
 // 3. Fetches transcript via pod2txt for the newest unseen episode
-async function fetchPodcastContent(podcasts, apiKey, state, errors) {
-  const cutoff = new Date(Date.now() - PODCAST_LOOKBACK_HOURS * 60 * 60 * 1000);
-  const allCandidates = [];
+async function fetchPodcastContent(podcasts, apiKey, state, errors, options = {}) {
+  const now = options.now ?? Date.now;
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const fetchTranscriptImpl = options.fetchTranscriptImpl ?? fetchPod2txtTranscript;
+  const findYouTubeImpl = options.findYouTubeImpl ?? findYouTubeEpisodeUrl;
+  const statuses = options.statuses;
+  const cutoff = new Date(now() - PODCAST_LOOKBACK_HOURS * 60 * 60 * 1000);
+  const results = [];
 
-  // Step 1: Discover episodes from each podcast's RSS feed
   for (const podcast of podcasts) {
+    const sourceErrors = [];
+    let failedCandidateCount = 0;
     if (!podcast.rssUrl) {
-      errors.push(`Podcast: No rssUrl configured for ${podcast.name}`);
-      continue;
-    }
-
-    try {
-      console.error(`  Fetching RSS for ${podcast.name}...`);
-      const rssRes = await fetch(podcast.rssUrl, {
-        headers: {
-          "User-Agent": RSS_USER_AGENT,
-          Accept: "application/rss+xml, application/xml, text/xml, */*",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-        signal: AbortSignal.timeout(30000), // 30 second timeout for large feeds
-      });
-
-      if (!rssRes.ok) {
-        console.error(
-          `  ${podcast.name}: RSS fetch failed — HTTP ${rssRes.status}`,
-        );
-        errors.push(
-          `Podcast: Failed to fetch RSS for ${podcast.name}: HTTP ${rssRes.status}`,
-        );
-        continue;
-      }
-
-      const rssXml = await rssRes.text();
-      const episodes = parseRssFeed(rssXml);
-      console.error(
-        `  ${podcast.name}: found ${episodes.length} episodes in RSS feed`,
-      );
-
-      // Check the 3 most recent episodes, skip already-seen ones
-      for (const episode of episodes.slice(0, 3)) {
-        if (state.seenVideos[episode.guid]) {
-          console.error(`    Skipping "${episode.title}" (already seen)`);
-          continue;
-        }
-
-        console.error(
-          `    Candidate: "${episode.title}" published=${episode.publishedAt || "unknown"}`,
-        );
-        allCandidates.push({ podcast, ...episode });
-      }
-    } catch (err) {
-      errors.push(`Podcast: Error processing ${podcast.name}: ${err.message}`);
-    }
-  }
-
-  console.error(
-    `  Total candidates: ${allCandidates.length}, cutoff: ${cutoff.toISOString()}`,
-  );
-
-  // Step 2: Filter by lookback window, sort newest first
-  const withinWindow = allCandidates
-    .filter((v) => !v.publishedAt || new Date(v.publishedAt) >= cutoff)
-    .sort((a, b) => {
-      // Newest first; dateless ones go to the end
-      if (a.publishedAt && b.publishedAt)
-        return new Date(b.publishedAt) - new Date(a.publishedAt);
-      if (a.publishedAt) return -1;
-      if (b.publishedAt) return 1;
-      return 0;
-    });
-
-  console.error(`  Within window: ${withinWindow.length} episode(s)`);
-  for (const v of withinWindow) {
-    console.error(`    - "${v.title}" published=${v.publishedAt || "unknown"}`);
-  }
-
-  // Step 3: Try each candidate until we get a transcript from pod2txt
-  for (const selected of withinWindow) {
-    console.error(`    Fetching transcript for "${selected.title}"...`);
-
-    const result = await fetchPod2txtTranscript(
-      selected.podcast.rssUrl,
-      selected.guid,
-      apiKey,
-    );
-
-    // Mark as seen regardless so we don't retry failed episodes daily
-    state.seenVideos[selected.guid] = Date.now();
-
-    if (result.error) {
-      console.error(
-        `    Transcript error: ${result.error} — skipping to next candidate`,
-      );
-      errors.push(
-        `Podcast: Transcript error for "${selected.title}": ${result.error}`,
-      );
-      continue;
-    }
-
-    if (!result.transcript) {
-      console.error(
-        `    Empty transcript for "${selected.title}" — skipping to next candidate`,
-      );
-      continue;
-    }
-
-    console.error(
-      `    Selected: "${selected.title}" (transcript: ${result.transcript.length} chars)`,
-    );
-
-    // Try to resolve the exact YouTube video URL for this episode. If the
-    // lookup fails (no YouTube channel configured, no title match, network
-    // error), fall back to the channel URL so the feed still works.
-    const youtubeUrl = await findYouTubeEpisodeUrl(
-      selected.podcast.url,
-      selected.title,
-    );
-    if (youtubeUrl) {
-      console.error(`    Matched YouTube episode URL: ${youtubeUrl}`);
+      sourceErrors.push(rssDiagnostic(`Podcast: No rssUrl configured for ${podcast.name}`));
     } else {
-      console.error(
-        `    No YouTube episode match found — falling back to channel URL`,
-      );
+      try {
+        console.error(`  Fetching RSS for ${podcast.name}...`);
+        const rssRes = await fetchImpl(podcast.rssUrl, {
+          headers: {
+            "User-Agent": RSS_USER_AGENT,
+            Accept: "application/rss+xml, application/xml, text/xml, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+          },
+          signal: AbortSignal.timeout(30000),
+        });
+        if (!rssRes.ok) {
+          sourceErrors.push(rssDiagnostic(`Podcast: Failed to fetch RSS for ${podcast.name}: HTTP ${rssRes.status}`));
+        } else {
+          const parsedEpisodes = parseRssFeed(await rssRes.text());
+          if (parsedEpisodes[RSS_PARSE_FAILURE_COUNT] > 0) {
+            failedCandidateCount += parsedEpisodes[RSS_PARSE_FAILURE_COUNT];
+            sourceErrors.push(rssDiagnostic(`Podcast: ${podcast.name}: ${parsedEpisodes[RSS_PARSE_FAILURE_COUNT]} feed item(s) missing identity`));
+          }
+          const candidates = parsedEpisodes
+            .slice(0, 3)
+            .filter((episode) => !state.seenVideos[episode.guid])
+            .filter((episode) => !episode.publishedAt || new Date(episode.publishedAt) >= cutoff)
+            .sort((first, second) => Date.parse(second.publishedAt ?? 0) - Date.parse(first.publishedAt ?? 0));
+
+          for (const episode of candidates) {
+            const transcriptResult = await fetchTranscriptImpl(podcast.rssUrl, episode.guid, apiKey);
+            if (transcriptResult.error || !transcriptResult.transcript) {
+              failedCandidateCount += 1;
+              sourceErrors.push(rssDiagnostic(transcriptResult.error
+                ? `Podcast: Transcript error for ${podcast.name} "${episode.title}": ${transcriptResult.error}`
+                : `Podcast: Empty transcript for ${podcast.name} "${episode.title}"`));
+              continue;
+            }
+
+            let youtubeUrl = null;
+            const warnings = [];
+            try {
+              youtubeUrl = await findYouTubeImpl(podcast.url, episode.title);
+              if (!youtubeUrl) warnings.push(`${podcast.name}: exact episode URL unavailable; used channel fallback`);
+            } catch (error) {
+              warnings.push(`${podcast.name}: episode URL enrichment failed; used channel fallback: ${error.message}`);
+            }
+            results.push({
+              source: "podcast",
+              sourceId: podcast.id,
+              name: podcast.name,
+              title: episode.title,
+              guid: episode.guid,
+              url: youtubeUrl || podcast.url,
+              publishedAt: episode.publishedAt,
+              transcript: transcriptResult.transcript,
+            });
+            state.seenVideos[episode.guid] = now();
+            statuses?.push(createSourceStatus({
+              sourceId: podcast.id,
+              channel: 'podcasts',
+              sourceName: podcast.name,
+              candidateCount: 1,
+              failedCandidateCount,
+              errors: sourceErrors,
+              warnings,
+            }));
+            break;
+          }
+        }
+      } catch (error) {
+        sourceErrors.push(rssDiagnostic(`Podcast: Error processing ${podcast.name}: ${error.message}`));
+      }
     }
 
-    return [
-      {
-        source: "podcast",
-        name: selected.podcast.name,
-        title: selected.title,
-        guid: selected.guid,
-        url: youtubeUrl || selected.podcast.url,
-        publishedAt: selected.publishedAt,
-        transcript: result.transcript,
-      },
-    ];
+    const produced = results.some(({ sourceId }) => sourceId === podcast.id);
+    if (!produced) {
+      statuses?.push(createSourceStatus({
+        sourceId: podcast.id,
+        channel: 'podcasts',
+        sourceName: podcast.name,
+        candidateCount: 0,
+        failedCandidateCount,
+        errors: sourceErrors,
+        discoveryComplete: sourceErrors.length === 0 || failedCandidateCount > 0,
+      }));
+    }
+    errors.push(...sourceErrors);
   }
-
-  console.error(`    No candidates had transcripts available`);
-  return [];
+  return results;
 }
 
 // -- X/Twitter Fetching (Official API v2) ------------------------------------
@@ -593,9 +572,9 @@ async function fetchXWithRetry(url, options) {
   return lastResponse;
 }
 
-async function fetchXContent(xAccounts, bearerToken, state, errors) {
+async function fetchXContent(xAccounts, bearerToken, state, errors, { now = Date.now } = {}) {
   const results = [];
-  const cutoff = new Date(Date.now() - TWEET_LOOKBACK_HOURS * 60 * 60 * 1000);
+  const cutoff = new Date(now() - TWEET_LOOKBACK_HOURS * 60 * 60 * 1000);
 
   // Batch lookup user IDs. Smaller batches make one flaky X response less likely
   // to wipe out the whole feed.
@@ -631,7 +610,7 @@ async function fetchXContent(xAccounts, bearerToken, state, errors) {
         }
       }
     } catch (err) {
-      errors.push(`X API: User lookup error: ${err.message}`);
+      errors.push(`X API: User lookup error for ${batch.join(",")}: ${err.message}`);
     }
   }
 
@@ -686,13 +665,14 @@ async function fetchXContent(xAccounts, bearerToken, state, errors) {
         });
 
         // Mark as seen
-        state.seenTweets[t.id] = Date.now();
+        state.seenTweets[t.id] = now();
       }
 
       if (newTweets.length === 0) continue;
 
       results.push({
         source: "x",
+        sourceId: account.id,
         name: account.name,
         handle: account.handle,
         bio: userData.description,
@@ -702,349 +682,6 @@ async function fetchXContent(xAccounts, bearerToken, state, errors) {
       await new Promise((r) => setTimeout(r, 200));
     } catch (err) {
       errors.push(`X API: Error fetching @${account.handle}: ${err.message}`);
-    }
-  }
-
-  return results;
-}
-
-// -- Blog Fetching (HTML scraping) -------------------------------------------
-
-// Scrapes the Anthropic Engineering blog index page.
-// The page is a Next.js app that embeds article data as JSON in <script> tags.
-// We parse that JSON to extract article metadata (title, slug, date, summary).
-// Falls back to regex-based HTML parsing if the JSON approach fails.
-function parseAnthropicEngineeringIndex(html) {
-  const articles = [];
-
-  // Strategy 1: Look for article data in Next.js __NEXT_DATA__ script tag
-  const nextDataMatch = html.match(
-    /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i,
-  );
-  if (nextDataMatch) {
-    try {
-      const data = JSON.parse(nextDataMatch[1]);
-      // Navigate the Next.js page props to find article entries
-      const pageProps = data?.props?.pageProps;
-      const posts =
-        pageProps?.posts || pageProps?.articles || pageProps?.entries || [];
-      for (const post of posts) {
-        const slug = post.slug?.current || post.slug || "";
-        articles.push({
-          title: post.title || "Untitled",
-          url: `https://www.anthropic.com/engineering/${slug}`,
-          publishedAt:
-            post.publishedOn || post.publishedAt || post.date || null,
-          description: post.summary || post.description || "",
-        });
-      }
-      if (articles.length > 0) return articles;
-    } catch {
-      // JSON parsing failed, fall through to regex approach
-    }
-  }
-
-  // Strategy 2: Regex-based extraction from the rendered HTML.
-  // Anthropic engineering articles follow the pattern /engineering/<slug>
-  const linkRegex = /href="\/engineering\/([a-z0-9-]+)"/gi;
-  const seenSlugs = new Set();
-  let linkMatch;
-  while ((linkMatch = linkRegex.exec(html)) !== null) {
-    const slug = linkMatch[1];
-    if (seenSlugs.has(slug)) continue;
-    seenSlugs.add(slug);
-    articles.push({
-      title: "", // Will be filled when we fetch the article page
-      url: `https://www.anthropic.com/engineering/${slug}`,
-      publishedAt: null,
-      description: "",
-    });
-  }
-  return articles;
-}
-
-// Scrapes the Claude Blog index page (claude.com/blog).
-// This is a Webflow site. We extract article links, titles, and dates
-// from the HTML structure.
-function parseClaudeBlogIndex(html) {
-  const articles = [];
-  const seenSlugs = new Set();
-
-  // Match blog post links — they follow the pattern /blog/<slug>
-  // We capture surrounding context to extract titles and dates
-  const linkRegex = /href="\/blog\/([a-z0-9-]+)"/gi;
-  let linkMatch;
-  while ((linkMatch = linkRegex.exec(html)) !== null) {
-    const slug = linkMatch[1];
-    if (seenSlugs.has(slug)) continue;
-    seenSlugs.add(slug);
-    articles.push({
-      title: "", // Will be filled when we fetch the article page
-      url: `https://claude.com/blog/${slug}`,
-      publishedAt: null,
-      description: "",
-    });
-  }
-  return articles;
-}
-
-// Extracts the main text content from an Anthropic Engineering article page.
-// Tries the embedded JSON first (Next.js SSR data), then falls back to
-// stripping HTML tags from the article body.
-function extractAnthropicArticleContent(html) {
-  let title = "";
-  let author = "";
-  let publishedAt = null;
-  let content = "";
-
-  // Try to get structured data from Next.js __NEXT_DATA__
-  const nextDataMatch = html.match(
-    /<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i,
-  );
-  if (nextDataMatch) {
-    try {
-      const data = JSON.parse(nextDataMatch[1]);
-      const pageProps = data?.props?.pageProps;
-      const post =
-        pageProps?.post || pageProps?.article || pageProps?.entry || pageProps;
-      title = post?.title || "";
-      author = post?.author?.name || post?.authors?.[0]?.name || "";
-      publishedAt =
-        post?.publishedOn || post?.publishedAt || post?.date || null;
-
-      // Extract text from the body blocks (Sanity CMS portable text format)
-      const body = post?.body || post?.content || [];
-      if (Array.isArray(body)) {
-        const textParts = [];
-        for (const block of body) {
-          if (block._type === "block" && block.children) {
-            const text = block.children.map((c) => c.text || "").join("");
-            if (text.trim()) textParts.push(text.trim());
-          }
-        }
-        content = textParts.join("\n\n");
-      }
-      if (content) return { title, author, publishedAt, content };
-    } catch {
-      // Fall through to HTML stripping
-    }
-  }
-
-  // Fallback: extract title from <h1> and body from <article> or main content
-  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  if (h1Match) title = h1Match[1].replace(/<[^>]+>/g, "").trim();
-
-  // Try to find the article body and strip HTML tags
-  const articleMatch = html.match(/<article[^>]*>([\s\S]*?)<\/article>/i);
-  const bodyHtml = articleMatch ? articleMatch[1] : html;
-
-  // Strip script/style tags first, then all remaining HTML tags
-  content = bodyHtml
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return { title, author, publishedAt, content };
-}
-
-// Extracts the main text content from a Claude Blog article page.
-// Uses JSON-LD schema data if present, then falls back to the rich text body.
-function extractClaudeBlogArticleContent(html) {
-  let title = "";
-  let author = "";
-  let publishedAt = null;
-  let content = "";
-
-  // Try JSON-LD structured data first (most reliable for metadata)
-  const jsonLdRegex =
-    /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
-  let jsonLdMatch;
-  while ((jsonLdMatch = jsonLdRegex.exec(html)) !== null) {
-    try {
-      const ld = JSON.parse(jsonLdMatch[1]);
-      if (ld["@type"] === "BlogPosting" || ld["@type"] === "Article") {
-        title = ld.headline || ld.name || "";
-        author = ld.author?.name || "";
-        publishedAt = ld.datePublished || null;
-        break;
-      }
-    } catch {
-      // Not valid JSON-LD, skip
-    }
-  }
-
-  // Extract body text from the Webflow rich text container
-  const richTextMatch =
-    html.match(
-      /<div[^>]*class="[^"]*u-rich-text-blog[^"]*"[^>]*>([\s\S]*?)<\/div>\s*<\/div>/i,
-    ) ||
-    html.match(/<div[^>]*class="[^"]*w-richtext[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-
-  if (richTextMatch) {
-    content = richTextMatch[1]
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  // If rich text extraction failed, try a broader approach
-  if (!content) {
-    // Get title from <h1> if not already found
-    if (!title) {
-      const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-      if (h1Match) title = h1Match[1].replace(/<[^>]+>/g, "").trim();
-    }
-
-    // Strip the whole page down to text as a last resort
-    content = html
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/<nav[\s\S]*?<\/nav>/gi, "")
-      .replace(/<footer[\s\S]*?<\/footer>/gi, "")
-      .replace(/<header[\s\S]*?<\/header>/gi, "")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  return { title, author, publishedAt, content };
-}
-
-// Main blog fetching orchestrator.
-// For each blog source in the config, discovers new articles, deduplicates
-// against previously seen URLs, fetches full article content, and returns
-// the results for feed-blogs.json.
-async function fetchBlogContent(blogs, state, errors) {
-  const results = [];
-  const cutoff = new Date(Date.now() - BLOG_LOOKBACK_HOURS * 60 * 60 * 1000);
-
-  for (const blog of blogs) {
-    console.error(`  Processing blog: ${blog.name}...`);
-    let candidates = [];
-
-    try {
-      // Step 1: Discover articles from the blog index page
-      const indexRes = await fetch(blog.indexUrl, {
-        headers: { "User-Agent": "FollowBuilders/1.0 (feed aggregator)" },
-      });
-      if (!indexRes.ok) {
-        errors.push(
-          `Blog: Failed to fetch index for ${blog.name}: HTTP ${indexRes.status}`,
-        );
-        continue;
-      }
-      const indexHtml = await indexRes.text();
-
-      // Use the right parser based on which blog this is
-      if (blog.indexUrl.includes("anthropic.com")) {
-        candidates = parseAnthropicEngineeringIndex(indexHtml);
-      } else if (blog.indexUrl.includes("claude.com")) {
-        candidates = parseClaudeBlogIndex(indexHtml);
-      }
-
-      // Step 2: Filter to unseen articles, cap at MAX_ARTICLES_PER_BLOG.
-      // Blog index pages list articles newest-first. We only consider the
-      // first few entries (MAX_INDEX_SCAN) to avoid crawling the entire
-      // backlog on first run. Articles with a known date must fall within
-      // the lookback window; articles without dates are accepted if they
-      // appear near the top of the listing (likely recent).
-      const MAX_INDEX_SCAN = MAX_ARTICLES_PER_BLOG; // only look at the N most recent entries
-      const newArticles = [];
-      for (const article of candidates.slice(0, MAX_INDEX_SCAN)) {
-        if (state.seenArticles[article.url]) continue; // already seen
-        // If we have a date, check it's within the lookback window
-        if (article.publishedAt && new Date(article.publishedAt) < cutoff)
-          continue;
-        newArticles.push(article);
-        if (newArticles.length >= MAX_ARTICLES_PER_BLOG) break;
-      }
-
-      if (newArticles.length === 0) {
-        console.error(`    No new articles found`);
-        continue;
-      }
-
-      console.error(
-        `    Found ${newArticles.length} new article(s), fetching content...`,
-      );
-
-      // Step 3: Fetch full article content for each new article
-      for (const article of newArticles) {
-        try {
-          // Fetch the full article page
-          const articleRes = await fetch(article.url, {
-            headers: { "User-Agent": "FollowBuilders/1.0 (feed aggregator)" },
-          });
-          if (!articleRes.ok) {
-            errors.push(
-              `Blog: Failed to fetch article ${article.url}: HTTP ${articleRes.status}`,
-            );
-            continue;
-          }
-          const articleHtml = await articleRes.text();
-
-          // Use the right content extractor based on the blog
-          let extracted;
-          if (article.url.includes("anthropic.com/engineering")) {
-            extracted = extractAnthropicArticleContent(articleHtml);
-          } else if (article.url.includes("claude.com/blog")) {
-            extracted = extractClaudeBlogArticleContent(articleHtml);
-          }
-
-          if (!extracted || !extracted.content) {
-            errors.push(`Blog: No content extracted from ${article.url}`);
-            continue;
-          }
-
-          // Merge extracted data with what we already have from the index
-          results.push({
-            source: "blog",
-            name: blog.name,
-            title: extracted.title || article.title || "Untitled",
-            url: article.url,
-            publishedAt: normalizePublishedAt(
-              extracted.publishedAt || article.publishedAt,
-            ),
-            author: extracted.author || "",
-            description: article.description || "",
-            content: extracted.content,
-          });
-
-          // Mark as seen
-          state.seenArticles[article.url] = Date.now();
-
-          // Small delay between article fetches to be polite
-          await new Promise((r) => setTimeout(r, 500));
-        } catch (err) {
-          errors.push(
-            `Blog: Error fetching article ${article.url}: ${err.message}`,
-          );
-        }
-      }
-    } catch (err) {
-      errors.push(`Blog: Error processing ${blog.name}: ${err.message}`);
     }
   }
 
@@ -1067,15 +704,23 @@ async function fetchRssFeeds(
   errors,
   filterKeywords,
   excludeKeywords,
-  { fetchImpl = fetch, namespace = "rss", now = Date.now } = {},
+  { fetchImpl = fetch, namespace = "rss", now = Date.now, channel = namespace, statuses } = {},
 ) {
   const results = [];
   const nowMs = now();
   const cutoff = new Date(nowMs - lookbackHours * 60 * 60 * 1000);
 
   for (const source of sources) {
+    const sourceErrors = [];
+    let failedCandidateCount = 0;
     if (!source.rss) {
       console.error(`  ${source.name}: No RSS URL configured, skipping`);
+      sourceErrors.push(rssDiagnostic(`RSS: ${source.name}: No RSS URL configured`));
+      errors.push(...sourceErrors);
+      statuses?.push(createSourceStatus({
+        sourceId: source.id, channel, sourceName: source.name,
+        errors: sourceErrors, discoveryComplete: false,
+      }));
       continue;
     }
 
@@ -1091,13 +736,22 @@ async function fetchRssFeeds(
       });
 
       if (!res.ok) {
-        errors.push(`RSS: Failed to fetch ${source.name}: HTTP ${res.status}`);
+        sourceErrors.push(rssDiagnostic(`RSS: Failed to fetch ${source.name}: HTTP ${res.status}`));
         console.error(`  ${source.name}: HTTP ${res.status}`);
-        continue;
+        throw new Error(`HTTP ${res.status}`);
       }
 
       const xml = await res.text();
-      const items = parseRssFeed(xml);
+      let items;
+      try {
+        items = parseRssFeed(xml);
+      } catch (error) {
+        throw new Error(`Invalid feed for ${source.name}: ${error.message}`);
+      }
+      if (items[RSS_PARSE_FAILURE_COUNT] > 0) {
+        failedCandidateCount += items[RSS_PARSE_FAILURE_COUNT];
+        sourceErrors.push(rssDiagnostic(`RSS: ${source.name}: ${items[RSS_PARSE_FAILURE_COUNT]} feed item(s) missing identity`));
+      }
       console.error(`  ${source.name}: ${items.length} items in feed`);
 
       // Filter by lookback, dedup, and optional keywords
@@ -1105,7 +759,11 @@ async function fetchRssFeeds(
       for (const item of items) {
         // Dedup: use guid as key, fall back to item link
         const legacyKey = item.guid || item.link;
-        if (!legacyKey) continue;
+        if (!legacyKey) {
+          failedCandidateCount += 1;
+          sourceErrors.push(rssDiagnostic(`RSS: ${source.name}: candidate is missing guid and link`));
+          continue;
+        }
         const dedupKey = `${namespace}:${source.rss}:${legacyKey}`;
         if (state.seenArticles[dedupKey] || state.seenArticles[legacyKey]) {
           console.error(`    Skipping "${item.title}" (already seen)`);
@@ -1139,6 +797,7 @@ async function fetchRssFeeds(
         }
 
         newItems.push({
+          sourceId: source.id,
           title: item.title || "Untitled",
           url: item.link || source.url,
           publishedAt: item.publishedAt || null,
@@ -1154,6 +813,7 @@ async function fetchRssFeeds(
 
       if (newItems.length > 0) {
         results.push({
+          sourceId: source.id,
           source: source.name,
           url: source.url,
           tags: source.tags || [],
@@ -1161,9 +821,22 @@ async function fetchRssFeeds(
         });
         console.error(`  ${source.name}: ${newItems.length} new items`);
       }
+      errors.push(...sourceErrors);
+      statuses?.push(createSourceStatus({
+        sourceId: source.id, channel, sourceName: source.name,
+        candidateCount: newItems.length, failedCandidateCount, errors: sourceErrors,
+      }));
     } catch (err) {
-      errors.push(`RSS: Error fetching ${source.name}: ${err.message}`);
-      console.error(`  ${source.name}: ${err.message}`);
+      if (!sourceErrors.some((error) => error.includes(err.message))) {
+        sourceErrors.push(rssDiagnostic(`RSS: Error fetching ${source.name}: ${err.message}`));
+      }
+      errors.push(...sourceErrors);
+      statuses?.push(createSourceStatus({
+        sourceId: source.id, channel, sourceName: source.name,
+        candidateCount: 0, failedCandidateCount,
+        errors: sourceErrors, discoveryComplete: false,
+      }));
+      console.error(`  ${source.name}: ${rssDiagnostic(err.message)}`);
     }
   }
 
@@ -1172,246 +845,341 @@ async function fetchRssFeeds(
 
 // -- Main --------------------------------------------------------------------
 
-async function main() {
-  const args = process.argv.slice(2);
+const CHANNEL_FILES = {
+  x: "feed-x.json",
+  podcasts: "feed-podcasts.json",
+  blogs: "feed-blogs.json",
+  newsletters: "feed-newsletters.json",
+  academic: "feed-academic.json",
+  "zh-tech": "feed-zh-tech.json",
+};
+
+const CHANNEL_PAYLOADS = {
+  x: "x",
+  podcasts: "podcasts",
+  blogs: "blogs",
+  newsletters: "newsletters",
+  academic: "papers",
+  "zh-tech": "articles",
+};
+
+function sourceRegistryFromSources(sources) {
+  return [
+    ...(sources.x_accounts ?? []).map((source) => ({ ...source, channel: "x" })),
+    ...(sources.podcasts ?? []).map((source) => ({ ...source, channel: "podcasts" })),
+    ...(sources.blogs ?? []).map((source) => ({ ...source, channel: "blogs" })),
+    ...(sources.newsletters ?? []).map((source) => ({ ...source, channel: "newsletters" })),
+    ...(sources.academic?.sources ?? []).map((source) => ({ ...source, channel: "academic" })),
+    ...(sources.zhTech ?? []).map((source) => ({ ...source, channel: "zh-tech" })),
+  ];
+}
+
+function sourceCandidateCount(feed, source) {
+  const payload = feed?.[CHANNEL_PAYLOADS[source.channel]] ?? [];
+  if (source.channel === "x") {
+    return payload.filter((group) => group.sourceId === source.id || group.handle === source.handle)
+      .reduce((sum, group) => sum + (group.tweets?.length ?? 0), 0);
+  }
+  if (source.channel === "podcasts" || source.channel === "blogs") {
+    return payload.filter((item) => item.sourceId === source.id || item.name === source.name).length;
+  }
+  return payload.filter((group) => group.sourceId === source.id
+    || group.url === source.url || group.url === source.rss)
+    .reduce((sum, group) => sum + (group.items?.length ?? 0), 0);
+}
+
+function sourceErrors(errors, source) {
+  const identities = [source.id, source.name, source.rss, source.rssUrl]
+    .filter(Boolean).map(String);
+  return errors.filter((error) => identities.some((identity) => error.includes(identity))
+    || (source.handle && error.startsWith('X API') && (error.includes(`@${source.handle}`)
+      || new RegExp(`(?:^|[, ])${source.handle}(?:[, :]|$)`, 'i').test(error)))
+    || (source.channel === 'x' && error.includes('Rate limited')));
+}
+
+function buildStatuses(registry, feeds, errors, structuredStatuses = []) {
+  const expectedIds = new Set(registry.map(({ id }) => id));
+  const explicitIds = structuredStatuses.map(({ sourceId }) => sourceId);
+  if (new Set(explicitIds).size !== explicitIds.length) {
+    throw new Error('Structured source statuses contain duplicate source IDs');
+  }
+  const unknown = explicitIds.find((sourceId) => !expectedIds.has(sourceId));
+  if (unknown) throw new Error(`Structured source status references unknown source ${unknown}`);
+  const explicit = new Map(structuredStatuses.map((status) => [status.sourceId, status]));
+  return registry.map((source) => explicit.get(source.id) ?? createSourceStatus({
+    sourceId: source.id,
+    channel: source.channel,
+    sourceName: source.name,
+    candidateCount: sourceCandidateCount(feeds[source.channel], source),
+    errors: sourceErrors(errors, source),
+  }));
+}
+
+async function readState(path, fsImpl) {
+  try {
+    const state = JSON.parse(await fsImpl.readFile(path, "utf8"));
+    return {
+      seenTweets: state.seenTweets ?? {},
+      seenVideos: state.seenVideos ?? {},
+      seenArticles: state.seenArticles ?? {},
+    };
+  } catch {
+    return { seenTweets: {}, seenVideos: {}, seenArticles: {} };
+  }
+}
+
+function validState(state) {
+  return state && typeof state === 'object' && !Array.isArray(state)
+    && state.seenTweets && typeof state.seenTweets === 'object' && !Array.isArray(state.seenTweets)
+    && state.seenVideos && typeof state.seenVideos === 'object' && !Array.isArray(state.seenVideos)
+    && state.seenArticles && typeof state.seenArticles === 'object' && !Array.isArray(state.seenArticles);
+}
+
+async function validateStagedDocuments({ targets }, { channels, registry, fsImpl, full }) {
+  const byFilename = new Map(targets.map(({ target, stagedPath }) => [basename(target), stagedPath]));
+  if (full) {
+    const errors = await validateFeedFiles({
+      readJson: async (filename) => JSON.parse(await fsImpl.readFile(byFilename.get(filename), 'utf8')),
+      expectedRegistry: registry,
+    });
+    if (errors.length > 0) throw new Error(`Staged Feed validation failed: ${errors.join('; ')}`);
+    const state = JSON.parse(await fsImpl.readFile(byFilename.get('state-feed.json'), 'utf8'));
+    if (!validState(state)) throw new Error('Staged state-feed.json is invalid');
+    return;
+  }
+  for (const channel of channels) {
+    const filename = CHANNEL_FILES[channel];
+    const feed = JSON.parse(await fsImpl.readFile(byFilename.get(filename), 'utf8'));
+    const result = validateFeed(feed, channel);
+    if (!result.valid) throw new Error(`${filename}: ${result.errors.join('; ')}`);
+  }
+}
+
+async function collectAll({ channels, sources, state, fetchImpl, now, env, stderr }) {
+  const errors = [];
+  const feeds = {};
+  const structuredStatuses = [];
+  const generatedAt = new Date(now()).toISOString();
+
+  if (channels.includes("x")) {
+    stderr("Fetching X/Twitter content...");
+    const content = await fetchXContent(sources.x_accounts ?? [], env.X_BEARER_TOKEN, state, errors, { now });
+    feeds.x = createFeedEnvelope({ generatedAt, lookbackHours: TWEET_LOOKBACK_HOURS, x: content,
+      stats: { xBuilders: content.length, totalTweets: content.reduce((sum, group) => sum + group.tweets.length, 0) },
+      errors: errors.filter((error) => error.startsWith("X API")).length ? errors.filter((error) => error.startsWith("X API")) : undefined });
+  }
+  if (channels.includes("podcasts")) {
+    stderr("Fetching podcast content (RSS + pod2txt)...");
+    const content = await fetchPodcastContent(sources.podcasts ?? [], env.POD2TXT_API_KEY, state, errors, {
+      now, fetchImpl, statuses: structuredStatuses,
+    });
+    feeds.podcasts = createFeedEnvelope({ generatedAt, lookbackHours: PODCAST_LOOKBACK_HOURS, podcasts: content,
+      stats: { podcastEpisodes: content.length },
+      errors: errors.filter((error) => error.startsWith("Podcast")).length ? errors.filter((error) => error.startsWith("Podcast")) : undefined });
+  }
+  if (channels.includes("blogs")) {
+    stderr("Fetching blog content...");
+    const content = await fetchBlogContent(sources.blogs ?? [], state, errors, {
+      fetchImpl, now, statuses: structuredStatuses,
+    });
+    feeds.blogs = createFeedEnvelope({ generatedAt, lookbackHours: BLOG_LOOKBACK_HOURS, blogs: content,
+      stats: { blogPosts: content.length },
+      errors: errors.filter((error) => error.startsWith("Blog")).length ? errors.filter((error) => error.startsWith("Blog")) : undefined });
+  }
+  for (const [channel, configuredSources, lookbackHours, maxPerSource] of [
+    ["newsletters", sources.newsletters ?? [], NEWSLETTER_LOOKBACK_HOURS, MAX_NEWSLETTERS_PER_SOURCE],
+    ["academic", sources.academic?.sources ?? [], ACADEMIC_LOOKBACK_HOURS, MAX_PAPERS_PER_SOURCE],
+    ["zh-tech", sources.zhTech ?? [], ZH_TECH_LOOKBACK_HOURS, MAX_ZH_ARTICLES_PER_SOURCE],
+  ]) {
+    if (!channels.includes(channel)) continue;
+    const errorStart = errors.length;
+    const content = await fetchRssFeeds(configuredSources, lookbackHours, maxPerSource, state, errors,
+      channel === "academic" ? sources.academic?.filters?.minKeywords ?? [] : undefined,
+      channel === "academic" ? sources.academic?.filters?.excludeKeywords ?? [] : undefined,
+      { fetchImpl, namespace: channel, now, channel, statuses: structuredStatuses });
+    feeds[channel] = createFeedEnvelope({ generatedAt, lookbackHours,
+      [CHANNEL_PAYLOADS[channel]]: content, stats: { sources: content.length },
+      errors: errorsSince(errors, errorStart).length ? errorsSince(errors, errorStart) : undefined });
+  }
+  return { feeds, state, errors, structuredStatuses };
+}
+
+async function runGeneration(options = {}) {
+  const processImpl = options.processImpl ?? process;
+  const args = options.args ?? processImpl.argv.slice(2);
+  const env = options.env ?? processImpl.env;
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
+  const stdout = options.stdout ?? console.log;
+  const stderr = options.stderr ?? console.error;
+  const loadSourcesImpl = options.loadSourcesImpl ?? loadSources;
+  const fsImpl = options.fsImpl ?? { readFile, writeFile, rename, unlink };
+  const rootDir = options.rootDir ?? join(SCRIPT_DIR, "..");
+  const collectAllImpl = options.collectAllImpl ?? collectAll;
+  const shadow = args.includes("--shadow");
+  const blogSourceId = args.find((arg) => arg.startsWith("--blog-source="))?.slice("--blog-source=".length);
   const tweetsOnly = args.includes("--tweets-only");
   const podcastsOnly = args.includes("--podcasts-only");
   const blogsOnly = args.includes("--blogs-only");
   const newslettersOnly = args.includes("--newsletters-only");
   const academicOnly = args.includes("--academic-only");
   const zhTechOnly = args.includes("--zh-tech-only");
+  const initialize = args.includes("--initialize-candidate-feed");
 
   // If a specific --*-only flag is set, only that feed type runs.
   // If no flag is set, all feed types run.
-  const anyOnly = tweetsOnly || podcastsOnly || blogsOnly || newslettersOnly || academicOnly || zhTechOnly;
+  const anyOnly = tweetsOnly || podcastsOnly || blogsOnly || newslettersOnly || academicOnly || zhTechOnly || Boolean(blogSourceId);
   const runTweets = tweetsOnly || !anyOnly;
   const runPodcasts = podcastsOnly || !anyOnly;
-  const runBlogs = blogsOnly || !anyOnly;
+  const runBlogs = blogsOnly || Boolean(blogSourceId) || !anyOnly;
   const runNewsletters = newslettersOnly || !anyOnly;
   const runAcademic = academicOnly || !anyOnly;
   const runZhTech = zhTechOnly || !anyOnly;
 
-  const xBearerToken = process.env.X_BEARER_TOKEN;
-  const pod2txtKey = process.env.POD2TXT_API_KEY;
-
-  if (runPodcasts && !pod2txtKey) {
-    console.error("POD2TXT_API_KEY not set");
-    process.exit(1);
-  }
-  if (runTweets && !xBearerToken) {
-    console.error("X_BEARER_TOKEN not set");
-    process.exit(1);
+  if (anyOnly && initialize) {
+    throw new Error("--initialize-candidate-feed requires a complete generation");
   }
 
-  const sources = await loadSources();
-  const state = await loadState();
-  const errors = [];
+  let sources = await loadSourcesImpl();
 
-  // Fetch tweets
-  if (runTweets) {
-    console.error("Fetching X/Twitter content...");
-    const xContent = await fetchXContent(
-      sources.x_accounts,
-      xBearerToken,
-      state,
-      errors,
-    );
-    console.error(`  Found ${xContent.length} builders with new tweets`);
-
-    const totalTweets = xContent.reduce((sum, a) => sum + a.tweets.length, 0);
-    const xErrors = errors.filter((e) => e.startsWith("X API"));
-
-    if (xErrors.length > 0) {
-      console.error("  X API errors:");
-      for (const error of xErrors) {
-        console.error(`    - ${error}`);
-      }
+  if (shadow) {
+    const selectedBlogs = blogSourceId
+      ? (sources.blogs ?? []).filter(({ id }) => id === blogSourceId)
+      : sources.blogs ?? [];
+    if (blogSourceId && selectedBlogs.length === 0) {
+      throw new Error(`Unknown blog source: ${blogSourceId}`);
     }
-
-    if (xContent.length === 0 && xErrors.length > 0) {
-      throw new Error(
-        `X feed failed: 0 builders returned and ${xErrors.length} X API error(s) occurred`,
-      );
-    }
-
-    const xFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: TWEET_LOOKBACK_HOURS,
-      x: xContent,
-      stats: { xBuilders: xContent.length, totalTweets },
-      errors: xErrors.length > 0 ? xErrors : undefined,
+    const state = { seenTweets: {}, seenVideos: {}, seenArticles: {} };
+    const errors = [];
+    for (const blog of selectedBlogs) stderr(`Processing blog: ${blog.name}`);
+    const blogs = await fetchBlogContent(selectedBlogs, state, errors, {
+      fetchImpl,
+      now,
+      shadow: true,
     });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-x.json"),
-      JSON.stringify(xFeed, null, 2),
-    );
-    console.error(
-      `  feed-x.json: ${xContent.length} builders, ${totalTweets} tweets`,
-    );
-  }
-
-  // Fetch podcasts
-  if (runPodcasts) {
-    console.error("Fetching podcast content (RSS + pod2txt)...");
-    const podcasts = await fetchPodcastContent(
-      sources.podcasts,
-      pod2txtKey,
-      state,
-      errors,
-    );
-    console.error(`  Found ${podcasts.length} new episodes`);
-
-    const podcastFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: PODCAST_LOOKBACK_HOURS,
-      podcasts,
-      stats: { podcastEpisodes: podcasts.length },
-      errors:
-        errors.filter((e) => e.startsWith("Podcast")).length > 0
-          ? errors.filter((e) => e.startsWith("Podcast"))
-          : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-podcasts.json"),
-      JSON.stringify(podcastFeed, null, 2),
-    );
-    console.error(`  feed-podcasts.json: ${podcasts.length} episodes`);
-  }
-
-  // Fetch blog posts
-  if (runBlogs && sources.blogs && sources.blogs.length > 0) {
-    console.error("Fetching blog content...");
-    const blogContent = await fetchBlogContent(sources.blogs, state, errors);
-    console.error(`  Found ${blogContent.length} new blog post(s)`);
-
-    const blogFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
+    const envelope = createFeedEnvelope({
+      generatedAt: new Date(now()).toISOString(),
       lookbackHours: BLOG_LOOKBACK_HOURS,
-      blogs: blogContent,
-      stats: { blogPosts: blogContent.length },
-      errors:
-        errors.filter((e) => e.startsWith("Blog")).length > 0
-          ? errors.filter((e) => e.startsWith("Blog"))
-          : undefined,
+      blogs,
+      stats: { blogPosts: blogs.length },
+      errors: errors.length > 0 ? errors : undefined,
     });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-blogs.json"),
-      JSON.stringify(blogFeed, null, 2),
-    );
-    console.error(`  feed-blogs.json: ${blogContent.length} posts`);
+    const serialized = JSON.stringify(envelope, null, 2);
+    stdout(serialized);
+    return JSON.parse(serialized);
   }
 
-  // Fetch newsletters (RSS-based)
-  if (runNewsletters && sources.newsletters && sources.newsletters.length > 0) {
-    console.error("Fetching newsletter content (RSS)...");
-    const errorStart = errors.length;
-    const newsletterContent = await fetchRssFeeds(
-      sources.newsletters,
-      NEWSLETTER_LOOKBACK_HOURS,
-      MAX_NEWSLETTERS_PER_SOURCE,
-      state,
-      errors,
-      undefined,
-      undefined,
-      { namespace: "newsletters" },
-    );
-    console.error(`  Found ${newsletterContent.length} new newsletter(s)`);
+  if (blogSourceId) {
+    const selected = (sources.blogs ?? []).filter(({ id }) => id === blogSourceId);
+    if (selected.length === 0 && options.collectAllImpl === undefined) throw new Error(`Unknown blog source: ${blogSourceId}`);
+    sources = { ...sources, blogs: selected };
+  }
 
-    const newsletterFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: NEWSLETTER_LOOKBACK_HOURS,
-      newsletters: newsletterContent,
-      stats: { newsletterSources: newsletterContent.length },
-      errors: errorsSince(errors, errorStart).length > 0
-        ? errorsSince(errors, errorStart)
-        : undefined,
+  const channels = [
+    ...(runTweets ? ["x"] : []), ...(runPodcasts ? ["podcasts"] : []),
+    ...(runBlogs ? ["blogs"] : []), ...(runNewsletters ? ["newsletters"] : []),
+    ...(runAcademic ? ["academic"] : []), ...(runZhTech ? ["zh-tech"] : []),
+  ];
+  const registry = sourceRegistryFromSources(sources);
+  const candidatePath = join(rootDir, CANDIDATE_FEED_FILE);
+  let previousCandidateFeed;
+  let initializationFeeds;
+  if (!anyOnly) {
+    if (initialize) {
+      try {
+        await fsImpl.readFile(candidatePath, "utf8");
+        throw new Error("Candidate Feed already exists; initialization refuses to overwrite it");
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      initializationFeeds = {};
+      for (const channel of Object.keys(CHANNEL_FILES)) {
+        const filename = CHANNEL_FILES[channel];
+        let feed;
+        try {
+          feed = JSON.parse(await fsImpl.readFile(join(rootDir, filename), "utf8"));
+        } catch (error) {
+          throw new Error(`${filename}: cannot initialize from the current Feed: ${error.message}`, { cause: error });
+        }
+        const validation = validateFeed(feed, channel);
+        if (!validation.valid) throw new Error(`${filename}: ${validation.errors.join('; ')}`);
+        initializationFeeds[channel] = feed;
+      }
+    } else {
+      previousCandidateFeed = await loadCandidateFeed({ path: candidatePath, readFileImpl: fsImpl.readFile, registry });
+    }
+  }
+
+  if (runPodcasts && !env.POD2TXT_API_KEY) throw new Error("POD2TXT_API_KEY not set");
+  if (runTweets && !env.X_BEARER_TOKEN) throw new Error("X_BEARER_TOKEN not set");
+
+  const state = await readState(join(rootDir, "state-feed.json"), fsImpl);
+  const collectionStartMs = now();
+  const collectionStart = new Date(collectionStartMs).toISOString();
+  const collected = await collectAllImpl({ channels, sources, state, fetchImpl, now, env, stderr });
+  const feeds = collected.feeds ?? {};
+  const documents = channels.map((channel) => [join(rootDir, CHANNEL_FILES[channel]), feeds[channel]]);
+
+  if (!anyOnly) {
+    const statuses = collected.statuses ?? buildStatuses(
+      registry, feeds, collected.errors ?? [], collected.structuredStatuses ?? [],
+    );
+    const currentCandidates = collected.candidates ?? normalizeLegacyFeeds(feeds, {
+      registry, seenAt: collectionStart,
     });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-newsletters.json"),
-      JSON.stringify(newsletterFeed, null, 2),
-    );
-    console.error(`  feed-newsletters.json: ${newsletterContent.length} sources with new content`);
+    const candidateFeed = initialize
+      ? initializeCandidateFeed({ feeds: initializationFeeds, currentCandidates, statuses, registry, collectionStart })
+      : mergeCandidateFeed(previousCandidateFeed, { currentCandidates, statuses, registry, collectionStart });
+    documents.push([candidatePath, candidateFeed]);
+    documents.push([join(rootDir, "state-feed.json"), pruneState(collected.state ?? state, collectionStartMs)]);
   }
+  // Multi-file publication is a lock-protected, journaled transaction. Recovery
+  // restores the prior generation after interruption; it is not a single rename.
+  const publishTransactionImpl = options.publishTransactionImpl ?? publishFeedTransaction;
+  const publicationOptions = {
+    rootDir,
+    documents,
+    transactionId: `${collectionStartMs}-${processImpl.pid ?? 'process'}`,
+    validateStaged: (context) => validateStagedDocuments(context, {
+      documents, channels, registry, fsImpl, full: !anyOnly,
+    }),
+  };
+  if (options.fsImpl) publicationOptions.fsImpl = fsImpl;
+  await publishTransactionImpl(publicationOptions);
+  return Object.fromEntries(documents.map(([path, document]) => [path, document]));
+}
 
-  // Fetch academic papers (RSS from arXiv)
-  if (runAcademic && sources.academic && sources.academic.sources && sources.academic.sources.length > 0) {
-    console.error("Fetching academic papers (arXiv RSS)...");
-    const errorStart = errors.length;
-    const filterKeywords = sources.academic.filters?.minKeywords || [];
-    const excludeKeywords = sources.academic.filters?.excludeKeywords || [];
-    const academicContent = await fetchRssFeeds(
-      sources.academic.sources,
-      ACADEMIC_LOOKBACK_HOURS,
-      MAX_PAPERS_PER_SOURCE,
-      state,
-      errors,
-      filterKeywords,
-      excludeKeywords,
-      { namespace: "academic" },
-    );
-    console.error(`  Found ${academicContent.length} categories with new papers`);
-
-    const totalPapers = academicContent.reduce((sum, src) => sum + src.items.length, 0);
-    const academicFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: ACADEMIC_LOOKBACK_HOURS,
-      papers: academicContent,
-      stats: { categories: academicContent.length, totalPapers },
-      errors: errorsSince(errors, errorStart).length > 0
-        ? errorsSince(errors, errorStart)
-        : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-academic.json"),
-      JSON.stringify(academicFeed, null, 2),
-    );
-    console.error(`  feed-academic.json: ${totalPapers} papers across ${academicContent.length} categories`);
-  }
-
-  // Fetch Chinese tech media (RSS-based)
-  if (runZhTech && sources.zhTech && sources.zhTech.length > 0) {
-    console.error("Fetching Chinese tech media (RSS)...");
-    const errorStart = errors.length;
-    const zhTechContent = await fetchRssFeeds(
-      sources.zhTech,
-      ZH_TECH_LOOKBACK_HOURS,
-      MAX_ZH_ARTICLES_PER_SOURCE,
-      state,
-      errors,
-      undefined,
-      undefined,
-      { namespace: "zh-tech" },
-    );
-    console.error(`  Found ${zhTechContent.length} sources with new articles`);
-
-    const totalArticles = zhTechContent.reduce((sum, src) => sum + src.items.length, 0);
-    const zhTechFeed = createFeedEnvelope({
-      generatedAt: new Date().toISOString(),
-      lookbackHours: ZH_TECH_LOOKBACK_HOURS,
-      articles: zhTechContent,
-      stats: { sources: zhTechContent.length, totalArticles },
-      errors: errorsSince(errors, errorStart).length > 0
-        ? errorsSince(errors, errorStart)
-        : undefined,
-    });
-    await writeFile(
-      join(SCRIPT_DIR, "..", "feed-zh-tech.json"),
-      JSON.stringify(zhTechFeed, null, 2),
-    );
-    console.error(`  feed-zh-tech.json: ${totalArticles} articles from ${zhTechContent.length} sources`);
-  }
-
-  // Save dedup state
-  await saveState(state);
-
-  if (errors.length > 0) {
-    console.error(`  ${errors.length} non-fatal errors`);
-  }
+async function main(options = {}) {
+  const rootDir = options.rootDir ?? join(SCRIPT_DIR, "..");
+  const fsImpl = options.fsImpl ?? { readFile, writeFile, rename, unlink };
+  const withLockImpl = options.withPublicationLockImpl
+    ?? (options.fsImpl ? async (_root, operation) => operation() : withFeedPublicationLock);
+  const recoverImpl = options.recoverPublicationImpl ?? recoverFeedPublication;
+  return withLockImpl(rootDir, async () => {
+    await recoverImpl(rootDir, options.fsImpl ? { fsImpl } : undefined);
+    try {
+      return await runGeneration({ ...options, rootDir });
+    } catch (error) {
+      try {
+        await recoverImpl(rootDir, options.fsImpl ? { fsImpl } : undefined);
+      } catch (recoveryError) {
+        throw new AggregateError(
+          [error, recoveryError],
+          `Feed generation failed and crash recovery remains pending: ${recoveryError.message}`,
+        );
+      }
+      throw error;
+    }
+  });
 }
 
 export {
   errorsSince,
+  fetchPodcastContent,
   fetchRssFeeds,
+  buildStatuses,
+  collectAll,
+  loadSources,
   main,
   normalizePublishedAt,
   parseRssFeed,
@@ -1421,6 +1189,6 @@ export {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((err) => {
     console.error("Feed generation failed:", err.message);
-    process.exit(1);
+    process.exitCode = 1;
   });
 }

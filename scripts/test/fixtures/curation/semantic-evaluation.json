@@ -1,0 +1,54 @@
+{
+  "fixtureType": "semantic-evaluation-only",
+  "description": "用于人工或模型评审，不应被描述为确定性单元测试。",
+  "cases": [
+    {
+      "name": "同一事件应聚为一组并优先官方来源作为 lead",
+      "candidates": [
+        {
+          "ref": "official-model-launch",
+          "sourceType": "official product blog",
+          "title": "Example Lab releases Model X",
+          "content": "Example Lab announces Model X and publishes its API documentation."
+        },
+        {
+          "ref": "independent-model-launch-report",
+          "sourceType": "independent reporting",
+          "title": "Example Lab launches Model X",
+          "content": "A reporter independently confirms the same Model X release and availability."
+        }
+      ],
+      "expectedReview": {
+        "sameEventCluster": true,
+        "preferredLead": "official-model-launch",
+        "reason": "官方公告是该发布事件的最强主证据，独立报道作为 corroboration。"
+      }
+    },
+    {
+      "name": "无 interests 时 relevance 只依据启用渠道与 Follow-up 通用范围",
+      "interestsPresent": false,
+      "enabledChannels": ["academic", "blogs"],
+      "candidate": {
+        "title": "New evaluation method for tool-using language models",
+        "content": "The paper introduces a reproducible evaluation method for agent tool use."
+      },
+      "expectedReview": {
+        "mustNotInventInterests": true,
+        "relevanceBasis": ["enabledChannels", "Follow-up product scope"]
+      }
+    },
+    {
+      "name": "不得虚构 59 分来规避确定性 portfolio 规则",
+      "candidate": {
+        "channel": "newsletters",
+        "title": "Independent confirmation of a major model release",
+        "content": "The source independently verifies availability and material capability changes."
+      },
+      "expectedReview": {
+        "requiresSemanticScoreReview": true,
+        "notMechanicallyProvable": true,
+        "reason": "validator 可检查分值范围与算术，但不能机械证明该内容应得 59 或 60 分。"
+      }
+    }
+  ]
+}

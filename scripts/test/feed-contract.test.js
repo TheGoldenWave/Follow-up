@@ -11,19 +11,25 @@ import {
   validateFeed,
   validateFeedFiles,
 } from '../feed-contract.js';
+import * as feedContract from '../feed-contract.js';
 import {
   errorsSince,
   fetchRssFeeds,
+  loadSources,
+  main as runGenerator,
   normalizePublishedAt,
   parseRssFeed,
   pruneState,
 } from '../generate-feed.js';
+import { validateBlogSources } from '../blog-source-config.js';
 import {
   CENTRAL_FEEDS,
   fetchJSON as fetchDigestJSON,
   loadCentralFeedData,
 } from '../prepare-digest.js';
 import { validateArtifactDirectory } from '../validate-feed-artifact.js';
+import { validateCandidateFeed } from '../candidate-feed-contract.js';
+import { loadSourceRegistry } from '../source-registry.js';
 
 const repositoryRoot = new URL('../../', import.meta.url);
 
@@ -312,12 +318,84 @@ test('released RSS source configurations contain only public HTTPS sources', asy
 });
 
 test('runtime blog configuration contains only sources with implemented collectors', async () => {
-  const config = await readJson('config/default-sources.json');
-
-  assert.deepEqual(config.blogs.map(({ name }) => name), [
-    'Anthropic Engineering',
-    'Claude Blog',
+  const [config, candidates] = await Promise.all([
+    readJson('config/feed-blogs.json'),
+    readJson('config/blog-source-candidates.json'),
   ]);
+
+  assert.deepEqual(config.sources.map(({ id, name }) => ({ id, name })), [
+    { id: 'blog:anthropic-engineering', name: 'Anthropic Engineering' },
+    { id: 'blog:claude-blog', name: 'Claude Blog' },
+    { id: 'blog:anthropic-interpretability', name: 'Anthropic Interpretability' },
+    { id: 'blog:anthropic-science', name: 'Anthropic Science' },
+    { id: 'blog:openai-alignment', name: 'OpenAI Alignment Research Blog' },
+    { id: 'blog:google-antigravity', name: 'Google Antigravity Blog' },
+    { id: 'blog:google-deepmind', name: 'Google DeepMind Blog' },
+    { id: 'blog:google-research', name: 'Google Research Blog' },
+    { id: 'blog:microsoft-research', name: 'Microsoft Research Blog' },
+    { id: 'blog:amazon-science', name: 'Amazon Science Blog' },
+    { id: 'blog:ibm-research', name: 'IBM Research Blog' },
+    { id: 'blog:perplexity-research', name: 'Perplexity Research Articles' },
+    { id: 'blog:qwen-blog', name: 'Qwen Blog' },
+    { id: 'blog:kimi-blog', name: 'Kimi Research & Tech Blog' },
+    { id: 'blog:ernie-blog', name: 'ERNIE Blog' },
+    { id: 'blog:minimax-blog', name: 'MiniMax Blog' },
+    { id: 'blog:apple-ml-research', name: 'Apple Machine Learning Research' },
+  ]);
+  assert.deepEqual(validateBlogSources(config.sources), { valid: true, errors: [] });
+  assert.deepEqual(config, candidates);
+});
+
+test('loadSources replaces legacy default blogs with feed-blogs configuration', async () => {
+  const [sources, blogConfig] = await Promise.all([
+    loadSources(),
+    readJson('config/feed-blogs.json'),
+  ]);
+
+  assert.deepEqual(sources.blogs, blogConfig.sources);
+  assert.equal(sources.blogs.length, 17);
+  assert.ok(sources.x_accounts.length > 0);
+});
+
+test('blog shadow mode selects one source, emits a valid envelope, and performs no writes', async () => {
+  const outputs = [];
+  const diagnostics = [];
+  const blog = {
+    id: 'shadow-blog',
+    name: 'Shadow Blog',
+    url: 'https://example.com/blog/',
+    language: 'en',
+    discovery: [{ type: 'rss', url: 'https://example.com/feed.xml' }],
+    articleUrlPatterns: ['^https://example\\.com/blog/[^/?]+$'],
+    excludeUrlPatterns: [],
+  };
+  const fetchImpl = async (url) => {
+    if (url.endsWith('feed.xml')) return {
+      ok: true, status: 200, url, headers: { get: () => null },
+      text: async () => '<rss><channel><item><title>Shadow post</title><link>/blog/shadow</link><pubDate>2026-09-03</pubDate></item></channel></rss>',
+    };
+    return {
+      ok: true, status: 200, url, headers: { get: () => null },
+      text: async () => `<h1>Shadow post</h1><article>${'Valid shadow content '.repeat(15)}</article>`,
+    };
+  };
+
+  const result = await runGenerator({
+    args: ['--shadow', '--blog-source=shadow-blog'],
+    fetchImpl,
+    loadSourcesImpl: async () => ({ x_accounts: [], podcasts: [], blogs: [blog] }),
+    now: () => Date.parse('2026-09-04T00:00:00Z'),
+    stdout: (line) => outputs.push(line),
+    stderr: (line) => diagnostics.push(line),
+    writeFileImpl: async () => { throw new Error('shadow mode must not write'); },
+  });
+  const envelope = JSON.parse(outputs.join('\n'));
+
+  assert.deepEqual(result, envelope);
+  assert.deepEqual(validateFeed(envelope, 'blogs'), { valid: true, errors: [] });
+  assert.equal(envelope.blogs.length, 1);
+  assert.equal(envelope.generatedAt, '2026-09-04T00:00:00.000Z');
+  assert.ok(diagnostics.some((line) => line.includes('Shadow Blog')));
 });
 
 test('checked-in state prevents every published tweet and podcast from republishing', async () => {
@@ -350,7 +428,7 @@ test('package and generation workflow run the unified test suite before generati
   assert.ok(generateStep > testStep);
 });
 
-test('generated feed validation covers all six artifacts and rejects an invalid one', async () => {
+test('generated feed validation covers all six compatible feeds plus candidate feed', async () => {
   assert.deepEqual(CENTRAL_FEED_FILES.map(({ filename }) => filename), feedCases.map(([, filename]) => filename));
 
   const validErrors = await validateFeedFiles({
@@ -366,6 +444,30 @@ test('generated feed validation covers all six artifacts and rejects an invalid 
     ),
   });
   assert.ok(invalidErrors.some((error) => error.includes('feed-academic.json')));
+
+  const missingCandidateErrors = await validateFeedFiles({
+    readJson: async (filename) => {
+      if (filename === 'feed-candidates.json') throw new Error('missing');
+      return readJson(filename);
+    },
+  });
+  assert.ok(missingCandidateErrors.some((error) => error.includes('feed-candidates.json')));
+});
+
+test('local standard validation locks and recovers before reading feed files', async () => {
+  assert.equal(typeof feedContract.validateFeedFilesLocked, 'function');
+  const events = [];
+  const errors = await feedContract.validateFeedFilesLocked({
+    rootDir: '/repo',
+    withLockImpl: async (_root, operation) => {
+      events.push('lock');
+      return operation();
+    },
+    recoverImpl: async () => { events.push('recover'); },
+    validateImpl: async () => { events.push('validate'); return []; },
+  });
+  assert.deepEqual(errors, []);
+  assert.deepEqual(events, ['lock', 'recover', 'validate']);
 });
 
 test('generation workflow validates generated feeds before staging them', async () => {
@@ -428,13 +530,14 @@ test('workflow dispatch and generated-file tracking cover exactly the six live c
   assert.doesNotMatch(workflow, /reports-only|feed-reports\.json/);
 });
 
-test('feed artifact gate accepts exactly six feeds plus state and rejects unsafe contents', async (t) => {
+test('feed artifact gate accepts exactly six feeds plus candidate and state', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'follow-up-feeds-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
 
   for (const [, filename] of feedCases) {
     await writeFile(directory + '/' + filename, await readFile(new URL(filename, repositoryRoot)));
   }
+  await writeFile(join(directory, 'feed-candidates.json'), await readFile(new URL('feed-candidates.json', repositoryRoot)));
   await writeFile(join(directory, 'state-feed.json'), await readFile(new URL('state-feed.json', repositoryRoot)));
   assert.deepEqual(await validateArtifactDirectory(directory), []);
 
@@ -469,14 +572,14 @@ test('feed workflow pins actions and separates secret generation from publishing
   assert.doesNotMatch(publishJob, /secrets\.|X_BEARER_TOKEN|POD2TXT_API_KEY|npm (ci|install|test)/);
 });
 
-test('feed workflow transfers and publishes only the exact seven generated files', async () => {
+test('feed workflow transfers and publishes only the exact eight generated files', async () => {
   const workflow = await readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8');
-  const expectedFiles = [...feedCases.map(([, filename]) => filename), 'state-feed.json'];
+  const expectedFiles = [...feedCases.map(([, filename]) => filename), 'feed-candidates.json', 'state-feed.json'];
   const uploadStart = workflow.indexOf('actions/upload-artifact@');
   const publishStart = workflow.indexOf('  publish:');
   const uploadBlock = workflow.slice(uploadStart, publishStart);
   for (const filename of expectedFiles) assert.match(uploadBlock, new RegExp(`^\\s+${filename.replace('.', '\\.')}\\s*$`, 'm'));
-  assert.equal((uploadBlock.match(/^\s+feed-[^\s]+\.json\s*$/gm) || []).length, 6);
+  assert.equal((uploadBlock.match(/^\s+feed-[^\s]+\.json\s*$/gm) || []).length, 7);
   assert.match(uploadBlock, /if-no-files-found: error/);
 
   const publishJob = workflow.slice(publishStart);
@@ -489,4 +592,21 @@ test('feed workflow transfers and publishes only the exact seven generated files
   assert.match(publishJob, /ref: main/);
   assert.match(publishJob, /git fetch origin main/);
   assert.match(publishJob, /git rebase origin\/main/);
+});
+
+test('checked-in candidate feed is initialized and valid for the complete source registry', async () => {
+  const [candidateFeed, registry] = await Promise.all([
+    readJson('feed-candidates.json'),
+    loadSourceRegistry(),
+  ]);
+  const validation = validateCandidateFeed(candidateFeed, { expectedRegistry: registry });
+  assert.deepEqual(validation, { valid: true, errors: [] });
+  assert.equal(candidateFeed.initializedAt, candidateFeed.continuousHistorySince);
+});
+
+test('workflow exposes one-time candidate initialization and includes it only in full generation', async () => {
+  const workflow = await readFile(new URL('.github/workflows/generate-feed.yml', repositoryRoot), 'utf8');
+  assert.match(workflow, /initialize_candidate_feed:[\s\S]*type: boolean/);
+  assert.match(workflow, /--initialize-candidate-feed/);
+  assert.match(workflow, /initialize_candidate_feed[\s\S]*mode.*all|mode.*all[\s\S]*initialize_candidate_feed/);
 });
