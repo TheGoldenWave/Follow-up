@@ -45,11 +45,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = sub.add_parser(
         "run",
-        help="collect configured sources into a Signal Batch",
+        help="collect configured sources into Signal Batches (shadow mode)",
     )
     run_parser.add_argument(
         "--source",
         help="collect a single stable source_id instead of all enabled sources",
+    )
+    run_parser.add_argument(
+        "--registry",
+        help="path to config/sources.json (defaults to the repo checkout)",
+    )
+    run_parser.add_argument(
+        "--output",
+        help="directory for shadow Signal Batches (defaults to ~/.follow-builders/acquisition)",
     )
 
     return parser
@@ -107,8 +115,47 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+def _default_output_dir() -> Path:
+    return Path.home() / ".follow-builders" / "acquisition"
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
-    print(f"run: acquisition not yet implemented (source={args.source or 'all'})")
+    from .collect import collect_sources
+    from .config import ConfigError, load_source_registry
+
+    path = Path(args.registry) if args.registry else _default_registry_path()
+    try:
+        sources = load_source_registry(path)
+    except (ConfigError, OSError) as exc:
+        print(f"run: failed to load registry: {exc}")
+        return 1
+
+    if args.source:
+        targets = [s for s in sources if s["id"] == args.source]
+        if not targets:
+            print(f"run: unknown source_id: {args.source}")
+            return 1
+    else:
+        targets = [s for s in sources if s["default_enabled"]]
+
+    batches = collect_sources(targets)
+    if not batches:
+        print("run: no collectable sources (v0.3.0 adapters are rss and web-publication)")
+        return 0
+
+    output_dir = Path(args.output) if args.output else _default_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for source_id, batch in batches.items():
+        out = output_dir / f"{source_id}.json"
+        out.write_text(
+            json.dumps(batch, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+
+    statuses = sorted({b["source_status"]["status"] for b in batches.values()})
+    print(
+        f"run: collected {len(batches)} source(s) into {output_dir} "
+        f"(statuses: {', '.join(statuses)})"
+    )
     return 0
 
 

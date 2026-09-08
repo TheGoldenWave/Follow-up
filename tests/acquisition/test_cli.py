@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -51,19 +52,30 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("failed to load registry", stdout.getvalue())
 
-    def test_run_exits_zero(self):
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
-            code = main(["run"])
+    def test_run_no_collectable_sources_exits_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = os.path.join(tmp, "sources.json")
+            source = {
+                "id": "x:test", "name": "Test", "channel": "x",
+                "channel_policy": "fixed", "adapter": "x",
+                "requires_credentials": False, "default_enabled": True,
+                "cadence": "daily", "budget": 3, "input": {"handle": "test"},
+                "legacy": {"feed": None},
+            }
+            with open(registry, "w", encoding="utf-8") as handle:
+                json.dump({"schema_version": "1.0", "sources": [source]}, handle)
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                code = main(["run", "--registry", registry])
         self.assertEqual(code, 0)
-        self.assertIn("run", stdout.getvalue())
+        self.assertIn("no collectable sources", stdout.getvalue())
 
-    def test_run_accepts_source_argument(self):
+    def test_run_unknown_source_returns_one(self):
         stdout = io.StringIO()
         with contextlib.redirect_stdout(stdout):
-            code = main(["run", "--source", "blog:anthropic-engineering"])
-        self.assertEqual(code, 0)
-        self.assertIn("blog:anthropic-engineering", stdout.getvalue())
+            code = main(["run", "--source", "bogus:nonexistent"])
+        self.assertEqual(code, 1)
+        self.assertIn("unknown source_id", stdout.getvalue())
 
     def test_no_command_prints_help_to_stderr_and_exits_two(self):
         stderr = io.StringIO()
