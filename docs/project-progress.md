@@ -62,12 +62,25 @@ canonical 方向见
   失败→`item_warnings`、整体不可达→`unreachable`。
 - `run` 命令接通 shadow mode（`collect.py`）：按注册表构造 rss/web-publication
   Adapter，产出写入隔离的 `~/.follow-builders/acquisition/`；`doctor` 报告注册表摘要。
-- 测试：Python 124 例 + Node 5 例全绿；secret 扫描零命中；`git diff --check` 干净；
-  实网 smoke test（36kr / apple-ml / openai-alignment）产出的 batch 均通过契约校验。
+- 测试：Python 140 例 + Node（含新增采集/Digest 集成用例）全绿；secret 扫描零命中；
+  `git diff --check` 干净；实网 smoke test（36kr / apple-ml / openai-alignment）产出的
+  batch 均通过契约校验。
+- Digest 集成（Task 17–18，`scripts/lib/`）：`normalize-central-feeds.js`（中心 Feed
+  按 `config/sources.json` 稳定 `source_id` 归一化）、`load-signal-batches.js`
+  （Signal Batch snake_case → 内部 camelCase 候选）、`route-channels.js`（固定/核心主题
+  路由 + `review` 队列兜底）、`resolve-acquisition-input.js`（central/shadow/hybrid/
+  local 四模式合并）；`prepare-digest.js` 已接通 acquisition mode。
+- 定时采集与原子发布（Task 19）：`collect-and-prepare.js` 唯一入口 + `run-acquisition.js`
+  调用 Python runtime + `publish-batches.js` 原子写入 `runs/<run_id>/` 与 `latest.json`
+  指针（临时文件 fsync + rename，校验失败不改指针）。
+- 迁移指标与门禁/回滚（Task 20）：`src/follow_up_acquisition/migration.py`（overlap/
+  duplicate/error 指标 + 切入门禁 + 回滚触发）+ `scripts/report-shadow.js` 逐来源报告；
+  切换顺序与中心 Feed 下线步骤见 `docs/operations/local-acquisition-runbook.md`。
 
 尚未纳入 v0.3.0（按冻结范围归入后续版本）：GitHub/HN/Reddit/Techmeme/arXiv（v0.4.0）、
-YouTube/播客/Digg（v0.5.0）、X（v0.6.0）、小红书/微信公众号 Sidecar（v0.7.0），以及
-Digest 集成与中心 Feed 下线（Task 17–21，由质量门禁驱动）。
+YouTube/播客/Digg（v0.5.0）、X（v0.6.0）、小红书/微信公众号 Sidecar（v0.7.0）。中心
+Feed 逐来源下线（Task 21）需各来源连续 14 天本地观察通过门禁后执行，属观测后运维动作，
+已记录运行手册，不绑定固定版本号。
 
 ## 使用路径
 
