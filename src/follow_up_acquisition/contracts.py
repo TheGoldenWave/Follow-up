@@ -216,6 +216,11 @@ def _validate_item(item: Any, index: int) -> None:
                 )
 
 
+def is_credential_key(key: str) -> bool:
+    """Return ``True`` when ``key`` looks like a credential field name."""
+    return _is_credential_key(key)
+
+
 def reject_embedded_credentials(batch: Any) -> None:
     """Reject a batch that embeds any credential-shaped key."""
     hits = list(_iter_credential_keys(batch))
