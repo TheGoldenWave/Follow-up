@@ -12,6 +12,11 @@ Digest。项目基于 [follow-builders](https://github.com/zarazhangrui/follow-b
 [版本变更](CHANGELOG.md)。公开安装包以
 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases) 为准。
 
+下一版本 `v0.3.0`（本地采集运行时）正在 `feature/v0.3.0-acquisition-runtime` 分支开发，
+核心范围（Acquisition Runtime、版本化 Signal Batch、source registry、受控 vendoring 与
+RSS/Blog shadow mode）已落地，但尚未发布正式版本。详见
+[项目进度](docs/project-progress.md)。
+
 当前支持的用户入口是：
 
 - 输入 `set up follow-up` 开始 Onboarding；

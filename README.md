@@ -13,6 +13,12 @@ Current version: `0.2.0` Stable. See [project progress](docs/project-progress.md
 Public installation assets are published through
 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases).
 
+The next version `v0.3.0` (local acquisition runtime) is under development on the
+`feature/v0.3.0-acquisition-runtime` branch. Its core scope — Acquisition Runtime,
+versioned Signal Batch, source registry, controlled vendoring, and RSS/Blog shadow mode
+— is landed but not yet released. See [project progress](docs/project-progress.md) for
+the current state.
+
 The supported user entry points are:
 
 - say `set up follow-up` to start onboarding;

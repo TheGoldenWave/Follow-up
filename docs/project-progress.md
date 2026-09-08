@@ -8,8 +8,9 @@ Follow-up 当前产品版本为 `0.2.0`。本版本的功能开发、文档、�
 完成；公开发布状态以 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases)
 中的 `v0.2.0` 为准。
 
-`v0.3.0` 规划已于 2026-09-08 启动：范围冻结为 Acquisition Runtime、Signal Batch、
-source registry、受控 vendoring 与 RSS/Blog shadow mode。规划文档见
+`v0.3.0` 于 2026-09-08 启动，核心范围（Acquisition Runtime、Signal Batch、source
+registry、受控 vendoring 与 RSS/Blog shadow mode）已全部落地，当前在
+`feature/v0.3.0-acquisition-runtime` 分支开发，尚未发布正式版本。规划文档见
 [superpowers/plans/2026-09-08-v0.3.0-acquisition-runtime.md](superpowers/plans/2026-09-08-v0.3.0-acquisition-runtime.md)，
 canonical 方向见
 [2026-09-01 本地采集与 Adapter 设计](superpowers/specs/2026-09-01-local-acquisition-adapters-design.md)。
@@ -78,16 +79,20 @@ Digest 集成与中心 Feed 下线（Task 17–21，由质量门禁驱动）。
 
 ## 当前边界
 
-`0.2.0` 尚未实现本地采集、认证 Sidecar、长期反馈学习、行业报告、分页个人 Feed、
-显式已读/未读操作、自动更新发现和自动回滚。官网 Blog 的 72 小时窗口用于采集恢复，
-并不是固定推送最近 72 小时内容；Digest 实际从滚动历史里的合格未推送候选中选取。
+`0.2.0` 发布版尚未实现本地采集、认证 Sidecar、长期反馈学习、行业报告、分页个人 Feed、
+显式已读/未读操作、自动更新发现和自动回滚。`v0.3.0`（开发中）开始落地 RSS 与官网
+Blog 两类本地采集 Adapter 及 shadow mode，但 GitHub/HN/Reddit/Techmeme/arXiv
+（v0.4.0）、YouTube/播客（v0.5.0）、X（v0.6.0）与 Sidecar（v0.7.0）仍待后续版本。
+官网 Blog 的 72 小时窗口用于采集恢复，并不是固定推送最近 72 小时内容；Digest 实际
+从滚动历史里的合格未推送候选中选取。
 
 ## 后续方向
 
-- `v0.3.0` 起：建设 Acquisition Runtime、Signal Batch、source registry，并按质量门禁
-  将公共来源逐步迁移到本地采集。
-- 后续采集版本：逐步覆盖 GitHub、Hacker News、Reddit、Techmeme、arXiv、YouTube、
-  播客及获得授权的认证来源。
+- `v0.3.0`（进行中，核心已落地）：Acquisition Runtime、Signal Batch、source registry、
+  受控 vendoring 与 RSS/Blog shadow mode；下一步是接入 Digest 并按质量门禁迁移中心
+  Feed（Task 17–21）。
+- 后续采集版本：GitHub/Hacker News/Reddit/Techmeme/arXiv（v0.4.0）、YouTube/播客/
+  Digg（v0.5.0）、X（v0.6.0）、小红书/微信公众号 Sidecar（v0.7.0）。
 - 后续产品版本：建设已推、看过、未推状态、按需加载更多内容、反馈学习、行业报告和
   自动更新能力；具体版本号尚未冻结。
 
