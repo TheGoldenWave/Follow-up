@@ -43,5 +43,8 @@ branch、image tag、npm range 或 Python range。
 
 ## 4. 同步历史
 
-尚未执行首次同步（受当前环境外网限制）。首次 `sync-last30days.sh` 运行后，此处
-记录每次同步的上游 commit、本地 diff、审查结论与签名。
+- 2026-09-08：`last30days-skill@3.22.0`（commit `fcebe321`）首次复刻 —— 经
+  codeload tarball 校验 commit 后导入 `skills/last30days/scripts/lib/cjk.py`（CJK
+  分词）与 MIT 许可证（`vendor/licenses/last30days-MIT.txt`）；哈希与
+  `imported_paths` 已写入 `vendor/manifest.json`，`verify_vendor_hashes` 校验全绿。
+- 其余上游（we-mp-rss / xiaohongshu / printing-press / yt-dlp）尚未执行首次同步。
