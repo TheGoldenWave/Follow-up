@@ -341,7 +341,7 @@ test('all three registered Skill paths execute a documented workflow with real f
     const deniedRequest = join(fixtureHome, `${platform}-denied-request.json`);
     await assert.rejects(
       run('node', [
-        script('prepare-digest.js'), '--request-out', deniedRequest,
+        script('collect-and-prepare.js'), '--request-out', deniedRequest,
         '--frequency', 'daily', '--scheduled',
       ], { env: commonEnv }),
       (error) => error.code === 1 && /schedule-not-authorized/.test(error.stderr),
