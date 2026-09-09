@@ -213,6 +213,9 @@ export async function main({
       for (const error of result.errors) stderr.write(`validation: ${error}\n`);
       return 1;
     }
+    if (basename(options.output) !== `${selection.digestId}.json`) {
+      throw new SafeIoError('output: filename must match digestId');
+    }
     await writeAtomic(options.output, selection, { fsImpl, randomUUID });
     stdout.write('Digest selection validated.\n');
     return 0;

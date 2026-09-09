@@ -4,7 +4,11 @@
 
 ## 当前状态
 
-最新公开版本为 [v0.3.0](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.0)，
+v0.3.1 补丁修复摘要 validator 与 finalize 的输出文件名契约不一致，并明确 Skill
+验证文件应使用独立目录与同一 digestId 文件名。正在执行回归、精确归档和正式发布验证；
+发布完成状态以 [v0.3.1 Release](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.1) 为准。
+
+上一公开版本为 [v0.3.0](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.0)，
 于 2026-09-09 发布。R1–R4 已完成。发布 tag 指向 `8d90eaccf7db751064ccc2e2140d420321470a4f`，
 公开归档与本地通过验收的精确归档逐字节一致，Release 为 immutable。
 

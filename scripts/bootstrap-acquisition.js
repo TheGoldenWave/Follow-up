@@ -4,7 +4,7 @@ import { devNull, homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const PACKAGE_VERSION = '0.3.0';
+const PACKAGE_VERSION = '0.3.1';
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 export function parsePythonVersion(stdout) {

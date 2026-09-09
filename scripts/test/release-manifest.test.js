@@ -44,7 +44,7 @@ async function createReleaseFixture(t) {
   return root;
 }
 
-test('repository release identity is frozen at version 0.3.0 on 2026-09-09', async () => {
+test('repository release identity is frozen at version 0.3.1 on 2026-09-09', async () => {
   const version = (await readFile(new URL('VERSION', repositoryRoot), 'utf8')).trim();
   const packageJson = await readJson('scripts/package.json');
   const packageLock = await readJson('scripts/package-lock.json');
@@ -55,7 +55,7 @@ test('repository release identity is frozen at version 0.3.0 on 2026-09-09', asy
     'utf8',
   );
 
-  assert.equal(version, '0.3.0');
+  assert.equal(version, '0.3.1');
   assert.equal(packageJson.name, 'follow-builders-scripts');
   assert.equal(
     packageJson.description,
@@ -67,7 +67,7 @@ test('repository release identity is frozen at version 0.3.0 on 2026-09-09', asy
   assert.equal(packageLock.packages[''].version, version);
   assert.equal(manifest.productVersion, version);
   assert.equal(manifest.releaseDate, '2026-09-09');
-  assert.match(changelog, /^## \[0\.3\.0\] - 2026-09-09$/m);
+  assert.match(changelog, /^## \[0\.3\.1\] - 2026-09-09$/m);
   assert.match(releaseDesign, /^Release freeze date: 2026-09-07$/m);
 });
 

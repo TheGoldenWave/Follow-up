@@ -8,6 +8,24 @@ import test from 'node:test';
 import { main } from '../validate-digest-selection.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url);
+const manifestFilename = `${'d'.repeat(64)}.json`;
+
+test('CLI rejects a mismatched output filename without overwriting existing output', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'digest-selection-wrong-name-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const request = new URL('curation/valid-request.json', fixtures).pathname;
+  const selection = new URL('selections/valid-selection.json', fixtures).pathname;
+  const output = join(root, 'private-validated-selection.json');
+  await writeFile(output, 'old-output');
+  const stdout = sink();
+  const stderr = sink();
+  assert.equal(await main({ argv: ['--request', request, '--selection', selection,
+    '--output', output], stdout, stderr }), 1);
+  assert.equal(stderr.text(), 'output: filename must match digestId\n');
+  assert.equal(stdout.text(), '');
+  assert.equal(await readFile(output, 'utf8'), 'old-output');
+  assert.deepEqual(await fs.readdir(root), ['private-validated-selection.json']);
+});
 
 function sink() {
   let value = '';
@@ -44,7 +62,7 @@ test('CLI validates exclusions and atomically writes the validated manifest', as
   const request = join(root, 'request.json');
   const selection = join(root, 'selection.json');
   const exclusions = join(root, 'excluded.json');
-  const output = join(root, 'validated.json');
+  const output = join(root, manifestFilename);
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   const selectionBuffer = await readFile(new URL('selections/valid-selection.json', fixtures));
   await writeFile(selection, selectionBuffer);
@@ -97,14 +115,14 @@ test('atomic output rejects symlink targets and parents without exposing paths',
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
   const outside = join(root, 'outside.json');
   await writeFile(outside, 'unchanged');
-  const targetLink = join(root, 'target-link.json');
+  const targetLink = join(root, manifestFilename);
   await symlink(outside, targetLink);
   const realParent = join(root, 'real-parent');
   await mkdir(realParent);
   const parentLink = join(root, 'parent-link');
   await symlink(realParent, parentLink);
 
-  for (const output of [targetLink, join(parentLink, 'output.json')]) {
+  for (const output of [targetLink, join(parentLink, manifestFilename)]) {
     const stdout = sink();
     const stderr = sink();
     assert.equal(await main({ argv: ['--request', request, '--selection', selection,
@@ -120,7 +138,7 @@ test('atomic output uses exclusive random temp files and preserves old output on
   t.after(() => rm(root, { recursive: true, force: true }));
   const request = join(root, 'request.json');
   const selection = join(root, 'selection.json');
-  const output = join(root, 'validated.json');
+  const output = join(root, manifestFilename);
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
   await writeFile(output, 'old-output');
@@ -141,7 +159,7 @@ test('atomic output does not follow a prepositioned temp symlink', async (t) => 
   t.after(() => rm(root, { recursive: true, force: true }));
   const request = join(root, 'request.json');
   const selection = join(root, 'selection.json');
-  const output = join(root, 'validated.json');
+  const output = join(root, manifestFilename);
   const outside = join(root, 'outside.json');
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
@@ -162,7 +180,7 @@ test('atomic output cleans a failed temp write and preserves old output', async 
   t.after(() => rm(root, { recursive: true, force: true }));
   const request = join(root, 'request.json');
   const selection = join(root, 'selection.json');
-  const output = join(root, 'validated.json');
+  const output = join(root, manifestFilename);
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
   await writeFile(output, 'old-output');
@@ -196,7 +214,7 @@ test('mkdir and rename failures use fixed labels and preserve old output', async
   t.after(() => rm(root, { recursive: true, force: true }));
   const request = join(root, 'request.json');
   const selection = join(root, 'selection.json');
-  const output = join(root, 'validated.json');
+  const output = join(root, manifestFilename);
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
   await writeFile(output, 'old-output');
@@ -224,7 +242,7 @@ test('input replacement after open cannot switch the document being validated', 
   const request = join(root, 'request.json');
   const replacement = join(root, 'replacement.json');
   const selection = join(root, 'selection.json');
-  const output = join(root, 'validated.json');
+  const output = join(root, manifestFilename);
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   await writeFile(replacement, '{"interests":["private replacement"]}');
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
@@ -259,7 +277,7 @@ test('input growth during chunked reading is rejected with a stable label', asyn
   t.after(() => rm(root, { recursive: true, force: true }));
   const request = join(root, 'request.json');
   const selection = join(root, 'selection.json');
-  const output = join(root, 'validated.json');
+  const output = join(root, manifestFilename);
   await writeFile(request, await readFile(new URL('curation/valid-request.json', fixtures)));
   await writeFile(selection, await readFile(new URL('selections/valid-selection.json', fixtures)));
   let grew = false;

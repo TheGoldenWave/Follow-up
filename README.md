@@ -2,18 +2,18 @@
 
 # Follow-up
 
-Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.3.0`在六类中心
-公共 Feed 的基础上新增 RSS/官网 Blog 本地采集，统一排序已启用来源，支持每日、每周
+Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.3.1`支持六类中心
+公共 Feed 和 RSS/官网 Blog 本地采集，统一排序已启用来源，支持每日、每周
 和按需 Digest。项目源自
 [follow-builders](https://github.com/zarazhangrui/follow-builders) and keeps compatible
 user data under `~/.follow-builders/`.
 
-Current stable release: `0.3.0`. See [project progress](docs/project-progress.md), the
+Current stable release: `0.3.1`. See [project progress](docs/project-progress.md), the
 [complete source catalog](docs/source-catalog.md), and the [changelog](CHANGELOG.md).
 Public installation assets are published through
 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases).
 
-最新公开版为 `v0.3.0`，已完成本地完整验收与公开资产下载校验。
+`v0.3.1` 修复摘要校验与生成阶段的文件名交接；公开发布状态以 GitHub Release 为准。
 已实现隔离 Python 运行时、统一采集与 Digest 入口、四模式输入和来源级迁移门禁。
 默认仍为 central；发布不触发中心 Feed 下线。查看
 [项目进度](docs/project-progress.md) 与 [后续版本计划](docs/version-roadmap.md)。
@@ -32,21 +32,21 @@ The supported user entry points are:
 The former product-name invocation is migration history, not a supported user entry
 point in v0.2.
 
-## Install v0.3.0
+## Install v0.3.1
 
-以下步骤安装已公开发布的不可变 `v0.3.0` 归档。
+以下步骤安装已公开发布的不可变 `v0.3.1` 归档。
 
 Requirements: Node.js 20 or newer and a pristine, extracted, verified GitHub Release
 archive.
 
 ```text
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/Follow-up-v0.3.0.tar.gz
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/Follow-up-v0.3.0-checksums.txt
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/release-manifest.json
-shasum -a 256 -c Follow-up-v0.3.0-checksums.txt
-tar -xzf Follow-up-v0.3.0.tar.gz
-cmp release-manifest.json Follow-up-v0.3.0/release-manifest.json
-cd Follow-up-v0.3.0
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.1/Follow-up-v0.3.1.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.1/Follow-up-v0.3.1-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.1/release-manifest.json
+shasum -a 256 -c Follow-up-v0.3.1-checksums.txt
+tar -xzf Follow-up-v0.3.1.tar.gz
+cmp release-manifest.json Follow-up-v0.3.1/release-manifest.json
+cd Follow-up-v0.3.1
 node scripts/release/validate-release.js --archive-critical-only
 cd scripts
 npm ci
@@ -54,7 +54,7 @@ npm run validate-release:archive
 npm run test:archive
 cd ..
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] --register
-node ~/.follow-builders/releases/0.3.0/scripts/doctor.js --json
+node ~/.follow-builders/releases/0.3.1/scripts/doctor.js --json
 ```
 
 After installation and a successful `doctor` check, say `set up follow-up` to select
@@ -91,7 +91,7 @@ itself. Running the validator while checking the validator's own hash is
 self-verification and cannot establish trust alone; the protected tag, separately
 downloaded manifest, and complete-archive checksum remain the external anchors.
 
-## What v0.3.0 Includes
+## What v0.3.1 Includes
 
 Six live centralized channels are available:
 
@@ -161,7 +161,7 @@ confirmation.
 
 ## Product Boundary
 
-`v0.3.0`已实现 RSS/官网 Blog 本地采集和来源级回滚；hybrid 回滚到中心输入，
+`v0.3.1`已实现 RSS/官网 Blog 本地采集和来源级回滚；hybrid 回滚到中心输入，
 local 回滚时隔离失败来源且不访问中心 Feed。认证 Sidecar、长期反馈学习、行业报告、
 分页个人 Feed、显式已读/未读交互、自动更新发现及安装版本自动回滚仍属后续工作。
 Signal 或成功投递的 Digest 不代表用户已阅读、理解或认可；Follow-up 不自动写入

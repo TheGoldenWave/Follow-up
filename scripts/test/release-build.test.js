@@ -503,7 +503,7 @@ test('installation docs use archive-safe validation commands after extraction', 
     const documentation = await readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
     assert.match(documentation, /npm run validate-release:archive/);
     assert.match(documentation, /--archive-critical-only/);
-    assert.match(documentation, /releases\/download\/v0\.3\.0\/release-manifest\.json/);
+    assert.match(documentation, /releases\/download\/v0\.3\.1\/release-manifest\.json/);
     assert.match(documentation, /cmp release-manifest\.json/);
     assert.match(documentation, /npm run test:archive/);
     assert.match(documentation, /tracked content digest/i);

@@ -137,7 +137,7 @@ test('SKILL uses one cross-platform immutable runtime root and records exact sou
   assert.doesNotMatch(skill, /CLAUDE_SKILL_DIR/);
   assert.match(
     skill,
-    /FOLLOW_UP_SKILL_DIR[^\n]*\.follow-builders\/releases\/0\.3\.0/,
+    /FOLLOW_UP_SKILL_DIR[^\n]*\.follow-builders\/releases\/0\.3\.1/,
   );
   for (const entrypoint of [
     'collect-and-prepare.js', 'finalize-digest.js', 'validate-digest-selection.js',

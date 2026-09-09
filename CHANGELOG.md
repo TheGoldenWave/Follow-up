@@ -2,9 +2,16 @@
 
 All notable changes to Follow-up are documented in this file.
 
+## [0.3.1] - 2026-09-09
+
+- 修复摘要校验与最终生成的文件名约定不一致：validator 在写入前拒绝无法被 finalize 消费的输出文件名，避免报告校验成功后才失败。
+- Skill 明确原始 selection 与验证后 selection 使用独立目录、相同 `<digestId>.json` 文件名；保留准备和生成阶段的错误诊断。
+- 新增校验到生成、stdout 投递的交接回归，保留 requestHash、确定性选择、原子激活和失败时不投递旧内容的防护。
+- Feed 过期和来源覆盖不足仍按 `partial` 披露；本补丁不声称修复中央采集覆盖，也不更改用户日程、凭据或投递目标。
+
 ## [0.3.0] - 2026-09-09
 
-发布候选，尚未公开发布；最新公开版为 v0.2.0。
+已于 2026-09-09 公开发布。
 
 - 新增 Python Acquisition Runtime、Signal Batch 契约、source registry、受控 vendoring
   与 RSS/官网 Blog Adapter。

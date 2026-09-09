@@ -61,7 +61,7 @@ test('bootstrapAcquisition writes runtime.json under an injected home', async ()
 
     const raw = JSON.parse(await readFile(path, 'utf8'));
     assert.equal(raw.schemaVersion, '1.0');
-    assert.equal(raw.packageVersion, '0.3.0');
+    assert.equal(raw.packageVersion, '0.3.1');
     assert.ok(raw.dependencies.includes('feedparser==6.0.14'));
   } finally {
     await rm(home, { recursive: true, force: true });

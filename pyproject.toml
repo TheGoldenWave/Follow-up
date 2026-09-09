@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "follow-up-acquisition"
-version = "0.3.0"
+version = "0.3.1"
 description = "Follow-up local acquisition runtime producing versioned Signal Batches"
 requires-python = ">=3.12"
 dependencies = []
