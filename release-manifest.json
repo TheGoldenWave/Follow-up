@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "36bfc3460ef994681aa36743aec88082d85463ef71f6ae0adbfdd3f41f88cb81"
+      "digest": "02e421eedcddbb6bb5c8f6092e3167cf91e57d22b91f6bdad7f262c286d9fe76"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -59,7 +59,7 @@
         "contracts/digest-selection.schema.json": "a11a2e794f123f29db9189ebffb5588f79b081db2971589a6a6b9e88afdb9db1",
         "contracts/release-manifest.schema.json": "ca300ca50a1c8670aee9a43b8761a9556bb9792cc9863ddc9efb56777d3b3114",
         "contracts/signal-batch.schema.json": "98d1764a53ffc4241ce4972977eaf79c243580579dc696799d97c346ff0aaa45",
-        "docs/project-progress.md": "2ab903e80b2740336307511be8462c599e98515c1254de2ebad43569312fae70",
+        "docs/project-progress.md": "a4f4a80ba50095e10d28004011091061301044433c7e42716756c192318c8589",
         "docs/source-catalog.md": "960d81b8ac76bd89495b56ee2b70a867648600f19c94ff56dfe9a8e91c4528d0",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
