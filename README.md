@@ -2,18 +2,18 @@
 
 # Follow-up
 
-Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.3.0` 候选版在六类中心
+Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.3.0`在六类中心
 公共 Feed 的基础上新增 RSS/官网 Blog 本地采集，统一排序已启用来源，支持每日、每周
 和按需 Digest。项目源自
 [follow-builders](https://github.com/zarazhangrui/follow-builders) and keeps compatible
 user data under `~/.follow-builders/`.
 
-Current release candidate: `0.3.0`. See [project progress](docs/project-progress.md), the
+Current stable release: `0.3.0`. See [project progress](docs/project-progress.md), the
 [complete source catalog](docs/source-catalog.md), and the [changelog](CHANGELOG.md).
 Public installation assets are published through
 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases).
 
-最新公开版仍为 `v0.2.0`；`v0.3.0` 是待完成发布验收的候选版，尚未公开发布。
+最新公开版为 `v0.3.0`，已完成本地完整验收与公开资产下载校验。
 已实现隔离 Python 运行时、统一采集与 Digest 入口、四模式输入和来源级迁移门禁。
 默认仍为 central；发布不触发中心 Feed 下线。查看
 [项目进度](docs/project-progress.md) 与 [后续版本计划](docs/version-roadmap.md)。
@@ -34,8 +34,7 @@ point in v0.2.
 
 ## Install v0.3.0
 
-以下为候选版发布后的安装说明；在 GitHub Releases 出现 `v0.3.0` 及完整资产前，
-请使用最新公开版 `v0.2.0` 的 [安装说明](https://github.com/TheGoldenWave/Follow-up/blob/v0.2.0/README.md)。
+以下步骤安装已公开发布的不可变 `v0.3.0` 归档。
 
 Requirements: Node.js 20 or newer and a pristine, extracted, verified GitHub Release
 archive.
@@ -162,7 +161,7 @@ confirmation.
 
 ## Product Boundary
 
-`v0.3.0` 候选版已实现 RSS/官网 Blog 本地采集和来源级回滚；hybrid 回滚到中心输入，
+`v0.3.0`已实现 RSS/官网 Blog 本地采集和来源级回滚；hybrid 回滚到中心输入，
 local 回滚时隔离失败来源且不访问中心 Feed。认证 Sidecar、长期反馈学习、行业报告、
 分页个人 Feed、显式已读/未读交互、自动更新发现及安装版本自动回滚仍属后续工作。
 Signal 或成功投递的 Digest 不代表用户已阅读、理解或认可；Follow-up 不自动写入
