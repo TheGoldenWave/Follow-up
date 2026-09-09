@@ -304,7 +304,7 @@ test('all three registered Skill paths execute a documented workflow with real f
       return match ? [match[1]] : [];
     }));
     for (const entrypoint of [
-      'prepare-digest.js', 'finalize-digest.js', 'validate-digest-selection.js',
+      'collect-and-prepare.js', 'finalize-digest.js', 'validate-digest-selection.js',
       'deliver.js', 'resolve-delivery.js', 'schedule-gate.js',
     ]) {
       assert.equal(documentedEntrypoints.has(entrypoint), true, `${platform}:${entrypoint}`);
