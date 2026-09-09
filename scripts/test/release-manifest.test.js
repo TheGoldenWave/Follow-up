@@ -44,7 +44,7 @@ async function createReleaseFixture(t) {
   return root;
 }
 
-test('repository release identity is frozen at version 0.2.0 on 2026-09-07', async () => {
+test('repository release identity is frozen at version 0.3.0 on 2026-09-09', async () => {
   const version = (await readFile(new URL('VERSION', repositoryRoot), 'utf8')).trim();
   const packageJson = await readJson('scripts/package.json');
   const packageLock = await readJson('scripts/package-lock.json');
@@ -55,7 +55,7 @@ test('repository release identity is frozen at version 0.2.0 on 2026-09-07', asy
     'utf8',
   );
 
-  assert.equal(version, '0.2.0');
+  assert.equal(version, '0.3.0');
   assert.equal(packageJson.name, 'follow-builders-scripts');
   assert.equal(
     packageJson.description,
@@ -66,12 +66,12 @@ test('repository release identity is frozen at version 0.2.0 on 2026-09-07', asy
   assert.equal(packageLock.version, version);
   assert.equal(packageLock.packages[''].version, version);
   assert.equal(manifest.productVersion, version);
-  assert.equal(manifest.releaseDate, '2026-09-07');
-  assert.match(changelog, /^## \[0\.2\.0\] - 2026-09-07$/m);
+  assert.equal(manifest.releaseDate, '2026-09-09');
+  assert.match(changelog, /^## \[0\.3\.0\] - 2026-09-09$/m);
   assert.match(releaseDesign, /^Release freeze date: 2026-09-07$/m);
 });
 
-test('manifest declares only implemented v0.2 capabilities', async () => {
+test('manifest declares only implemented v0.3 capabilities', async () => {
   const manifest = await readJson('release-manifest.json');
 
   assert.equal(manifest.channel, 'stable');
@@ -88,7 +88,7 @@ test('manifest declares only implemented v0.2 capabilities', async () => {
     atMostOnceDelivery: true,
     installer: true,
     doctor: true,
-    localAcquisition: false,
+    localAcquisition: true,
     sidecars: false,
     longTermFeedback: false,
     reports: false,

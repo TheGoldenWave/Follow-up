@@ -1,11 +1,11 @@
 {
   "$schema": "./contracts/release-manifest.schema.json",
   "schemaVersion": "1.0",
-  "productVersion": "0.2.0",
-  "releaseDate": "2026-09-07",
+  "productVersion": "0.3.0",
+  "releaseDate": "2026-09-09",
   "channel": "stable",
   "minimumSupportedVersion": null,
-  "releaseNotesUrl": "https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.2.0",
+  "releaseNotesUrl": "https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.0",
   "trustMode": "github-tag-sha256",
   "runtime": {
     "node": ">=20.0.0"
@@ -30,7 +30,7 @@
     "atMostOnceDelivery": true,
     "installer": true,
     "doctor": true,
-    "localAcquisition": false,
+    "localAcquisition": true,
     "sidecars": false,
     "longTermFeedback": false,
     "reports": false,

@@ -45,8 +45,8 @@ export function deriveDigestWindow({
     : null;
   const endInclusive = frequency !== 'weekly' || Boolean(prior);
   const endMs = frequency === 'weekly' && !prior ? startOfUtcDay(nowMs) : nowMs;
-  if (historyStartMs > endMs) {
-    throw new RangeError('continuousHistorySince must not be later than the coverage end');
+  if (historyStartMs > nowMs) {
+    throw new RangeError('continuousHistorySince must not be later than now');
   }
   let requestedStartMs;
   const reasons = [];

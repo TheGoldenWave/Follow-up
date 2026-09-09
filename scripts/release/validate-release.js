@@ -19,6 +19,39 @@ export const EXPECTED_FEEDS = [
 ];
 
 export const REQUIRED_CRITICAL_FILES = [
+  'pyproject.toml',
+  'requirements-acquisition.lock',
+  'requirements-build.lock',
+  'config/sources.json',
+  'contracts/signal-batch.schema.json',
+  'scripts/bootstrap-acquisition.js',
+  'scripts/collect-and-prepare.js',
+  'scripts/report-shadow.js',
+  'scripts/migration.js',
+  'scripts/lib/normalize-central-feeds.js',
+  'scripts/lib/local-candidate-store.js',
+  'scripts/lib/acquisition-retention.js',
+  'scripts/lib/route-channels.js',
+  'scripts/lib/publish-batches.js',
+  'scripts/lib/load-signal-batches.js',
+  'scripts/lib/run-acquisition.js',
+  'scripts/lib/migration-state.js',
+  'scripts/lib/migration-metrics.js',
+  'scripts/lib/resolve-acquisition-input.js',
+  'src/follow_up_acquisition/__main__.py',
+  'src/follow_up_acquisition/migration.py',
+  'src/follow_up_acquisition/contracts.py',
+  'src/follow_up_acquisition/cli.py',
+  'src/follow_up_acquisition/collect.py',
+  'src/follow_up_acquisition/redaction.py',
+  'src/follow_up_acquisition/config.py',
+  'src/follow_up_acquisition/__init__.py',
+  'src/follow_up_acquisition/vendor.py',
+  'src/follow_up_acquisition/cache.py',
+  'src/follow_up_acquisition/runtime.py',
+  'src/follow_up_acquisition/adapters/__init__.py',
+  'src/follow_up_acquisition/adapters/web_publication.py',
+  'src/follow_up_acquisition/adapters/rss.py',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'SKILL.md',
@@ -106,7 +139,6 @@ const IMPLEMENTED_CAPABILITIES = [
   'doctor',
 ];
 const PLANNED_CAPABILITIES = [
-  'localAcquisition',
   'sidecars',
   'longTermFeedback',
   'reports',
@@ -115,7 +147,7 @@ const PLANNED_CAPABILITIES = [
   'automaticRollback',
   'updater',
 ];
-const CAPABILITIES = [...IMPLEMENTED_CAPABILITIES, ...PLANNED_CAPABILITIES];
+const CAPABILITIES = [...IMPLEMENTED_CAPABILITIES, 'localAcquisition', ...PLANNED_CAPABILITIES];
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -338,6 +370,11 @@ export function validateManifest(manifest, repositoryVersion) {
         errors.push(`manifest.capabilities.${capability} must be false in v0.2.0`);
       }
     }
+    const localImplemented = Number(manifest.productVersion?.split('.')[0]) > 0
+      || Number(manifest.productVersion?.split('.')[1]) >= 3;
+    if (manifest.capabilities.localAcquisition !== localImplemented) {
+      errors.push('manifest.capabilities.localAcquisition must match the release version');
+    }
   }
 
   if (validateFields(
@@ -527,7 +564,7 @@ if (isCli) {
     const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
     const manifestPath = resolve(root, 'release-manifest.json');
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-    const criticalPaths = Object.keys(manifest.integrity?.criticalFiles?.files ?? {});
+    const criticalPaths = [...new Set([...REQUIRED_CRITICAL_FILES, ...Object.keys(manifest.integrity?.criticalFiles?.files ?? {})])];
     manifest.integrity = {
       trackedContent: await computeTrackedContentDigest(root, treeish),
       criticalFiles: {

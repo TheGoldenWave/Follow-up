@@ -2,20 +2,24 @@
 
 # Follow-up
 
-Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.2.0` 读取 6 类中心化
+Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.3.0` 读取 6 类中心化
 公共 Feed，从全部已启用信源中排序重要更新，并按 daily、weekly 或用户按需请求生成
 Digest。项目基于 [follow-builders](https://github.com/zarazhangrui/follow-builders)
 演进，兼容用户数据继续保存在 `~/.follow-builders/`。
 
-当前版本：`0.2.0` Stable。查看 [项目进度](docs/project-progress.md)、
+当前发布候选：`0.3.0`。查看 [项目进度](docs/project-progress.md)、[后续版本计划](docs/version-roadmap.md)、
 [完整信源目录](docs/source-catalog.md) 和
 [版本变更](CHANGELOG.md)。公开安装包以
 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases) 为准。
 
-下一版本 `v0.3.0`（本地采集运行时）正在 `feature/v0.3.0-acquisition-runtime` 分支开发，
-核心范围（Acquisition Runtime、版本化 Signal Batch、source registry、受控 vendoring 与
-RSS/Blog shadow mode）已落地，但尚未发布正式版本。详见
-[项目进度](docs/project-progress.md)。
+`v0.3.0` 新增 RSS/Blog 本地采集、独立 Python 运行时、四模式摘要输入与来源迁移工具。
+默认仍使用中心 Feed；公开版本与安装包以 GitHub Releases 为准。
+
+启用本地采集前，在已验证的安装目录运行 `node scripts/bootstrap-acquisition.js`。
+需要 Python 3.12，安装器创建隔离环境并验证锁定依赖；日常采集不自动安装。
+在用户配置设置 `"acquisition": {"mode": "shadow"}` 可先观察，使用
+`node scripts/collect-and-prepare.js --request-out <绝对路径>` 准备摘要请求。
+迁移和回滚操作见 [运行手册](docs/operations/local-acquisition-runbook.md)。
 
 当前支持的用户入口是：
 
@@ -24,19 +28,19 @@ RSS/Blog shadow mode）已落地，但尚未发布正式版本。详见
 
 旧产品名对应的调用方式只属于迁移背景，不再是 v0.2 支持的用户入口。
 
-## 安装 v0.2.0
+## 安装 v0.3.0
 
 环境要求为 Node.js 20 或更高版本，以及未经修改、已经校验并解压的 GitHub Release
 归档。
 
 ```text
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/Follow-up-v0.2.0.tar.gz
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/Follow-up-v0.2.0-checksums.txt
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/release-manifest.json
-shasum -a 256 -c Follow-up-v0.2.0-checksums.txt
-tar -xzf Follow-up-v0.2.0.tar.gz
-cmp release-manifest.json Follow-up-v0.2.0/release-manifest.json
-cd Follow-up-v0.2.0
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/Follow-up-v0.3.0.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/Follow-up-v0.3.0-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/release-manifest.json
+shasum -a 256 -c Follow-up-v0.3.0-checksums.txt
+tar -xzf Follow-up-v0.3.0.tar.gz
+cmp release-manifest.json Follow-up-v0.3.0/release-manifest.json
+cd Follow-up-v0.3.0
 node scripts/release/validate-release.js --archive-critical-only
 cd scripts
 npm ci
@@ -44,7 +48,7 @@ npm run validate-release:archive
 npm run test:archive
 cd ..
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <绝对路径>] --register
-node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
+node ~/.follow-builders/releases/0.3.0/scripts/doctor.js --json
 ```
 
 安装并通过 `doctor` 后，输入 `set up follow-up`，依次选择关注频道、daily 或 weekly
@@ -75,7 +79,7 @@ immutable releases，并设置 `RELEASE_IMMUTABILITY_CONFIRMED=true` 后，发�
 self-verification，不能独立建立信任；受保护 tag、单独下载的 manifest 和完整归档
 checksum 才是外部信任锚点。
 
-## v0.2.0 已实现范围
+## v0.3.0 已实现范围
 
 当前共有 6 类中心化 live channel：
 
@@ -136,7 +140,7 @@ Onboarding 将配置写入 `~/.follow-builders/config.json`。6 个稳定的
 
 ## 产品边界
 
-v0.2.0 使用中心化公共 Feed，尚未实现本地采集、认证 Sidecar、长期反馈学习、行业
+v0.3.0 使用中心化公共 Feed，尚未实现本地采集、认证 Sidecar、长期反馈学习、行业
 报告采集、分页个人 Feed、显式已读/未读操作、自动发现更新或自动回滚。这些属于后续
 版本。Signal 或成功投递的 Digest 不代表用户已经阅读、理解或认可，Follow-up 也不会
 自动写入 Malow 或 GoldenWave 的权威状态。

@@ -2,6 +2,15 @@
 
 All notable changes to Follow-up are documented in this file.
 
+## [0.3.0] - 2026-09-09
+
+- 新增 Python Acquisition Runtime、Signal Batch 契约、source registry、受控 vendoring
+  与 RSS/官网 Blog Adapter。
+- 新增四种采集输入模式的 Digest 消费、批次原子发布和 shadow 指标模块。
+- 尚待完成运行时安装、采集到 Digest 的统一入口、完整迁移门禁及发布验收；保持 central
+  默认输入，未确认中心 Feed 已下线。详见 [项目进度](docs/project-progress.md) 和
+  [版本开发计划](docs/version-roadmap.md)。
+
 ## [0.2.0] - 2026-09-07
 
 ### Added

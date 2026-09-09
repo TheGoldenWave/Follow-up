@@ -1,5 +1,8 @@
 # Follow-up 本地采集切换运行手册
 
+> v0.3.0 已实现来源状态持久化、人工复核和切换工具；发布不等于中心 Feed 下线。
+> 未复核、缺失实际批次或观察不足时门禁不放行。当前候选版本验收见 [项目进度](../project-progress.md)。
+
 本文记录把公共来源从中心 Feed 逐步切换到用户本地采集（Signal Batch）的**切换顺序、
 门禁、回滚与中心 Feed 下线步骤**。执行者是维护者；普通采集永不静默安装、永不自动切换，
 每一步都按来源级观察结果推进。
@@ -14,6 +17,25 @@
 | `shadow` | 中心 Feed 投递 + 本地采集仅记录指标（本地候选绝不进入 Digest） |
 | `hybrid` | 本地 `ok`/`no-results`/`partial` 对该来源生效；失败状态回退中心 |
 | `local` | 仅用本地 Signal Batch |
+
+已切换来源失败时保留可见错误，不自动重放旧内容。触发回滚后，hybrid 使用中心输入；
+local 隔离该来源并报告错误，仍不访问中心 Feed。
+
+显式运行 `node scripts/bootstrap-acquisition.js` 安装 Python 3.12 隔离运行时后，使用
+`node scripts/collect-and-prepare.js --request-out <absolute-path>`；定时调用附加 `--scheduled`。
+
+维护命令：
+
+```text
+node scripts/migration.js inspect
+node scripts/migration.js review blog:anthropic-engineering /absolute/review.json
+node scripts/migration.js cutover blog:anthropic-engineering
+node scripts/migration.js reset blog:anthropic-engineering
+node scripts/report-shadow.js
+```
+
+复核文件包含 `batchId`、`reviewer`、`reviewedAt` 与 `items`；每项为真实批次中的
+`candidateId` 和布尔 `relevant`。工具计算相关率，不能以传入 `passed` 布尔值跳过门禁。
 
 ## 2. 切换顺序（cutover order）
 
@@ -34,6 +56,7 @@
 - 本地候选**无重复**（`duplicate_rate == 0`）。
 - 达到运行阈值：至少 **3 次真实运行** + 代表性 Fixture 重放（低频例外）。
 - 人工复核的相关性（review relevance）≥ **80%**。
+- 从首次通过检查的成功真实运行起观察满 **14 天**。
 
 指标由 `src/follow_up_acquisition/migration.py` 计算，`npm --prefix scripts run report-shadow`
 输出逐来源 overlap / duplicate / error 指标与切入门禁、回滚结论。

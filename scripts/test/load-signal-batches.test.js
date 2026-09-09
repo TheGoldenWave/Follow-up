@@ -110,3 +110,9 @@ test('loadSignalBatches aggregates candidates and statuses across batches', () =
   assert.equal(result.sourceStatuses.length, 1);
   assert.equal(result.sourceStatuses[0].sourceId, 'blog:test');
 });
+
+test('batch mapping rejects an item claiming another source', () => {
+  assert.throws(() => mapSignalBatch(batch({ items: [{ ...item, source: 'blog:other' }] }), {
+    sourceIndex: new Map([['blog:test', source]]), seenAt: SEEN_AT,
+  }), /item source does not match batch/);
+});

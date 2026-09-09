@@ -12,9 +12,10 @@ from . import __version__
 
 
 def _default_registry_path() -> Path:
-    # Repo-relative default for the source checkout; a wheel install must pass
-    # --registry explicitly (mirrors contracts.py schema resolution).
-    return Path(__file__).resolve().parents[2] / "config" / "sources.json"
+    checkout = Path(__file__).resolve().parents[2] / "config" / "sources.json"
+    if checkout.is_file():
+        return checkout
+    return Path(sys.prefix) / "share" / "follow-up-acquisition" / "config" / "sources.json"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -35,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     doctor.add_argument(
         "--registry",
-        help="path to config/sources.json (defaults to the repo checkout)",
+        help="path to sources.json (defaults to the bundled registry)",
     )
     doctor.add_argument(
         "--json",
@@ -53,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run_parser.add_argument(
         "--registry",
-        help="path to config/sources.json (defaults to the repo checkout)",
+        help="path to sources.json (defaults to the bundled registry)",
     )
     run_parser.add_argument(
         "--output",

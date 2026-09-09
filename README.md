@@ -2,22 +2,20 @@
 
 # Follow-up
 
-Follow-up is a Skill-first personal AI Signal digest. Version `0.2.0` reads six
+Follow-up is a Skill-first personal AI Signal digest. Version `0.3.0` reads six
 centrally generated public Feed channels, ranks important updates across all enabled
 sources, and delivers a daily, weekly, or on-demand Digest. It is derived from
 [follow-builders](https://github.com/zarazhangrui/follow-builders) and keeps compatible
 user data under `~/.follow-builders/`.
 
-Current version: `0.2.0` Stable. See [project progress](docs/project-progress.md), the
+Current release candidate: `0.3.0`. See [project progress](docs/project-progress.md), the
 [complete source catalog](docs/source-catalog.md), and the [changelog](CHANGELOG.md).
 Public installation assets are published through
 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases).
 
-The next version `v0.3.0` (local acquisition runtime) is under development on the
-`feature/v0.3.0-acquisition-runtime` branch. Its core scope — Acquisition Runtime,
-versioned Signal Batch, source registry, controlled vendoring, and RSS/Blog shadow mode
-— is landed but not yet released. See [project progress](docs/project-progress.md) for
-the current state.
+下一版本 `v0.3.0` 正在 `feature/v0.3.0-acquisition-runtime` 分支开发。采集与 Digest
+消费模块已实现，安装、统一执行入口和迁移门禁仍需收尾，尚未发布。查看
+[项目进度](docs/project-progress.md) 与 [后续版本计划](docs/version-roadmap.md)。
 
 The supported user entry points are:
 
@@ -27,19 +25,19 @@ The supported user entry points are:
 The former product-name invocation is migration history, not a supported user entry
 point in v0.2.
 
-## Install v0.2.0
+## Install v0.3.0
 
 Requirements: Node.js 20 or newer and a pristine, extracted, verified GitHub Release
 archive.
 
 ```text
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/Follow-up-v0.2.0.tar.gz
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/Follow-up-v0.2.0-checksums.txt
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.2.0/release-manifest.json
-shasum -a 256 -c Follow-up-v0.2.0-checksums.txt
-tar -xzf Follow-up-v0.2.0.tar.gz
-cmp release-manifest.json Follow-up-v0.2.0/release-manifest.json
-cd Follow-up-v0.2.0
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/Follow-up-v0.3.0.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/Follow-up-v0.3.0-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.3.0/release-manifest.json
+shasum -a 256 -c Follow-up-v0.3.0-checksums.txt
+tar -xzf Follow-up-v0.3.0.tar.gz
+cmp release-manifest.json Follow-up-v0.3.0/release-manifest.json
+cd Follow-up-v0.3.0
 node scripts/release/validate-release.js --archive-critical-only
 cd scripts
 npm ci
@@ -47,7 +45,7 @@ npm run validate-release:archive
 npm run test:archive
 cd ..
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] --register
-node ~/.follow-builders/releases/0.2.0/scripts/doctor.js --json
+node ~/.follow-builders/releases/0.3.0/scripts/doctor.js --json
 ```
 
 After installation and a successful `doctor` check, say `set up follow-up` to select
@@ -84,7 +82,7 @@ itself. Running the validator while checking the validator's own hash is
 self-verification and cannot establish trust alone; the protected tag, separately
 downloaded manifest, and complete-archive checksum remain the external anchors.
 
-## What v0.2.0 Includes
+## What v0.3.0 Includes
 
 Six live centralized channels are available:
 
@@ -154,7 +152,7 @@ confirmation.
 
 ## Product Boundary
 
-v0.2.0 uses centralized public Feeds. It does **not** implement local acquisition,
+v0.3.0 uses centralized public Feeds. It does **not** implement local acquisition,
 authenticated Sidecars, long-term feedback learning, industry-report ingestion, a
 paginated personal Feed, explicit read/unread actions, automatic update discovery, or
 automatic rollback. These remain later-version work. A Signal or delivered Digest is

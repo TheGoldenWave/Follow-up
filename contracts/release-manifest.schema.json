@@ -118,7 +118,7 @@
         "atMostOnceDelivery": { "const": true },
         "installer": { "const": true },
         "doctor": { "const": true },
-        "localAcquisition": { "const": false },
+        "localAcquisition": { "type": "boolean" },
         "sidecars": { "const": false },
         "longTermFeedback": { "const": false },
         "reports": { "const": false },

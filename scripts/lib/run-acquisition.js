@@ -1,6 +1,7 @@
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { spawn as systemSpawn } from 'node:child_process';
 import * as systemFs from 'node:fs/promises';
+import { resolveBootstrapPath } from '../bootstrap-acquisition.js';
 
 /**
  * Invoke the Python Acquisition Runtime `run` command, which collects every
@@ -8,18 +9,32 @@ import * as systemFs from 'node:fs/promises';
  * `outputDir`. Resolves on exit code 0 and rejects on any failure so callers can
  * classify the run instead of silently proceeding.
  */
-export function invokeAcquisitionRun({
+export async function invokeAcquisitionRun({
   outputDir,
-  pythonPath = 'python3.12',
+  pythonPath,
   cwd,
   env = process.env,
   spawnImpl = systemSpawn,
 } = {}) {
+  if (!pythonPath) {
+    try {
+      const runtime = JSON.parse(await systemFs.readFile(resolveBootstrapPath({ env }), 'utf8'));
+      if (runtime.schemaVersion !== '1.0' || !isAbsolute(runtime.interpreter ?? '')) {
+        throw new Error('invalid runtime descriptor');
+      }
+      pythonPath = runtime.interpreter;
+    } catch (error) {
+      throw new Error(`Acquisition runtime is not ready. Run node scripts/bootstrap-acquisition.js first: ${error.message}`);
+    }
+  }
+  const runtimeEnv = { ...env };
+  delete runtimeEnv.PYTHONPATH;
+  delete runtimeEnv.PYTHONHOME;
   return new Promise((resolve, reject) => {
     const child = spawnImpl(
       pythonPath,
-      ['-m', 'follow_up_acquisition', 'run', '--output', outputDir],
-      { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] },
+      ['-I', '-m', 'follow_up_acquisition', 'run', '--output', outputDir],
+      { cwd, env: runtimeEnv, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let stdout = '';
     let stderr = '';

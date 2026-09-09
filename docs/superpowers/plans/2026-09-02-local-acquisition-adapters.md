@@ -318,6 +318,10 @@ product version.
 
 ### Task 17: Normalize central Feeds for per-source routing
 
+> 2026-09-09 状态校准：Task 17–20 已有模块实现，但来源级迁移状态、统一准备入口与完整
+> 门禁尚未闭环；Task 21 未确认执行。下列原始验收项不因存在同名提交而批量勾选。
+> 当前收尾与后续版本顺序见 [版本开发计划](../../version-roadmap.md)。
+
 **Files:**
 - Create: `scripts/lib/normalize-central-feeds.js`
 - Create: `scripts/test/normalize-central-feeds.test.js`

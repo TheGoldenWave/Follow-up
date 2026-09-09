@@ -3,6 +3,13 @@
   "description": "User configuration for Follow-up. Stored at ~/.follow-builders/config.json",
   "type": "object",
   "properties": {
+    "acquisition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string", "enum": ["central", "shadow", "hybrid", "local"], "default": "central" }
+      }
+    },
     "platform": {
       "type": "string",
       "enum": ["openclaw", "other"],

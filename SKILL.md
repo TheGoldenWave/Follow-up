@@ -16,14 +16,14 @@ Combine Western and Chinese perspectives into a unified, low-noise attention fee
 centrally and served via public Feeds. Telegram or email delivery still requires the
 user's own delivery credentials, stored locally after explicit authorization.
 
-Release `v0.2.0` has no automatic updater. Its executable Prompt defaults are the
+Release `v0.3.0` has no automatic updater. Its executable Prompt defaults are the
 files bundled with the installed release, not files fetched from a mutable branch.
 Files under `~/.follow-builders/prompts/` remain the highest-priority user overrides.
 The six centralized category Feed envelopes and rolling candidate Feed are
 schema-validated before Digest preparation; invalid or unsupported input is reported
 as incomplete rather than becoming trusted payload.
 
-For `v0.2.0`, use only the exact GitHub Release after verifying its separate checksum
+For `v0.3.0`, use only the exact GitHub Release after verifying its separate checksum
 and manifest assets. Run `node scripts/release/validate-release.js
 --archive-critical-only` before `npm ci`, then use `node scripts/install.js --platform
 <codex|claude-code|custom> --register` and confirm the installed release with
@@ -343,7 +343,7 @@ This workflow runs on a daily/weekly schedule or when the user invokes `/follow-
 
 优先使用当前 Skill 宿主提供的实际 Skill 根目录作为 `FOLLOW_UP_SKILL_DIR`。若宿主没有
 提供，则使用安装器发布并校验过的 immutable release pointer：
-`$HOME/.follow-builders/releases/0.2.0`。Codex、Claude Code 与 custom registration
+`$HOME/.follow-builders/releases/0.3.0`。Codex、Claude Code 与 custom registration
 都只负责把 Skill 链接到该 release；不得假定任何单一宿主的专属环境变量存在。
 下面每条命令都在同一个 shell invocation 内完成 fallback，避免环境变量无法跨命令保留。
 
@@ -361,7 +361,7 @@ Read `~/.follow-builders/config.json` for language, schedule, delivery, and prom
 `no-channels` 是需要修改配置的状态，不得伪装成 authorized 或发送 no-update。
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/schedule-gate.js" --config "$HOME/.follow-builders/config.json"
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/schedule-gate.js" --config "$HOME/.follow-builders/config.json"
 ```
 
 `schedule-gate.js` 从 config 内 canonical `schedule` 与 `delivery` 字段校验 frequency 和
@@ -369,10 +369,10 @@ exact destination；不得向该 CLI 传入未声明的 `--frequency` 或 `--des
 
 ### Step 3: Prepare curation request
 
-创建绝对路径作为本次 request 输出。只运行 `prepare-digest.js`，它读取本地配置、delivery ledger 和中央 rolling `feed-candidates.json`，验证完整 source registry，并按渠道与投递历史筛选候选。不要自行拉取六个 snapshot Feed。
+创建绝对路径作为本次 request 输出。运行 `collect-and-prepare.js`，按 acquisition.mode 采集并准备摘要请求：central 默认读取中央 rolling Feed；shadow 本地结果仅供观察；hybrid 逐来源回退；local 不访问中央 Feed。脚本保留 delivery ledger 与授权门禁。首次启用本地采集前，显式运行 `node scripts/bootstrap-acquisition.js` 安装 Python 3.12 隔离环境；普通采集不会安装依赖。不要自行拉取六个 snapshot Feed。
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/prepare-digest.js" --request-out <absolute-request-path> [--frequency daily|weekly] [--scheduled] 2>/dev/null
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/collect-and-prepare.js" --request-out <absolute-request-path> [--frequency daily|weekly] [--scheduled] 2>/dev/null
 ```
 
 - `no-channels`：停止，不生成 selection，不投递 daily no-update；向用户展示全零 `contentStats` 和启用渠道的操作提示。
@@ -395,13 +395,13 @@ FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.
 只读取该验证输出：
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/validate-digest-selection.js" --request <absolute-request-path> --selection <absolute-selection-path> --output <absolute-validated-selection-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/validate-digest-selection.js" --request <absolute-request-path> --selection <absolute-selection-path> --output <absolute-validated-selection-path>
 ```
 
 ### Step 5: Finalize
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/finalize-digest.js" --request <absolute-request-path> --selection <absolute-validated-selection-path> --output-dir <absolute-output-directory> 2>/dev/null
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/finalize-digest.js" --request <absolute-request-path> --selection <absolute-validated-selection-path> --output-dir <absolute-output-directory> 2>/dev/null
 ```
 
 finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确定性选择。它先在同一 staging generation 内完整写入并持久化 `artifact.json`、`message.txt` 与 manifest，再以一次目录 rename 发布 generation，最后原子更新 `<absolute-output-directory>/active.json`。只有 `active.json` 指向的 generation 可投递；JSON artifact 供 ledger/outbox 使用，不能直接作为用户消息发送。状态含义如下：
@@ -421,19 +421,19 @@ finalize 会再次校验 request、manifest、`digestId`、`requestHash` 和确�
 手动运行：
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> [--confirm-destination] --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> [--confirm-destination] --result-out <absolute-delivery-result-path>
 ```
 
 自动运行必须显式标记 scheduled，使 deliver 再次执行 TOCTOU 门禁：
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --scheduled --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --scheduled --result-out <absolute-delivery-result-path>
 ```
 
 默认 stdout 也必须运行：
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination stdout --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination stdout --result-out <absolute-delivery-result-path>
 ```
 
 stdout destination 的用户正文只写 stdout；machine status 只从 `--result-out` 指定的 JSON 文件读取。不得把正文当 JSON 解析，也不得隐藏或丢弃 stdout 正文。
@@ -456,9 +456,9 @@ stdout destination 的用户正文只写 stdout；machine status 只从 `--resul
 对应脚本命令：
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> delivered --result-out <absolute-resolution-result-path>
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> suppress --result-out <absolute-resolution-result-path>
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> retry --confirm-external-retry [--destination stdout|telegram|email] --result-out <absolute-resolution-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> delivered --result-out <absolute-resolution-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> suppress --result-out <absolute-resolution-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/resolve-delivery.js" <attempt-id> retry --confirm-external-retry [--destination stdout|telegram|email] --result-out <absolute-resolution-result-path>
 ```
 
 必须先检查 `resolve-delivery.js` 的 exit code；只有 exit 0 才读取 `--result-out` 的 machine JSON。exit 非零时停止并检查 stderr；`delivery-busy` 表示该 attempt 正在 provider handoff 中，不得提交 delivered、suppress 或 retry，也不得绕过锁重试写状态。
@@ -466,7 +466,7 @@ FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.
 `retry` 只在同一 transaction 中将旧 attempt 标记为 `superseded` 并创建 replacement pending，不调用 provider。返回 `retry-ready` 后，从 machine JSON 读取 `replacementAttemptId`，然后使用同一个已激活 Digest 直接 resume：
 
 ```bash
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> [--confirm-destination] --result-out <absolute-delivery-result-path>
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; node "$FOLLOW_UP_SKILL_DIR/scripts/deliver.js" --active <absolute-output-directory>/active.json --destination <stdout|telegram|email> --resume-attempt <replacement-attempt-id> [--confirm-destination] --result-out <absolute-delivery-result-path>
 ```
 
 resume 会校验该 pending 确实由对应旧 attempt 的 `superseded` 事件创建，并要求 `digestId`、`frequency`、candidate IDs、event cluster IDs、`messageHash` 和 destination 完全匹配；它不会创建普通 reservation。每个 replacement 的 resume 会在 provider handoff 前持久化一次性 claim，只有 claim 成功的调用可以继续；进程崩溃或 provider 结果不确定时也不得重复 resume。
@@ -512,7 +512,7 @@ bundled with the installed release.
 
 ```bash
 mkdir -p ~/.follow-builders/prompts
-FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.2.0}"; cp "$FOLLOW_UP_SKILL_DIR/prompts/<filename>.md" ~/.follow-builders/prompts/<filename>.md
+FOLLOW_UP_SKILL_DIR="${FOLLOW_UP_SKILL_DIR:-$HOME/.follow-builders/releases/0.3.0}"; cp "$FOLLOW_UP_SKILL_DIR/prompts/<filename>.md" ~/.follow-builders/prompts/<filename>.md
 ```
 
 Then edit the file with the user's requested changes.

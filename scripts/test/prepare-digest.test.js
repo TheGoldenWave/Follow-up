@@ -51,6 +51,70 @@ const registry = [
   { id: 'x:builder', channel: 'x', name: 'Builder' },
 ];
 
+test('local preparation never loads central content and discloses missing sources', async () => {
+  const localCandidate = candidate('local');
+  const result = await prepareDigest({
+    config: { onboardingComplete: true, enabledChannels: ['blogs', 'x'] },
+    mode: 'local', registry, now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => { throw new Error('central must not be loaded'); },
+    loadLocalSignalBatches: async () => ({ candidates: [localCandidate], sourceStatuses: [
+      { sourceId: 'blog:official', channel: 'blogs', sourceName: 'Official', status: 'ok', candidateCount: 1 },
+    ] }),
+    loadCurationPrompt: async () => 'curate',
+  });
+  assert.equal(result.request.eligibleCandidates[0].title, 'local');
+  assert.equal(result.request.sourceCompleteness.complete, false);
+  assert.equal(result.request.sourceCompleteness.missingSourceCount, 1);
+});
+
+test('local mode without a local loader fails closed', async () => {
+  await assert.rejects(prepareDigest({
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] },
+    mode: 'local', registry, now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => feed([candidate('central')]),
+    loadCurationPrompt: async () => 'curate',
+  }), /local Signal Batch loader is unavailable/);
+});
+
+test('hybrid reports local partial status even when central coverage is complete', async () => {
+  const result = await prepareDigest({
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] },
+    mode: 'hybrid', registry, now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => feed([candidate('central')]),
+    loadLocalSignalBatches: async () => ({ candidates: [candidate('local')], sourceStatuses: [
+      { sourceId: 'blog:official', channel: 'blogs', sourceName: 'Official', status: 'partial', candidateCount: 1, errorSummary: 'One article unavailable' },
+    ] }),
+    loadCurationPrompt: async () => 'curate',
+  });
+  assert.deepEqual(result.request.eligibleCandidates.map(value => value.title), ['local']);
+  assert.equal(result.request.sourceCompleteness.complete, false);
+  assert.equal(result.request.sourceCompleteness.partialSourceCount, 1);
+});
+
+test('shadow never exposes local candidates in the prepared request', async () => {
+  const result = await prepareDigest({
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] },
+    mode: 'shadow', registry, now: '2026-09-06T08:00:00.000Z',
+    loadCandidateFeed: async () => feed([candidate('central')]),
+    loadLocalSignalBatches: async () => ({ candidates: [candidate('local')], sourceStatuses: [] }),
+    loadCurationPrompt: async () => 'curate',
+  });
+  assert.deepEqual(result.request.eligibleCandidates.map(value => value.title), ['central']);
+});
+
+test('first local weekly request reports incomplete empty history instead of failing', async () => {
+  const now = '2026-09-09T12:00:00.000Z';
+  const result = await prepareDigest({
+    config: { onboardingComplete: true, enabledChannels: ['blogs'] },
+    mode: 'local', frequency: 'weekly', registry, now,
+    loadLocalSignalBatches: async () => ({ candidates: [], continuousHistorySince: now,
+      sourceStatuses: [{ sourceId: 'blog:official', channel: 'blogs', sourceName: 'Official', status: 'no-results', candidateCount: 0 }] }),
+    loadCurationPrompt: async () => 'curate',
+  });
+  assert.equal(result.contextStatus, 'incomplete-history');
+  assert.deepEqual(result.request.eligibleCandidates, []);
+});
+
 async function fixtureConfig(name) {
   return {
     ...JSON.parse(await readFile(new URL(`config/${name}.json`, fixtures), 'utf8')),

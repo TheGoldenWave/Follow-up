@@ -1,6 +1,6 @@
 {
   "name": "follow-builders-scripts",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Scripts for Follow-up - feed generation, digest preparation, and delivery",
   "type": "module",
   "engines": {

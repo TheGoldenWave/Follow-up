@@ -394,6 +394,7 @@ export async function prepareDigest({
   randomUUID = systemRandomUUID,
   mode,
   loadLocalSignalBatches,
+  migrationState,
 } = {}) {
   const normalizedConfig = normalizeConfig(config ?? {});
   const resolvedFrequency = frequency
@@ -419,31 +420,48 @@ export async function prepareDigest({
     };
   }
   if (!Array.isArray(registry)) throw new TypeError('source registry is unavailable');
-  if (typeof loadCandidateFeed !== 'function') throw new TypeError('candidate Feed loader is unavailable');
-
-  const feed = await loadCandidateFeed();
+  const acquisitionMode = normalizeAcquisitionMode(mode ?? config?.acquisition?.mode);
+  if (acquisitionMode !== 'central' && typeof loadLocalSignalBatches !== 'function') {
+    throw new TypeError('local Signal Batch loader is unavailable');
+  }
+  if (acquisitionMode !== 'local' && typeof loadCandidateFeed !== 'function') {
+    throw new TypeError('candidate Feed loader is unavailable');
+  }
+  const local = acquisitionMode === 'central' ? null : await loadLocalSignalBatches();
+  const feed = acquisitionMode === 'local' ? {
+    schemaVersion: '1.0', generatedAt: now,
+    initializedAt: local.continuousHistorySince ?? now, continuousHistorySince: local.continuousHistorySince ?? now,
+    retention: { defaultDays: 15, podcastDays: 30, minimumPerSource: 50, maxCandidates: 1000 },
+    historyTruncated: false,
+    truncation: { affectedSourceIds: [], oldestRetainedAt: null, removedCount: 0 },
+    candidates: local.candidates, registry: local.sourceStatuses,
+  } : await loadCandidateFeed();
   const expected = expectedRegistry(registry);
   const feedValidation = validateCandidateFeedStructure(feed, { expectedRegistry: expected });
   if (!feedValidation.valid) throw new Error('candidate Feed is invalid');
   if (Date.parse(feed.generatedAt) - Date.parse(now) > CANDIDATE_FEED_FUTURE_SKEW_MS) {
     throw new Error('candidate Feed generatedAt is in the future');
   }
-  const completeness = validateCandidateFeedCompleteness(feed, { expectedRegistry: expected });
-  const acquisitionMode = normalizeAcquisitionMode(mode ?? config?.acquisition?.mode);
   let effectiveFeed = feed;
-  if (acquisitionMode !== 'central' && typeof loadLocalSignalBatches === 'function') {
-    const local = await loadLocalSignalBatches();
+  if (acquisitionMode !== 'central') {
     const combined = combineAcquisitionInput({
       mode: acquisitionMode,
       central: { candidates: feed.candidates, registry: feed.registry },
       local,
+      migrationState,
     });
     effectiveFeed = {
       ...feed,
       candidates: combined.candidates,
       registry: combined.sourceStatuses,
+      ...(acquisitionMode === 'hybrid' && local.continuousHistorySince
+        ? { continuousHistorySince: new Date(Math.max(Date.parse(feed.continuousHistorySince), Date.parse(local.continuousHistorySince))).toISOString() }
+        : {}),
     };
   }
+  const effectiveValidation = validateCandidateFeedStructure(effectiveFeed, { expectedRegistry: expected });
+  if (!effectiveValidation.valid) throw new Error('effective candidate Feed is invalid');
+  const completeness = validateCandidateFeedCompleteness(effectiveFeed, { expectedRegistry: expected });
   const resolved = await resolveDigestCandidates({
     config: normalizedConfig, frequency: resolvedFrequency, now, deliveryEvents,
     loadCandidateFeed: async () => effectiveFeed,
@@ -487,7 +505,7 @@ export async function prepareDigest({
       reportedStatuses,
       expectedCount: enabledRegistry.length,
       missingCount: enabledMissingSources.length,
-      feed,
+      feed: effectiveFeed,
       now,
     }),
     contentStats,
@@ -510,7 +528,7 @@ export async function prepareDigest({
   };
 }
 
-function parseOptions(argv) {
+export function parseOptions(argv) {
   return parseCommandLine(argv, {
     options: {
       'request-out': { type: 'string' },
@@ -538,6 +556,8 @@ export async function main({
   registry,
   deliveryEvents,
   loadCandidateFeed: injectedFeedLoader,
+  loadLocalSignalBatches,
+  migrationState,
   loadCurationPrompt: injectedPromptLoader,
   fetchJson = fetchJSON,
   now = new Date().toISOString(),
@@ -588,6 +608,8 @@ export async function main({
       registry: loadedRegistry,
       deliveryEvents: events,
       loadCandidateFeed: loadFeed,
+      loadLocalSignalBatches,
+      migrationState,
       loadCurationPrompt: injectedPromptLoader,
       randomUUID,
     });

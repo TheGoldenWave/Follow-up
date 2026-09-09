@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==80.9.0", "wheel==0.45.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -22,6 +22,10 @@ follow-up-acquisition = "follow_up_acquisition.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+"share/follow-up-acquisition/config" = ["config/sources.json"]
+"share/follow-up-acquisition/contracts" = ["contracts/signal-batch.schema.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import unittest
+import json
+import subprocess
+from pathlib import Path
 
 from follow_up_acquisition.migration import (
     canonical_url,
@@ -13,6 +16,7 @@ from follow_up_acquisition.migration import (
     native_id_of,
     overlap_rate,
     run_streak,
+    source_verdict,
 )
 
 
@@ -21,6 +25,9 @@ def item(source: str, native: str, url: str) -> dict:
 
 
 class CanonicalUrlTests(unittest.TestCase):
+    def test_preserves_path_case_and_sorts_query_like_node(self):
+        self.assertEqual(canonical_url('https://EXAMPLE.com/Case/?z=2&a=1&utm_extra=x'), 'https://example.com/Case?a=1&z=2')
+
     def test_strips_fragment_tracking_and_trailing_slash(self):
         self.assertEqual(
             canonical_url("https://Example.com/post/?utm_source=x#frag"),
@@ -41,6 +48,10 @@ class IdentityTests(unittest.TestCase):
 
 
 class MetricTests(unittest.TestCase):
+    def test_duplicates_match_either_identity_independently(self):
+        self.assertEqual(duplicate_rate([item('blog:a', '1', 'https://e.com/a'), item('blog:a', '1', 'https://e.com/b')], 'blog:a'), 0.5)
+        self.assertEqual(duplicate_rate([item('blog:a', '1', 'https://e.com/a?utm_source=x'), item('blog:a', '2', 'https://e.com/a')], 'blog:a'), 0.5)
+
     def test_overlap_rate_matches_native_id_and_url(self):
         local = [item("blog:a", "1", "https://example.com/x")]
         central = [item("blog:a", "1", "https://example.com/x")]
@@ -67,6 +78,40 @@ class MetricTests(unittest.TestCase):
 
 
 class CutoverTests(unittest.TestCase):
+    def test_operational_source_verdict_requires_current_real_review(self):
+        source = {'observation_until': '2026-09-15T00:00:00Z', 'runs': [
+            {'batchId': str(n), 'generatedAt': f'2026-09-0{n}T00:00:00Z', 'status': 'ok', 'contractsOk': True, 'secretsClean': True, 'secretsLeaked': False, 'duplicateRate': 0, 'candidateIds': [f'blog:a:{n}']} for n in [1, 2, 3]
+        ], 'review': {'batchId': '3', 'reviewer': 'person', 'reviewedAt': '2026-09-04T00:00:00Z', 'items': [{'candidateId': 'blog:a:3', 'relevant': True}]}}
+        self.assertTrue(source_verdict(source, '2026-09-20T00:00:00Z')['cutover']['passed'])
+        self.assertFalse(source_verdict(source, '2026-09-05T00:00:00Z')['cutover']['passed'])
+        source['review']['batchId'] = '2'
+        self.assertFalse(source_verdict(source, '2026-09-20T00:00:00Z')['cutover']['passed'])
+
+    def test_operational_verdict_matches_node_for_saved_evidence(self):
+        source = {'observation_until': '2026-09-15T00:00:00Z', 'runs': [
+            {'batchId': str(n), 'generatedAt': f'2026-09-0{n}T00:00:00Z', 'status': 'ok', 'contractsOk': True, 'secretsClean': True, 'secretsLeaked': False, 'duplicateRate': 0, 'candidateIds': [f'blog:a:{n}']} for n in [1, 2, 3]
+        ], 'review': {'batchId': '3', 'reviewer': 'person', 'reviewedAt': '2026-09-04T00:00:00Z', 'items': [{'candidateId': 'blog:a:3', 'relevant': True}]}}
+        cases = [(source, clock) for clock in ['2026-09-05T00:00:00Z', '2026-09-20T00:00:00Z', '2027-01-01T00:00:00Z']]
+        for relevance in [False, True]:
+            changed = json.loads(json.dumps(source))
+            changed['review']['items'][0]['relevant'] = relevance
+            cases.append((changed, '2026-09-20T00:00:00Z'))
+        for status in ['error', 'timeout']:
+            changed = json.loads(json.dumps(source))
+            for run in changed['runs'][-2:]:
+                run['status'] = status
+            cases.append((changed, '2026-09-20T00:00:00Z'))
+        script = "import {sourceVerdict} from './scripts/lib/migration-state.js'; let input=''; for await(const c of process.stdin) input+=c; console.log(JSON.stringify(JSON.parse(input).map(([s,n])=>sourceVerdict(s,n))));"
+        result = subprocess.run(['node', '--input-type=module', '-e', script], input=json.dumps(cases), text=True, capture_output=True, check=True, cwd=Path(__file__).resolve().parents[2])
+        self.assertEqual(json.loads(result.stdout), [source_verdict(s, n) for s, n in cases])
+
+    def test_missing_review_blocks_cutover(self):
+        gates = evaluate_cutover(
+            run_count=3, duplicate_rate_value=0.0, relevance=None,
+            contracts_ok=True, secrets_clean=True,
+        )
+        self.assertFalse(gates["passed"])
+
     def test_all_gates_pass_allows_cutover(self):
         gates = evaluate_cutover(
             run_count=3, duplicate_rate_value=0.0, relevance=0.9,

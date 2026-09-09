@@ -104,6 +104,9 @@ export function mapSignalBatch(batch, { sourceIndex, seenAt }) {
     throw new Error(`No source registry entry for Signal Batch source ${sourceId}`);
   }
   const channel = routeSourceChannel(source);
+  if ((batch.items ?? []).some(item => item.source !== sourceId)) {
+    throw new TypeError('item source does not match batch');
+  }
   const resolvedSeenAt = normalizeDate(batch.generated_at) ?? seenAt;
   const candidates = (batch.items ?? []).map((item) => (
     mapSignalBatchItem(item, { source, channel, seenAt: resolvedSeenAt })
