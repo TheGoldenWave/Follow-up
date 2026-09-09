@@ -31,6 +31,7 @@ jobs:
 
       - name: Verify Python acquisition and isolated installation
         run: |
+          npm --prefix scripts ci
           python3.12 -m venv /tmp/follow-up-python-tests
           /tmp/follow-up-python-tests/bin/python -m pip install --require-hashes -r requirements-build.lock
           /tmp/follow-up-python-tests/bin/python -m pip install --no-build-isolation --require-hashes -r requirements-acquisition.lock
