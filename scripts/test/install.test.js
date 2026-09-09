@@ -322,7 +322,7 @@ test('mutable config, prompts, env, and state remain byte-for-byte unchanged', a
 
 test('module has a main guard and README invokes installer directly with upgrade flag', async () => {
   const script = `import ${JSON.stringify(new URL('../install.js', import.meta.url).href)}; console.log('imported')`; const child = spawn(process.execPath, ['--input-type=module', '--eval', script], { stdio: ['ignore', 'pipe', 'pipe'] }); let output = ''; child.stdout.on('data', (chunk) => { output += chunk; }); assert.equal(await new Promise((resolve) => child.on('close', resolve)), 0); assert.equal(output.trim(), 'imported');
-  for (const readme of ['README.md', 'README.zh-CN.md']) { const text = await fs.readFile(new URL(`../../${readme}`, import.meta.url), 'utf8'); assert.match(text, /node scripts\/install\.js --platform/); assert.doesNotMatch(text, /npm ci --prefix scripts/); assert.match(text, /--replace-follow-builders/); assert.match(text, /node ~\/\.follow-builders\/releases\/0\.3\.0\/scripts\/doctor\.js --json/); }
+  for (const readme of ['README.md', 'README.zh-CN.md']) { const text = await fs.readFile(new URL(`../../${readme}`, import.meta.url), 'utf8'); assert.match(text, /node scripts\/install\.js --platform/); assert.doesNotMatch(text, /npm ci --prefix scripts/); assert.match(text, /--replace-follow-builders/); assert.match(text, /node ~\/\.follow-builders\/releases\/0\.3\.1\/scripts\/doctor\.js --json/); }
 });
 
 test('Task 12 plan requires the stable-cwd installer worker in the critical set', async () => {
