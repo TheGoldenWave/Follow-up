@@ -107,7 +107,10 @@ test('normalizeCentralFeeds spans multiple channels', () => {
     blogs: { blogs: [{ name: 'Brand New Blog', title: 'Blog post', url: 'https://example.com/post', content: 'body' }] },
   };
   const candidates = normalizeCentralFeeds(feeds, { sources, seenAt: SEEN_AT });
-  const byChannel = Object.groupBy(candidates, (candidate) => candidate.channel);
+  const byChannel = {
+    x: candidates.filter((candidate) => candidate.channel === 'x'),
+    blogs: candidates.filter((candidate) => candidate.channel === 'blogs'),
+  };
   assert.equal(byChannel.x.length, 1);
   assert.equal(byChannel.x[0].sourceId, 'x:brandnew');
   assert.equal(byChannel.blogs.length, 1);

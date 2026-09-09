@@ -4,9 +4,22 @@
 
 ## 当前状态
 
-v0.3.1 补丁修复摘要 validator 与 finalize 的输出文件名契约不一致，并明确 Skill
-验证文件应使用独立目录与同一 digestId 文件名。正在执行回归、精确归档和正式发布验证；
-发布完成状态以 [v0.3.1 Release](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.1) 为准。
+最新正式版本 [v0.3.1](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.1)
+已于 2026-09-09 发布，Release 为 immutable。标签提交为
+`e7d04a8b470cbca12ffe4b11e1e6f6e5f1210413`。修复 validator 与 finalize 输出文件名
+契约不一致，Skill 明确验证后文件使用独立目录和同一 digestId 文件名。
+
+验收：Node 24 全量 648 项通过、1 项安装 smoke 单独通过；Python 145 项通过；
+精确归档 81 项通过、2 项 Git-only 跳过；交接 2 项及全新隔离 RSS/Blog 安装通过。
+原失败请求在隔离输出目录生成成功，状态仍为 partial，未改变实际投递历史。
+
+GitHub run `34334305647` 在 Node 20 因既有测试的 `Object.groupBy` 不兼容失败，
+未产出公开资产；本次发布的是同一受保护标签的本地验收归档。公开下载 checksum、
+manifest、归档字节比对通过。测试兼容修正在发布后提交，不修改 tag 或不可变资产。
+
+首位用户本机已升级 0.3.1，doctor 9 项健康、0 警告、0 错误；16 个配置和历史文件
+逐字节未变。未启用本地采集，无需迁移 Python 用户运行时。安装器拒绝覆盖旧版本
+Skill 链接，已备份旧链接后由安装器重新注册；自动跨版本链接替换仍需后续改进。
 
 上一公开版本为 [v0.3.0](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.0)，
 于 2026-09-09 发布。R1–R4 已完成。发布 tag 指向 `8d90eaccf7db751064ccc2e2140d420321470a4f`，
