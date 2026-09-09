@@ -21,7 +21,8 @@
 已切换来源失败时保留可见错误，不自动重放旧内容。触发回滚后，hybrid 使用中心输入；
 local 隔离该来源并报告错误，仍不访问中心 Feed。
 
-显式运行 `node scripts/bootstrap-acquisition.js` 安装 Python 3.12 隔离运行时后，使用
+先准备 Python 3.12，再显式运行 `node scripts/bootstrap-acquisition.js` 创建隔离运行时、
+安装锁定依赖与 wheel；日常使用
 `node scripts/collect-and-prepare.js --request-out <absolute-path>`；定时调用附加 `--scheduled`。
 
 维护命令：
@@ -54,7 +55,7 @@ node scripts/report-shadow.js
 - 契约与 Fixture 测试全绿（`python -m unittest` + `node --test`）。
 - secret 扫描零命中（`scripts/release/scan-secrets.js`）。
 - 本地候选**无重复**（`duplicate_rate == 0`）。
-- 达到运行阈值：至少 **3 次真实运行** + 代表性 Fixture 重放（低频例外）。
+- 达到运行阈值：至少 **3 次通过检查的成功真实运行**；Fixture 重放不能替代真实运行。
 - 人工复核的相关性（review relevance）≥ **80%**。
 - 从首次通过检查的成功真实运行起观察满 **14 天**。
 
@@ -63,7 +64,8 @@ node scripts/report-shadow.js
 
 ## 4. 回滚触发（rollback triggers）
 
-以下任一命中，立即把该来源回退到中心 Feed 并记录 `rollback_reason`：
+以下任一命中，记录来源回滚原因：hybrid 回退到中心 Feed；local 隔离该来源、报告错误，
+仍不访问中心 Feed：
 
 - 秘密泄漏（secret leak）。
 - 连续两次未分类失败（`consecutive-failures`）。
@@ -85,5 +87,6 @@ node scripts/report-shadow.js
 5. 更新 `config/sources.json` 的 `legacy.feed` 标记与 `docs/source-catalog.md`。
 6. 提交并校验 checksum；中心 Feed 契约测试仍对未下线来源全绿。
 
-> 中心 Feed 下线是**观测后**的运维动作，不绑定固定版本号；在任何来源完成 14 天观察前，
-> 中心 Feed 仍是运行时现状，本地采集只以 shadow/hybrid 方式并行。
+> 中心 Feed 下线是**观测后**的运维动作，不绑定固定版本号，也不是 v0.3.0 发布前置条件。
+> 当前尚未执行来源下线；central 仍是默认输入。显式 local 模式可用于本地运行，
+> 不表示来源已通过迁移门禁或中心任务可以停止。

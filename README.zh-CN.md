@@ -2,8 +2,8 @@
 
 # Follow-up
 
-Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.3.0` 读取 6 类中心化
-公共 Feed，从全部已启用信源中排序重要更新，并按 daily、weekly 或用户按需请求生成
+Follow-up 是一个 Skill-first 的个人 AI 信息信号摘要工具。`0.3.0` 候选版在 6 类中心化
+公共 Feed 的基础上新增 RSS/官网 Blog 本地采集，从全部已启用信源中排序重要更新，并按 daily、weekly 或用户按需请求生成
 Digest。项目基于 [follow-builders](https://github.com/zarazhangrui/follow-builders)
 演进，兼容用户数据继续保存在 `~/.follow-builders/`。
 
@@ -13,7 +13,8 @@ Digest。项目基于 [follow-builders](https://github.com/zarazhangrui/follow-b
 [GitHub Releases](https://github.com/TheGoldenWave/Follow-up/releases) 为准。
 
 `v0.3.0` 新增 RSS/Blog 本地采集、独立 Python 运行时、四模式摘要输入与来源迁移工具。
-默认仍使用中心 Feed；公开版本与安装包以 GitHub Releases 为准。
+默认仍使用中心 Feed；最新公开版仍为 `v0.2.0`，`v0.3.0` 尚待完成发布验收。
+公开发布不触发中心 Feed 下线，公开版本与安装包以 GitHub Releases 为准。
 
 启用本地采集前，在已验证的安装目录运行 `node scripts/bootstrap-acquisition.js`。
 需要 Python 3.12，安装器创建隔离环境并验证锁定依赖；日常采集不自动安装。
@@ -29,6 +30,9 @@ Digest。项目基于 [follow-builders](https://github.com/zarazhangrui/follow-b
 旧产品名对应的调用方式只属于迁移背景，不再是 v0.2 支持的用户入口。
 
 ## 安装 v0.3.0
+
+以下为候选版发布后的安装说明；在 GitHub Releases 出现 `v0.3.0` 及完整资产前，
+请使用最新公开版 `v0.2.0` 的 [安装说明](https://github.com/TheGoldenWave/Follow-up/blob/v0.2.0/README.zh-CN.md)。
 
 环境要求为 Node.js 20 或更高版本，以及未经修改、已经校验并解压的 GitHub Release
 归档。
@@ -140,10 +144,11 @@ Onboarding 将配置写入 `~/.follow-builders/config.json`。6 个稳定的
 
 ## 产品边界
 
-v0.3.0 使用中心化公共 Feed，尚未实现本地采集、认证 Sidecar、长期反馈学习、行业
-报告采集、分页个人 Feed、显式已读/未读操作、自动发现更新或自动回滚。这些属于后续
-版本。Signal 或成功投递的 Digest 不代表用户已经阅读、理解或认可，Follow-up 也不会
-自动写入 Malow 或 GoldenWave 的权威状态。
+`v0.3.0` 候选版已实现 RSS/官网 Blog 本地采集和来源级回滚；hybrid 回滚到中心输入，
+local 回滚时隔离失败来源且不访问中心 Feed。认证 Sidecar、长期反馈学习、行业报告、
+分页个人 Feed、显式已读/未读交互、自动更新发现及安装版本自动回滚仍属后续工作。
+Signal 或成功投递的 Digest 不代表用户已阅读、理解或认可；Follow-up 不自动写入
+Malow 或 GoldenWave 的权威状态。
 
 ## 许可证与授权
 

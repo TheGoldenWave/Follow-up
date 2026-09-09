@@ -4,11 +4,16 @@ All notable changes to Follow-up are documented in this file.
 
 ## [0.3.0] - 2026-09-09
 
+发布候选，尚未公开发布；最新公开版为 v0.2.0。
+
 - 新增 Python Acquisition Runtime、Signal Batch 契约、source registry、受控 vendoring
   与 RSS/官网 Blog Adapter。
 - 新增四种采集输入模式的 Digest 消费、批次原子发布和 shadow 指标模块。
-- 尚待完成运行时安装、采集到 Digest 的统一入口、完整迁移门禁及发布验收；保持 central
-  默认输入，未确认中心 Feed 已下线。详见 [项目进度](docs/project-progress.md) 和
+- 新增隔离 Python 3.12 安装、哈希锁定依赖与 wheel，使用登记的绝对解释器和 `-I` 运行。
+- 统一采集与 Digest 准备入口，保留授权门禁，落实正文 7 天、元数据 90 天留存。
+- 新增来源级运行历史、人工复核、切换与重置 CLI；迁移要求 14 天观察、至少 3 次通过
+  检查的真实运行及不低于 80% 人工相关性。hybrid 回滚到中心，local 隔离失败来源。
+- 最终发布验收仍在进行；保持 central 默认输入，未执行中心 Feed 来源下线。详见 [项目进度](docs/project-progress.md) 和
   [版本开发计划](docs/version-roadmap.md)。
 
 ## [0.2.0] - 2026-09-07
