@@ -9,6 +9,35 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { recordRun, saveMigrationState, loadMigrationState } from '../lib/migration-state.js';
+
+test('secret output rolls back a cutover source without persisting leaked text', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'entry-secret-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const userDir = join(home, '.follow-builders');
+  const acq = join(userDir, 'acquisition');
+  await mkdir(acq, { recursive: true });
+  await writeFile(join(userDir, 'config.json'), JSON.stringify({ onboardingComplete: true, enabledChannels: ['blogs'], acquisition: { mode: 'local' } }));
+  const local = JSON.parse(await readFile(new URL('../../tests/acquisition/fixtures/signal-batch-valid.json', import.meta.url), 'utf8'));
+  const state = recordRun(undefined, [local]);
+  state.sources[local.source].input = 'local';
+  await saveMigrationState(join(acq, 'migration.json'), state);
+  local.batch_id = 'unsafe-run';
+  local.items[0].text = 'ghp_' + 'a'.repeat(36);
+  const code = await main({ userDir, now: '2026-09-09T12:00:00.000Z', argv: ['--request-out', join(home, 'request.json')],
+    stdout: { write() {} }, stderr: { write() {} },
+    invokeRun: async ({ outputDir }) => {
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(join(outputDir, `${local.source}.json`), JSON.stringify(local));
+    },
+  });
+  assert.equal(code, 1);
+  const updated = await loadMigrationState(join(acq, 'migration.json'));
+  assert.equal(updated.sources[local.source].input, 'central');
+  assert.equal(updated.sources[local.source].rollback_reason, 'secret-leak');
+  assert.equal(JSON.stringify(updated).includes(local.items[0].text), false);
+  await assert.rejects(readFile(join(acq, 'latest', `${local.source}.json`)), { code: 'ENOENT' });
+});
 
 test('command enforces onboarding before launching local acquisition', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'follow-entry-'));

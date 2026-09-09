@@ -170,8 +170,11 @@ test('manifest records non-circular tracked content and critical-file integrity'
     'scripts/validate-digest-selection.js',
     'scripts/validate-feed-artifact.js',
   ];
-  assert.deepEqual(REQUIRED_CRITICAL_FILES, requiredCriticalFiles);
-  for (const path of requiredCriticalFiles) {
+  for (const path of requiredCriticalFiles) assert.ok(REQUIRED_CRITICAL_FILES.includes(path), path);
+  for (const path of ['requirements-acquisition.lock', 'config/sources.json', 'scripts/collect-and-prepare.js', 'src/follow_up_acquisition/cli.py']) {
+    assert.ok(REQUIRED_CRITICAL_FILES.includes(path), path);
+  }
+  for (const path of REQUIRED_CRITICAL_FILES) {
     assert.ok(Object.hasOwn(manifest.integrity.criticalFiles.files, path), path);
   }
   assert.deepEqual(

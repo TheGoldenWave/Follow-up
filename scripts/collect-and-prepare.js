@@ -3,7 +3,7 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID as systemRandomUUID } from 'node:crypto';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir, rm } from 'node:fs/promises';
 import lockfile from 'proper-lockfile';
 
 import { isMainModule } from './command-line.js';
@@ -38,6 +38,7 @@ export async function collectAndPrepare({
   publishPointers = publishLatestPointers,
   prepare,
   validateBatches,
+  onUnsafeBatches,
 } = {}) {
   const mode = normalizeAcquisitionMode(config.acquisition?.mode);
   if (mode === 'central') {
@@ -54,6 +55,8 @@ export async function collectAndPrepare({
   const batches = await loadBatches({ outputDir });
   if (validateBatches) await validateBatches(batches);
   if (Object.entries(batches).some(([id, batch]) => scanBuffer(id, Buffer.from(JSON.stringify(batch))).length)) {
+    if (onUnsafeBatches) await onUnsafeBatches(batches);
+    await rm(outputDir, { recursive: true, force: true });
     throw new Error('unsafe acquisition output');
   }
 
@@ -85,6 +88,12 @@ export async function main({ argv = process.argv.slice(2), stdout = process.stdo
       await cleanAcquisitionHistory(acquisitionDir, now);
       const result = await collectAndPrepare({ config, now, userDir, invokeRun,
         validateBatches: batches => loadSignalBatches(Object.values(batches), { sources: sources.sources, seenAt: now }),
+        onUnsafeBatches: async batches => {
+          const unsafe = Object.entries(batches).filter(([id, batch]) => scanBuffer(id, Buffer.from(JSON.stringify(batch))).length);
+          const sanitized = unsafe.map(([source, batch]) => ({ source, batch_id: batch.batch_id, generated_at: now, items: [], source_status: { status: 'error' } }));
+          const checks = Object.fromEntries(unsafe.map(([id]) => [id, { contractsOk: false, secretsClean: false, secretsLeaked: true }]));
+          await updateMigrationState(join(acquisitionDir, 'migration.json'), state => applyRollbacks(recordRun(state, sanitized, { now, checks }), { now }));
+        },
         prepare: async ({ batches }) => {
         let local;
         let migrationState;
