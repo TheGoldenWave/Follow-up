@@ -32,14 +32,18 @@
 ## v0.4.0：社区与学术来源
 
 前置条件：v0.3.0 的 R1–R4 通过，来源级失败不会影响其他来源。
-对应采集母计划 Task 9/10/13。
+对应采集母计划 Task 9/10/13（Task 13 在本版只包含 Techmeme/arXiv）以及新增 HF-1；
+HF-1 的设计见 `superpowers/specs/2026-09-14-hugging-face-papers-source-design.md`，具体实施步骤待后续计划拆分。
 
 1. 先实现 GitHub/Hacker News：固定来源身份、分页与增量窗口、原生指标、限流/超时分类。
 2. 接入 Techmeme/arXiv：列表与条目身份标准化、更新时间语义、来源去重与频道映射。
-3. 接入 Reddit：免 Key 路径优先，可选增强默认关闭；主题路由沿用现有频道与 review 队列。
-4. 每类加入契约、正常/空结果/限流/部分失败 fixture；再走 shadow → 来源级门禁。
+3. 执行 HF-1，接入 Hugging Face Papers：一个 `academic:hugging-face-papers` 来源同时覆盖按运行日期生成的 Daily、Trending 与 ISO Weekly 页面；来源内合并三视图，curation 阶段再按 arXiv ID 优先与现有学术候选聚为同一 event cluster。保留榜单位置、upvote 和 GitHub 关联作为独立的社区热度/发现证据，不替代论文原始元数据，也不混入事实交叉印证成员或 `corroboration` 计分。
+4. 接入 Reddit：免 Key 路径优先，可选增强默认关闭；主题路由沿用现有频道与 review 队列。
+5. 每类加入契约、正常/空结果/限流/部分失败 fixture；Hugging Face Papers 还需覆盖时区日期边界、跨年 ISO 周、多视图重复、三视图状态聚合、与 arXiv 的 event clustering、原始论文 lead 选择、独立社区证据成员及确定性 `corroboration` 计分，再走 shadow → 来源级门禁。
 
-验收：5 类 Adapter 可独立运行、失败状态明确，native ID/URL 去重稳定；不新增平台命名
+验收：6 类 Adapter 可独立运行、失败状态明确，native ID/URL 去重稳定；Hugging Face
+Daily、Trending 与 Weekly 作为同一来源，部分视图失败时来源状态为 `partial`，三个视图
+均失败时为 `error`；不新增平台命名
 频道，不因 Adapter 就绪自动下线中心来源。不包含 X、视频转录和认证 Sidecar。
 
 ## v0.5.0：视频、播客与受控工具
