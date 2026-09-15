@@ -358,7 +358,7 @@ def validate_checkpoint_updates(
             raise SourceStateError("checkpoint updates cannot be read safely") from exc
         if index >= MAX_CHECKPOINT_UPDATES:
             raise SourceStateError("too many checkpoint updates")
-        if not isinstance(update, CheckpointUpdate):
+        if type(update) is not CheckpointUpdate:
             raise SourceStateError(f"checkpoint_updates[{index}] must be a CheckpointUpdate")
         if type(update.checkpoint) is not dict:
             raise SourceStateError(f"checkpoint_updates[{index}].checkpoint must be an object")

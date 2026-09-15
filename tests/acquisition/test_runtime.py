@@ -216,6 +216,22 @@ class CheckpointContractTests(unittest.TestCase):
             validate_checkpoint_updates("community:other", updates())
         self.assertEqual(consumed, MAX_CHECKPOINT_UPDATES + 1)
 
+    def test_validate_checkpoint_updates_rejects_hostile_subclass_without_field_access(self):
+        class HostileUpdate(CheckpointUpdate):
+            accessed = False
+
+            def __getattribute__(self, name):
+                if name not in {"accessed", "__class__"}:
+                    type(self).accessed = True
+                    raise RuntimeError("secret-field-detail")
+                return object.__getattribute__(self, name)
+
+        hostile = object.__new__(HostileUpdate)
+        with self.assertRaises(SourceStateError) as ctx:
+            validate_checkpoint_updates("community:other", (hostile,))
+        self.assertNotIn("secret", str(ctx.exception))
+        self.assertFalse(HostileUpdate.accessed)
+
     def test_oversize_strings_are_rejected_before_json_serialization(self):
         cases = (
             "a" * (MAX_STATE_BYTES + 1),
@@ -749,6 +765,39 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(batches["hostile"]["items"], [])
         self.assertEqual(batches["healthy"]["source_status"]["status"], "ok")
         self.assertFalse(InfiniteUpdates.iterated)
+
+    def test_run_isolates_hostile_checkpoint_update_subclass_without_field_access(self):
+        class HostileUpdate(CheckpointUpdate):
+            accessed = False
+
+            def __getattribute__(self, name):
+                if name not in {"accessed", "__class__"}:
+                    type(self).accessed = True
+                    raise RuntimeError("secret-field-detail")
+                return object.__getattribute__(self, name)
+
+        hostile = object.__new__(HostileUpdate)
+        malformed = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "malformed", "ok",
+            (make_candidate("bad", "https://bad.example/item"),),
+            checkpoint_updates=(hostile,),
+        ))
+        healthy = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "healthy", "ok",
+            (make_candidate("good", "https://good.example/item"),),
+        ))
+        batches = self.runtime.run(
+            [(malformed, "malformed"), (healthy, "healthy")], FIXED_REQUEST,
+        )
+        self.assertEqual(batches["malformed"]["source_status"], {
+            "status": "schema-drift",
+            "code": "invalid-checkpoint-update",
+            "message": "adapter returned invalid checkpoint updates",
+            "retryable": False,
+        })
+        self.assertEqual(batches["malformed"]["items"], [])
+        self.assertEqual(batches["healthy"]["source_status"]["status"], "ok")
+        self.assertFalse(HostileUpdate.accessed)
 
     def test_run_filters_by_source_ids(self):
         adapter = FakeAdapter()
