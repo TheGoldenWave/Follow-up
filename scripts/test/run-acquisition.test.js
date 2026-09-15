@@ -119,6 +119,28 @@ test('invokeAcquisitionRun rejects a symlinked staging parent and output replace
     });
     return child;
   } }), /could not be verified/);
+  assert.equal((await fs.stat(outputDir)).isDirectory(), true);
+  assert.equal((await fs.stat(`${outputDir}.old`)).isDirectory(), true);
+});
+
+test('invokeAcquisitionRun removes only owned staging on real spawn error and child nonzero', async (t) => {
+  const fs = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'owned-staging-failure-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const missingOutput = join(root, 'staging', 'missing');
+  await assert.rejects(() => invokeAcquisitionRun({ outputDir: missingOutput, runId: 'missing',
+    pythonPath: join(root, 'missing-python') }));
+  await assert.rejects(fs.stat(missingOutput), { code: 'ENOENT' });
+
+  const failedOutput = join(root, 'staging', 'failed');
+  await assert.rejects(() => invokeAcquisitionRun({ outputDir: failedOutput, runId: 'failed', pythonPath: '/python',
+    spawnImpl: () => {
+      const listeners = {};
+      const child = { stdout: { on() {} }, stderr: { on() {} }, on: (event, callback) => { listeners[event] = callback; } };
+      queueMicrotask(async () => { await fs.writeFile(join(failedOutput, 'partial.json'), '{}'); listeners.close(1); });
+      return child;
+    } }), /failed/);
+  await assert.rejects(fs.stat(failedOutput), { code: 'ENOENT' });
 });
 
 test('loadCollectedBatches ignores intent and rejects duplicate batch sources', async () => {

@@ -14,6 +14,12 @@ const validateReportSchema = new Ajv2020({ allErrors: true, strict: false }).com
 const MAX_PROCESS_OUTPUT = 16 * 1024;
 const MAX_BATCH_BYTES = 10 * 1024 * 1024;
 
+function fallbackReport(runId, sources) {
+  const ids = [...sources].sort((a, b) => Buffer.from(a).compare(Buffer.from(b)));
+  return { schema_version: '1.0', run_id: runId, status: 'partial', source_count: ids.length,
+    sources: ids.map(source_id => ({ source_id, status: 'error' })) };
+}
+
 async function resolveInterpreter({ pythonPath, env }) {
   if (pythonPath) return pythonPath;
   try {
@@ -75,6 +81,17 @@ async function verifyDirectoryIdentity(outputDir, expected, fsImpl) {
   }
 }
 
+async function removeOwnedOutput(outputDir, identity, fsImpl) {
+  if (!identity) return;
+  try {
+    await verifyPrivateOutput(outputDir, identity, fsImpl);
+    await identity.handle.close();
+    await fsImpl.rm(outputDir, { recursive: true, force: true });
+  } catch {
+    await identity.handle.close().catch(() => {});
+  }
+}
+
 /**
  * Invoke the Python Acquisition Runtime `run` command, which collects every
  * enabled rss/web-publication source and writes one Signal Batch per source into
@@ -98,6 +115,13 @@ export async function invokeAcquisitionRun({
   delete runtimeEnv.PYTHONPATH;
   delete runtimeEnv.PYTHONHOME;
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = async error => {
+      if (settled) return;
+      settled = true;
+      await removeOwnedOutput(outputDir, outputIdentity, fsImpl);
+      reject(error);
+    };
     const child = spawnImpl(
       pythonPath,
       ['-I', '-m', 'follow_up_acquisition', 'run', '--run-id', runId,
@@ -108,25 +132,27 @@ export async function invokeAcquisitionRun({
     let stderr = '';
     child.stdout?.on('data', (chunk) => { if (stdout.length < MAX_PROCESS_OUTPUT) stdout += chunk; });
     child.stderr?.on('data', (chunk) => { if (stderr.length < MAX_PROCESS_OUTPUT) stderr += chunk; });
-    child.on('error', async error => {
-      if (outputIdentity) await outputIdentity.handle.close().catch(() => {});
-      reject(error);
-    });
+    child.on('error', error => { void fail(error); });
     child.on('close', async (code) => {
       stdout = safeOutput(stdout);
       stderr = safeOutput(stderr);
       try {
         if (outputIdentity) await verifyPrivateOutput(outputDir, outputIdentity, fsImpl);
-        if (code === 0) resolve({ code, stdout, stderr,
+        if (code === 0 && !settled) {
+          settled = true;
+          resolve({ code, stdout, stderr,
           stagingIdentity: outputIdentity ? {
             dev: outputIdentity.opened.dev, ino: outputIdentity.opened.ino,
             realPath: outputIdentity.realPath,
           } : null });
-        else reject(new Error(`acquisition run failed (${code}): ${stderr.trim()}`));
+        }
+        else {
+          await fail(new Error(`acquisition run failed (${code}): ${stderr.trim()}`));
+        }
       } catch {
-        reject(new Error('acquisition output directory could not be verified'));
+        await fail(new Error('acquisition output directory could not be verified'));
       } finally {
-        if (outputIdentity) await outputIdentity.handle.close().catch(() => {});
+        if (code === 0 && settled && outputIdentity) await outputIdentity.handle.close().catch(() => {});
       }
     });
   });
@@ -205,6 +231,7 @@ export async function invokeCheckpointCommit({
   delete runtimeEnv.PYTHONPATH;
   delete runtimeEnv.PYTHONHOME;
   return new Promise(resolve => {
+    const fallback = () => ({ code: null, checkpointStatus: 'partial', report: fallbackReport(expectedRunId, expectedSources) });
     let settled = false;
     const finish = value => {
       if (!settled) { settled = true; resolve(value); }
@@ -217,14 +244,14 @@ export async function invokeCheckpointCommit({
         '--expected-sha256', expectedSha256, '--expected-run-id', expectedRunId,
       ], { cwd, env: runtimeEnv, stdio: ['ignore', 'pipe', 'pipe'] });
     } catch {
-      finish({ code: null, checkpointStatus: 'partial', report: { status: 'partial' } });
+      finish(fallback());
       return;
     }
     let stdout = '';
     let stderr = '';
     child.stdout?.on('data', chunk => { if (stdout.length < MAX_PROCESS_OUTPUT) stdout += chunk; });
     child.stderr?.on('data', chunk => { if (stderr.length < MAX_PROCESS_OUTPUT) stderr += chunk; });
-    child.on('error', () => finish({ code: null, checkpointStatus: 'partial', report: { status: 'partial' } }));
+    child.on('error', () => finish(fallback()));
     child.on('close', code => {
       stdout = safeOutput(stdout);
       stderr = safeOutput(stderr);
@@ -243,7 +270,7 @@ export async function invokeCheckpointCommit({
           && expectedStatuses.has(report.status)) {
         finish({ code, checkpointStatus: report.status, report });
       } else {
-        finish({ code, checkpointStatus: 'partial', report: { status: 'partial' } });
+        finish({ ...fallback(), code });
       }
     });
   });

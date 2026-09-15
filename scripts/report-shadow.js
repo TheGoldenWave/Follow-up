@@ -1,6 +1,8 @@
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
-import { readFile, readdir, realpath } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { createHash } from 'node:crypto';
+import * as fs from 'node:fs/promises';
 
 import { canonicalizeUrl } from './candidate-identity.js';
 import { isMainModule } from './command-line.js';
@@ -14,6 +16,31 @@ const FAILURE_STATUSES = new Set([
   'rate-limited', 'auth-failed', 'unreachable', 'timeout',
   'schema-drift', 'skipped-unconfigured', 'error',
 ]);
+const SAFE_RUN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const HASH = /^[0-9a-f]{64}$/;
+
+async function readBounded(path, limit) {
+  const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.nlink !== 1 || before.size > limit) throw new Error('unsafe durable pointer file');
+    const buffer = Buffer.alloc(limit + 1);
+    let total = 0;
+    while (total < buffer.length) {
+      const part = await handle.read(buffer, total, Math.min(64 * 1024, buffer.length - total), total);
+      if (!part.bytesRead) break;
+      total += part.bytesRead;
+    }
+    const after = await handle.stat();
+    if (after.dev !== before.dev || after.ino !== before.ino || after.nlink !== 1
+        || after.size !== before.size || total !== before.size || total > limit) throw new Error('durable pointer file changed');
+    return buffer.subarray(0, total);
+  } finally { await handle.close(); }
+}
+
+const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+const exactKeys = (value, keys) => value && typeof value === 'object' && !Array.isArray(value)
+  && JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort());
 
 function nativeIdOf(candidateId, source) {
   const prefix = `${source}:`;
@@ -146,19 +173,45 @@ export function computeShadowReport({ localBatches, centralFeed, history = {}, e
 
 export async function loadLatestBatches(acquisitionDir) {
   let names;
-  try { names = await readdir(join(acquisitionDir, 'latest')); }
+  try { names = await fs.readdir(join(acquisitionDir, 'latest')); }
   catch (error) { if (error.code === 'ENOENT') return {}; throw error; }
   const batches = {};
   for (const name of names.filter(name => name.endsWith('.json'))) {
     const source = name.slice(0, -5);
     validateSourceId(source);
-    const pointer = JSON.parse(await readFile(join(acquisitionDir, 'latest', name), 'utf8'));
-    const root = await realpath(join(acquisitionDir, 'runs'));
-    const path = await realpath(resolve(pointer.path));
+    const pointer = JSON.parse((await readBounded(join(acquisitionDir, 'latest', name), 64 * 1024)).toString('utf8'));
+    const legacy = exactKeys(pointer, ['run_id', 'batch_id', 'generated_at', 'path']);
+    const current = exactKeys(pointer, ['schema_version', 'run_id', 'batch_id', 'generated_at', 'path',
+      'batch_sha256', 'run_manifest_sha256', 'intent_sha256']) && pointer.schema_version === '1.0';
+    if (!legacy && !current) throw new Error('invalid latest pointer shape');
+    if (!SAFE_RUN.test(pointer.run_id) || (current && ![pointer.batch_sha256, pointer.run_manifest_sha256, pointer.intent_sha256].every(value => HASH.test(value)))) {
+      throw new Error('invalid latest pointer binding');
+    }
+    const root = await fs.realpath(join(acquisitionDir, 'runs'));
+    const expected = join(acquisitionDir, 'runs', pointer.run_id, `${source}.json`);
+    if (resolve(pointer.path) !== resolve(expected)) throw new Error('invalid latest batch path');
+    const path = await fs.realpath(resolve(pointer.path));
     const rel = relative(root, path);
     if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('invalid latest batch path');
-    const batch = JSON.parse(await readFile(path, 'utf8'));
+    let manifestEntry;
+    if (current) {
+      const runDir = join(acquisitionDir, 'runs', pointer.run_id);
+      const manifestBytes = await readBounded(join(runDir, 'run.json'), 1024 * 1024);
+      if (digest(manifestBytes) !== pointer.run_manifest_sha256) throw new Error('invalid run manifest hash');
+      const manifest = JSON.parse(manifestBytes.toString('utf8'));
+      const entry = manifest.sources?.[source];
+      manifestEntry = entry;
+      if (manifest.run_id !== pointer.run_id || manifest.checkpoint_intent?.sha256 !== pointer.intent_sha256
+          || entry?.filename !== `${source}.json` || entry?.sha256 !== pointer.batch_sha256
+          || entry?.batch_id !== pointer.batch_id) throw new Error('invalid run manifest linkage');
+      const intentBytes = await readBounded(join(runDir, 'checkpoint-intent.json'), 1024 * 1024);
+      if (digest(intentBytes) !== pointer.intent_sha256) throw new Error('invalid published intent hash');
+    }
+    const batchBytes = await readBounded(path, 10 * 1024 * 1024);
+    if (current && digest(batchBytes) !== pointer.batch_sha256) throw new Error('invalid published batch hash');
+    const batch = JSON.parse(batchBytes.toString('utf8'));
     if (!validateSignalBatch(batch).valid || batch.source !== source || batch.batch_id !== pointer.batch_id || batch.generated_at !== pointer.generated_at) throw new Error('invalid latest batch');
+    if (current && manifestEntry.status !== batch.source_status.status) throw new Error('invalid batch status linkage');
     batches[source] = batch;
   }
   return batches;
@@ -169,7 +222,7 @@ export async function main({ stdout = process.stdout, userDir = USER_DIR, now } 
   const batches = await loadLatestBatches(acquisitionDir);
   let centralFeed = { candidates: [] };
   try {
-    centralFeed = JSON.parse(await readFile(join(userDir, 'feed-candidates.json'), 'utf8'));
+    centralFeed = JSON.parse(await fs.readFile(join(userDir, 'feed-candidates.json'), 'utf8'));
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
     // No local central feed copy; overlap is reported as zero against empty central.

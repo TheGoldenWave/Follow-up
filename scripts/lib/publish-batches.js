@@ -250,6 +250,7 @@ export async function publishLatestPointers(batches, {
   await validatePublishedRun(batches, { runsDir, runId, receipt, fsImpl });
   for (const [sourceId, batch] of Object.entries(batches)) {
     await writeJsonAtomic(join(latestDir, `${sourceId}.json`), {
+      schema_version: '1.0',
       run_id: runId,
       batch_id: batch.batch_id,
       batch_sha256: receipt.sources[sourceId].sha256,

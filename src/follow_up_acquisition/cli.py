@@ -500,11 +500,7 @@ def _cmd_commit_state(args: argparse.Namespace) -> int:
             if exc.code == "state-durability-uncertain":
                 durability_uncertain = True
                 try:
-                    persisted = store.load(source["source_id"])
-                    confirmed = all(
-                        persisted["streams"].get(update["stream_id"]) == update["checkpoint"]
-                        for update in source["updates"]
-                    )
+                    store.load(source["source_id"])
                     status_value = "uncertain"
                 except SourceStateError:
                     status_value = "uncertain"

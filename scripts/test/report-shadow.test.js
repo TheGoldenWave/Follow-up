@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { computeShadowReport, loadLatestBatches } from '../report-shadow.js';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, readFile, symlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { recordRun } from '../lib/migration-state.js';
+import { publishBatchRun, publishLatestPointers } from '../lib/publish-batches.js';
 
 function localBatch(source, items) {
   return {
@@ -100,6 +102,62 @@ test('latest pointer cannot escape run storage', async t => {
   await mkdir(join(dir, 'latest'));
   await mkdir(join(dir, 'runs'));
   await writeFile(join(dir, 'outside.json'), '{}');
-  await writeFile(join(dir, 'latest', 'blog:a.json'), JSON.stringify({ path: join(dir, 'outside.json') }));
+  await writeFile(join(dir, 'latest', 'blog:a.json'), JSON.stringify({ run_id: 'r1', batch_id: 'b1',
+    generated_at: '2026-09-08T00:00:00.000Z', path: join(dir, 'outside.json') }));
   await assert.rejects(loadLatestBatches(dir), /path/);
+});
+
+async function publishedFixture(dir) {
+  const batches = { 'blog:a': localBatch('blog:a', []) };
+  const intent = { schema_version: '1.0', run_id: 'r1', generated_at: '2026-09-15T08:00:00Z',
+    sources: [{ source_id: 'blog:a', batch_id: 'b1', active_stream_ids: [], updates: [] }] };
+  const bytes = Buffer.from(JSON.stringify(intent));
+  const checkpointIntent = { intent, bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const runsDir = join(dir, 'runs');
+  const published = await publishBatchRun(batches, { runsDir, runId: 'r1', checkpointIntent });
+  await publishLatestPointers(batches, { runsDir, latestDir: join(dir, 'latest'), runId: 'r1', receipt: published.receipt });
+  return { batches, runsDir, published };
+}
+
+test('durable latest consumer accepts publisher output and rejects post-pointer tampering', async t => {
+  for (const kind of ['success', 'batch', 'coordinated-batch', 'intent', 'pointer-hash']) {
+    const dir = await mkdtemp(join(tmpdir(), `durable-pointer-${kind}-`));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    await publishedFixture(dir);
+    if (kind === 'success') {
+      assert.equal((await loadLatestBatches(dir))['blog:a'].batch_id, 'b1');
+      continue;
+    }
+    const manifestPath = join(dir, 'runs', 'r1', 'run.json');
+    if (kind.includes('batch')) {
+      const changed = Buffer.from(`${JSON.stringify(localBatch('blog:a', []).source_status.status = 'partial')}\n`);
+      await writeFile(join(dir, 'runs', 'r1', 'blog:a.json'), changed);
+      if (kind === 'coordinated-batch') {
+        const manifest = JSON.parse(await readFile(manifestPath));
+        manifest.sources['blog:a'].sha256 = createHash('sha256').update(changed).digest('hex');
+        await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+      }
+    } else if (kind === 'intent') {
+      await writeFile(join(dir, 'runs', 'r1', 'checkpoint-intent.json'), '{}');
+    } else {
+      const pointerPath = join(dir, 'latest', 'blog:a.json');
+      const pointer = JSON.parse(await readFile(pointerPath));
+      pointer.batch_sha256 = '0'.repeat(64);
+      await writeFile(pointerPath, JSON.stringify(pointer));
+    }
+    await assert.rejects(loadLatestBatches(dir), /hash|manifest|batch|intent/);
+  }
+});
+
+test('durable latest consumer rejects symlink and oversized pointer files', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'durable-pointer-files-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await mkdir(join(dir, 'latest'), { recursive: true });
+  const target = join(dir, 'target.json');
+  await writeFile(target, '{}');
+  await symlink(target, join(dir, 'latest', 'blog:a.json'));
+  await assert.rejects(loadLatestBatches(dir));
+  await rm(join(dir, 'latest', 'blog:a.json'));
+  await writeFile(join(dir, 'latest', 'blog:a.json'), 'x'.repeat(64 * 1024 + 1));
+  await assert.rejects(loadLatestBatches(dir), /unsafe/);
 });

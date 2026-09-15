@@ -304,6 +304,7 @@ test('unexpected checkpoint failure becomes partial and preparation continues', 
   assert.equal(preparedStatus, 'partial');
   assert.equal(result.prepared.status, 'request-ready');
   assert.equal(JSON.stringify(result).includes('/secret/path'), false);
+  assert.deepEqual(Object.keys(result.checkpointReport).sort(), ['run_id', 'schema_version', 'source_count', 'sources', 'status']);
 });
 
 test('unknown mode is rejected', async () => {

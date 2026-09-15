@@ -22,6 +22,13 @@ import { cleanAcquisitionHistory } from './lib/acquisition-retention.js';
 
 export const USER_DIR = join(homedir(), '.follow-builders');
 
+function fallbackCheckpoint(runId, sources) {
+  const ids = [...sources].sort((a, b) => Buffer.from(a).compare(Buffer.from(b)));
+  return { checkpointStatus: 'partial', report: { schema_version: '1.0', run_id: runId,
+    status: 'partial', source_count: ids.length,
+    sources: ids.map(source_id => ({ source_id, status: 'error' })) } };
+}
+
 /**
  * Single on-demand and scheduled acquisition entry point. In `central` mode it
  * skips local collection entirely; otherwise it invokes the Python runtime,
@@ -89,10 +96,10 @@ export async function collectAndPrepare({
         env: { ...process.env, HOME: join(userDir, '..') },
       });
     } catch {
-      checkpoint = { checkpointStatus: 'partial', report: { status: 'partial' } };
+      checkpoint = fallbackCheckpoint(runId, checkpointIntent.intent.sources.map(source => source.source_id));
     }
     if (!checkpoint || !['committed', 'partial', 'uncertain'].includes(checkpoint.checkpointStatus)) {
-      checkpoint = { checkpointStatus: 'partial', report: { status: 'partial' } };
+      checkpoint = fallbackCheckpoint(runId, checkpointIntent.intent.sources.map(source => source.source_id));
     }
     return { mode, collected: true, runId, batchCount: Object.keys(batches).length, batches,
       checkpointStatus: checkpoint.checkpointStatus,
