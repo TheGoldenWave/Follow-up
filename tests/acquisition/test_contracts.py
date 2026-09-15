@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import unittest
 from pathlib import Path
@@ -57,6 +58,12 @@ class SignalBatchContractTests(unittest.TestCase):
     def test_rejects_unknown_envelope_field(self) -> None:
         bad = copy.deepcopy(self.batch)
         bad["bogus"] = "x"
+        with self.assertRaises(SignalBatchError):
+            validate_batch(bad)
+
+    def test_rejects_internal_checkpoint_updates_field(self) -> None:
+        bad = copy.deepcopy(self.batch)
+        bad["checkpoint_updates"] = []
         with self.assertRaises(SignalBatchError):
             validate_batch(bad)
 
@@ -148,6 +155,15 @@ class SignalBatchContractTests(unittest.TestCase):
             schema = json.load(handle)
         schema_enum = set(schema["$defs"]["sourceStatus"]["properties"]["status"]["enum"])
         self.assertEqual(schema_enum, set(SOURCE_STATUSES))
+
+    def test_signal_batch_schema_remains_unchanged_and_declares_no_checkpoint_updates(self) -> None:
+        schema_path = Path(__file__).resolve().parents[2] / "contracts" / "signal-batch.schema.json"
+        raw = schema_path.read_bytes()
+        self.assertEqual(
+            hashlib.sha256(raw).hexdigest(),
+            "98d1764a53ffc4241ce4972977eaf79c243580579dc696799d97c346ff0aaa45",
+        )
+        self.assertNotIn(b"checkpoint_updates", raw)
 
 
 if __name__ == "__main__":

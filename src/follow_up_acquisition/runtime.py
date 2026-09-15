@@ -9,13 +9,20 @@ contract-validated batches.
 
 from __future__ import annotations
 
+import copy
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol
 
 from .contracts import SCHEMA_VERSION, SignalBatchError, validate_batch
+from .source_state import (
+    STATE_SCHEMA_VERSION,
+    SourceStateError,
+    merge_checkpoint_updates,
+    validate_state,
+)
 
 _TRACKING_PARAMS = frozenset({
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -49,6 +56,93 @@ class AuthFailedError(AdapterError):
 class SchemaDriftError(AdapterError):
     def __init__(self, message: str = "adapter output drifted from the expected schema"):
         super().__init__(message, status="schema-drift", retryable=False)
+
+
+@dataclass(frozen=True)
+class CheckpointUpdate:
+    """Validated pending state for one completely collected source stream."""
+
+    stream_id: str
+    previous_checkpoint_at: str | None
+    checkpoint: dict[str, Any]
+
+
+def _empty_source_state(source: str) -> dict[str, Any]:
+    state = {
+        "schema_version": STATE_SCHEMA_VERSION,
+        "source_id": source,
+        "streams": {},
+        "updated_at": None,
+    }
+    validate_state(state, expected_source_id=source)
+    return state
+
+
+def validate_checkpoint_updates(
+    source: str,
+    updates: Iterable[CheckpointUpdate],
+) -> tuple[CheckpointUpdate, ...]:
+    """Validate and detach adapter-produced pending checkpoint updates.
+
+    Persistence owns the checkpoint schema and security contract.  The runtime
+    exercises that authoritative validator against synthetic state, first per
+    update and then as one aggregate, without changing caller-owned values.
+    """
+    _empty_source_state(source)
+    try:
+        update_list = tuple(updates)
+    except TypeError as exc:
+        raise SourceStateError("checkpoint updates must be iterable") from exc
+
+    detached: list[CheckpointUpdate] = []
+    validation_time = "9999-12-31T23:59:59Z"
+    for index, update in enumerate(update_list):
+        if not isinstance(update, CheckpointUpdate):
+            raise SourceStateError(f"checkpoint_updates[{index}] must be a CheckpointUpdate")
+        checkpoint = copy.deepcopy(update.checkpoint)
+        detached_update = CheckpointUpdate(
+            update.stream_id, update.previous_checkpoint_at, checkpoint,
+        )
+
+        current_streams: dict[str, Any] = {}
+        if update.previous_checkpoint_at is not None:
+            current = copy.deepcopy(checkpoint)
+            current.pop("inactive_since", None)
+            current["checkpoint_at"] = update.previous_checkpoint_at
+            if source.endswith(":techmeme") and update.stream_id == "archive":
+                cursor = current.get("cursor")
+                if isinstance(cursor, dict) and isinstance(cursor.get("complete_dates"), list):
+                    cursor["complete_dates"] = cursor["complete_dates"][-14:]
+            current_streams[update.stream_id] = current
+        current_state = {
+            "schema_version": STATE_SCHEMA_VERSION,
+            "source_id": source,
+            "streams": current_streams,
+            "updated_at": validation_time if current_streams else None,
+        }
+        merge_checkpoint_updates(
+            current_state,
+            [{
+                "stream_id": detached_update.stream_id,
+                "previous_checkpoint_at": detached_update.previous_checkpoint_at,
+                "checkpoint": detached_update.checkpoint,
+            }],
+            updated_at=validation_time,
+        )
+        detached.append(detached_update)
+
+    # A second pass makes duplicate streams and the combined payload subject to
+    # the same closed, maximum-size source-state validation as persistence.
+    merge_checkpoint_updates(
+        _empty_source_state(source),
+        [{
+            "stream_id": update.stream_id,
+            "previous_checkpoint_at": None,
+            "checkpoint": update.checkpoint,
+        } for update in detached],
+        updated_at=validation_time,
+    )
+    return tuple(detached)
 
 
 @dataclass(frozen=True)
@@ -86,6 +180,10 @@ class SourceResult:
     message: str | None = None
     retryable: bool = False
     request: dict[str, Any] = field(default_factory=dict)
+    checkpoint_updates: tuple[CheckpointUpdate, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "checkpoint_updates", tuple(self.checkpoint_updates))
 
 
 class Adapter(Protocol):
@@ -219,12 +317,30 @@ class AcquisitionRuntime:
             )
 
         try:
-            return adapter.collect(source, request)
+            result = adapter.collect(source, request)
         except Exception as exc:  # noqa: BLE001
             status, retryable = self.classify_exception(exc)
             return SourceResult(
                 adapter.adapter_id, adapter.adapter_version, source, status,
                 message=str(exc), retryable=retryable, request=request,
+            )
+        try:
+            updates = validate_checkpoint_updates(source, result.checkpoint_updates)
+            if updates and result.status not in {"ok", "no-results", "partial"}:
+                raise SourceStateError(
+                    "only successful source streams may advance checkpoints"
+                )
+            return replace(result, checkpoint_updates=updates)
+        except SourceStateError:
+            return SourceResult(
+                adapter.adapter_id,
+                adapter.adapter_version,
+                source,
+                "schema-drift",
+                code="invalid-checkpoint-update",
+                message="adapter returned invalid checkpoint updates",
+                retryable=False,
+                request=request,
             )
 
     def run(

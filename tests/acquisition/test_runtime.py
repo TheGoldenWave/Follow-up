@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import json
 import unittest
 
 from follow_up_acquisition.contracts import SCHEMA_VERSION
@@ -9,11 +11,14 @@ from follow_up_acquisition.runtime import (
     AcquisitionRuntime,
     Adapter,
     AuthFailedError,
+    CheckpointUpdate,
     RateLimitedError,
     SchemaDriftError,
     SourceCandidate,
     SourceResult,
+    validate_checkpoint_updates,
 )
+from follow_up_acquisition.source_state import MAX_STATE_BYTES, SourceStateError
 
 FIXED_NOW = "2026-09-08T12:00:00+00:00"
 FIXED_REQUEST = {"mode": "shadow", "depth": 3}
@@ -29,6 +34,138 @@ def make_candidate(native_id: str, url: str, **kwargs) -> SourceCandidate:
     }
     defaults.update(kwargs)
     return SourceCandidate(**defaults)
+
+
+def make_checkpoint(**overrides) -> dict:
+    value = {
+        "successful_window_end": "2026-09-15T07:00:00Z",
+        "cursor": "page-2",
+        "etag": '"abc"',
+        "last_modified": "Mon, 15 Sep 2026 07:00:00 GMT",
+        "recent_native_ids": ["native-1"],
+        "checkpoint_at": "2026-09-15T08:00:00Z",
+    }
+    value.update(overrides)
+    return value
+
+
+class CheckpointContractTests(unittest.TestCase):
+    def test_source_result_tupleizes_checkpoint_updates_and_defaults_empty(self):
+        update = CheckpointUpdate("top", None, make_checkpoint())
+        result = SourceResult(
+            "fake", "1.0.0", "community:other", "ok", checkpoint_updates=[update],
+        )
+        self.assertEqual(result.checkpoint_updates, (update,))
+        self.assertEqual(
+            SourceResult("fake", "1.0.0", "community:other", "ok").checkpoint_updates,
+            (),
+        )
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            update.stream_id = "changed"
+
+    def test_source_result_positional_construction_remains_backward_compatible(self):
+        result = SourceResult(
+            "fake", "1.0.0", "community:other", "ok", (), None, None, False,
+            FIXED_REQUEST,
+        )
+        self.assertIs(result.request, FIXED_REQUEST)
+        self.assertEqual(result.checkpoint_updates, ())
+
+    def test_validate_checkpoint_updates_returns_detached_immutable_tuple(self):
+        checkpoint = make_checkpoint(cursor={"page": 2})
+        updates = [CheckpointUpdate("top", None, checkpoint)]
+        validated = validate_checkpoint_updates("community:other", updates)
+        self.assertIsInstance(validated, tuple)
+        self.assertEqual(validated, tuple(updates))
+        self.assertIsNot(validated[0], updates[0])
+        self.assertIsNot(validated[0].checkpoint, checkpoint)
+        checkpoint["cursor"]["page"] = 99
+        self.assertEqual(validated[0].checkpoint["cursor"]["page"], 2)
+
+    def test_validate_checkpoint_updates_accepts_canonical_previous_timestamp(self):
+        validated = validate_checkpoint_updates("community:other", (
+            CheckpointUpdate(
+                "top", "2026-09-15T07:00:00Z",
+                make_checkpoint(checkpoint_at="2026-09-15T08:00:00Z"),
+            ),
+        ))
+        self.assertEqual(validated[0].previous_checkpoint_at, "2026-09-15T07:00:00Z")
+
+    def test_validate_checkpoint_updates_rejects_invalid_source_stream_previous_and_duplicates(self):
+        valid = make_checkpoint()
+        cases = (
+            ("unsafe/source", (CheckpointUpdate("top", None, valid),)),
+            ("community:other", (CheckpointUpdate("Upper", None, valid),)),
+            ("community:other", (CheckpointUpdate("top", "2026-09-15 07:00:00", valid),)),
+            ("community:other", (CheckpointUpdate("top", "null", valid),)),
+            ("community:other", (
+                CheckpointUpdate("top", None, valid),
+                CheckpointUpdate("top", None, valid),
+            )),
+        )
+        for source, updates in cases:
+            with self.subTest(source=source, updates=updates), self.assertRaises(SourceStateError):
+                validate_checkpoint_updates(source, updates)
+
+    def test_validate_checkpoint_updates_rejects_closed_shape_and_store_managed_field(self):
+        for field, value in (("unknown", True), ("inactive_since", "2026-09-15T08:00:00Z")):
+            checkpoint = make_checkpoint()
+            checkpoint[field] = value
+            with self.subTest(field=field), self.assertRaises(SourceStateError):
+                validate_checkpoint_updates(
+                    "community:other", (CheckpointUpdate("top", None, checkpoint),),
+                )
+
+    def test_validate_checkpoint_updates_rejects_credentials(self):
+        credentials = (
+            {"api_key": "secret"},
+            "github_" + "pat_" + "A" * 70,
+        )
+        for cursor in credentials:
+            with self.subTest(cursor=str(cursor)[:16]), self.assertRaises(SourceStateError):
+                validate_checkpoint_updates("community:other", (
+                    CheckpointUpdate("top", None, make_checkpoint(cursor=cursor)),
+                ))
+
+    def test_validate_checkpoint_updates_rejects_invalid_checkpoint_semantics(self):
+        invalid_checkpoints = (
+            make_checkpoint(checkpoint_at="2026-09-15 08:00:00"),
+            make_checkpoint(successful_window_end="2026-09-31T07:00:00Z"),
+            make_checkpoint(cursor={"page": object()}),
+            make_checkpoint(recent_native_ids=["duplicate", "duplicate"]),
+            make_checkpoint(query_fingerprint="A" * 64),
+        )
+        for checkpoint in invalid_checkpoints:
+            with self.subTest(checkpoint=checkpoint), self.assertRaises(SourceStateError):
+                validate_checkpoint_updates("community:other", (
+                    CheckpointUpdate("top", None, checkpoint),
+                ))
+
+    def test_validate_checkpoint_updates_rejects_invalid_archive_shape(self):
+        checkpoint = make_checkpoint(cursor={
+            "current_processing_date": "2026-09-15",
+            "complete_dates": ["2026-09-14", "2026-09-14"],
+        })
+        with self.assertRaises(SourceStateError):
+            validate_checkpoint_updates("community:techmeme", (
+                CheckpointUpdate("archive", None, checkpoint),
+            ))
+
+    def test_validate_checkpoint_updates_rejects_individual_and_aggregate_oversize(self):
+        individual = CheckpointUpdate(
+            "top", None, make_checkpoint(cursor="x" * MAX_STATE_BYTES),
+        )
+        with self.assertRaises(SourceStateError):
+            validate_checkpoint_updates("community:other", (individual,))
+
+        aggregate = tuple(
+            CheckpointUpdate(
+                stream_id, None, make_checkpoint(cursor="x" * (MAX_STATE_BYTES // 2)),
+            )
+            for stream_id in ("first", "second")
+        )
+        with self.assertRaises(SourceStateError):
+            validate_checkpoint_updates("community:other", aggregate)
 
 
 class FakeAdapter:
@@ -136,6 +273,18 @@ class SerializationTests(unittest.TestCase):
         self.assertEqual(batch["source_status"]["status"], "schema-drift")
         self.assertEqual(batch["items"], [])
 
+    def test_build_batch_never_serializes_checkpoint_updates(self):
+        adapter = FakeAdapter()
+        result = SourceResult(
+            "fake", "1.0.0", "community:other", "ok", (),
+            checkpoint_updates=(CheckpointUpdate("top", None, make_checkpoint()),),
+        )
+        batch = self.runtime.build_batch(
+            adapter, "community:other", FIXED_REQUEST, result, batch_id="b1",
+        )
+        self.assertNotIn("checkpoint_updates", batch)
+        self.assertNotIn("checkpoint_at", json.dumps(batch, sort_keys=True))
+
 
 class ClassificationTests(unittest.TestCase):
     def test_classify_exception_maps_common_failures(self):
@@ -168,6 +317,39 @@ class OrchestrationTests(unittest.TestCase):
         result = self.runtime.collect_one(adapter, "src:a", FIXED_REQUEST)
         self.assertEqual(result.status, "error")
 
+    def test_collect_one_preserves_valid_checkpoint_updates(self):
+        update = CheckpointUpdate("top", None, make_checkpoint())
+        adapter = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "community:other", "ok", (),
+            checkpoint_updates=(update,),
+        ))
+        result = self.runtime.collect_one(adapter, "community:other", FIXED_REQUEST)
+        self.assertEqual(result.checkpoint_updates, (update,))
+
+    def test_collect_one_invalid_checkpoint_is_safe_schema_drift(self):
+        adapter = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "bad", "ok",
+            (make_candidate("bad", "https://bad.example/item"),),
+            checkpoint_updates=(CheckpointUpdate("Upper", None, make_checkpoint()),),
+        ))
+        result = self.runtime.collect_one(adapter, "bad", FIXED_REQUEST)
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.candidates, ())
+        self.assertEqual(result.checkpoint_updates, ())
+        self.assertEqual(result.code, "invalid-checkpoint-update")
+        self.assertEqual(result.message, "adapter returned invalid checkpoint updates")
+        self.assertFalse(result.retryable)
+
+    def test_collect_one_rejects_updates_from_unsuccessful_source_result(self):
+        adapter = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "bad", "timeout", (), retryable=True,
+            checkpoint_updates=(CheckpointUpdate("top", None, make_checkpoint()),),
+        ))
+        result = self.runtime.collect_one(adapter, "bad", FIXED_REQUEST)
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.checkpoint_updates, ())
+        self.assertEqual(result.code, "invalid-checkpoint-update")
+
     def test_run_isolates_independent_source_failures(self):
         good = FakeAdapter(result=SourceResult(
             "fake", "1.0.0", "good", "ok", (make_candidate("1", "https://g.com/x"),),
@@ -176,6 +358,26 @@ class OrchestrationTests(unittest.TestCase):
         batches = self.runtime.run([(good, "good"), (broken, "broken")], FIXED_REQUEST)
         self.assertEqual(batches["good"]["source_status"]["status"], "ok")
         self.assertEqual(batches["broken"]["source_status"]["status"], "unreachable")
+
+    def test_run_isolates_invalid_checkpoint_updates_from_other_sources(self):
+        good = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "good", "ok", (make_candidate("1", "https://g.com/x"),),
+            checkpoint_updates=(CheckpointUpdate("top", None, make_checkpoint()),),
+        ))
+        invalid = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "invalid", "ok",
+            (make_candidate("2", "https://bad.com/x"),),
+            checkpoint_updates=(CheckpointUpdate("Upper", None, make_checkpoint()),),
+        ))
+        batches = self.runtime.run([(good, "good"), (invalid, "invalid")], FIXED_REQUEST)
+        self.assertEqual(batches["good"]["source_status"]["status"], "ok")
+        self.assertEqual(batches["invalid"]["source_status"], {
+            "status": "schema-drift",
+            "code": "invalid-checkpoint-update",
+            "message": "adapter returned invalid checkpoint updates",
+            "retryable": False,
+        })
+        self.assertEqual(batches["invalid"]["items"], [])
 
     def test_run_filters_by_source_ids(self):
         adapter = FakeAdapter()
