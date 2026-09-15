@@ -444,7 +444,8 @@ class AdapterInputAdversarialTests(unittest.TestCase):
         invalid_urls = (
             "https://example.com:abc/feed", "https://example.com:/feed",
             "https://example.com:0/feed", "https://example.com:65536/feed", "https://example.com:-1/feed",
-            "https://example.com:+443/feed", "https://user@example.com/feed",
+            "https://example.com:+443/feed", "https://@example.com/feed",
+            "https://:@example.com/feed", "https://user@example.com/feed",
             "https://user:pass@example.com/feed", "https:// example.com/feed",
             "https://example .com/feed", "https://example\u00a0.com/feed",
             "https://foo..example.com/feed", "https://.example.com/feed",

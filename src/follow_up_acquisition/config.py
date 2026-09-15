@@ -191,7 +191,8 @@ def _require_https_url(value: Any, label: str, *, template: bool = False) -> Non
         port = parsed.port
     except ValueError as exc:
         raise ConfigError(f"{label} must be a public HTTPS URL") from exc
-    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+    if (parsed.scheme != "https" or not parsed.netloc
+            or parsed.username is not None or parsed.password is not None):
         raise ConfigError(f"{label} must be a public HTTPS URL")
     if not hostname:
         raise ConfigError(f"{label} must be a public HTTPS URL")
