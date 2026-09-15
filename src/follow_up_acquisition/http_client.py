@@ -8,6 +8,7 @@ server metadata cannot accidentally enter checkpoints or logs.
 from __future__ import annotations
 
 import errno
+import http.client
 import ipaddress
 import json
 import socket
@@ -15,10 +16,9 @@ import ssl
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urljoin, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from .runtime import AdapterError, RateLimitedError, SchemaDriftError
 
@@ -47,12 +47,6 @@ class _TransportResponse:
     body: bytes
 
 
-class _NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req: Any, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> None:
-        del req, fp, code, msg, headers, newurl
-        return None
-
-
 class _ApplicationResponseFailure(Exception):
     """Transport failed after response headers had already been received."""
 
@@ -61,8 +55,196 @@ class _ApplicationResponseFailure(Exception):
         self.timed_out = timed_out
 
 
+class _PreResponseProtocolFailure(Exception):
+    """The peer did not provide a usable HTTP application response."""
+
+
+@dataclass(frozen=True)
+class _ResolvedTarget:
+    url: str
+    host: str
+    port: int
+    addresses: tuple[str, ...]
+
+
+class _Transport(Protocol):
+    def fetch(
+        self,
+        target: _ResolvedTarget,
+        headers: dict[str, str],
+        timeout: float,
+        max_bytes: int,
+    ) -> Any: ...
+
+
+class _InjectedTransport:
+    def __init__(self, fetch: Callable[[str, dict[str, str], float, int], Any]) -> None:
+        self._fetch = fetch
+
+    def fetch(
+        self,
+        target: _ResolvedTarget,
+        headers: dict[str, str],
+        timeout: float,
+        max_bytes: int,
+    ) -> Any:
+        return self._fetch(target.url, headers, timeout, max_bytes)
+
+
 def _system_resolver(host: str, port: int) -> list[str]:
-    return list({answer[4][0] for answer in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
+    addresses: list[str] = []
+    for answer in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+        address = answer[4][0]
+        if address not in addresses:
+            addresses.append(address)
+    return addresses
+
+
+def _canonical_ip(address: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+    parsed = ipaddress.ip_address(address.split("%", 1)[0])
+    if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped is not None:
+        return parsed.ipv4_mapped
+    return parsed
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection whose TCP destination is a prevalidated numeric IP."""
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        *,
+        pinned_address: str,
+        timeout: float,
+        context: ssl.SSLContext | None = None,
+    ) -> None:
+        self._pinned_address = str(_canonical_ip(pinned_address))
+        super().__init__(host, port, timeout=timeout, context=context)
+        self._create_connection = self._create_pinned_connection
+
+    def _create_pinned_connection(
+        self,
+        _address: tuple[str, int],
+        timeout: float,
+        source_address: tuple[str, int] | None,
+    ) -> socket.socket:
+        parsed = _canonical_ip(self._pinned_address)
+        family = socket.AF_INET6 if isinstance(parsed, ipaddress.IPv6Address) else socket.AF_INET
+        sock = socket.socket(family, socket.SOCK_STREAM)
+        try:
+            sock.settimeout(timeout)
+            if source_address is not None:
+                sock.bind(source_address)
+            sockaddr: tuple[Any, ...]
+            if family == socket.AF_INET6:
+                sockaddr = (str(parsed), self.port, 0, 0)
+            else:
+                sockaddr = (str(parsed), self.port)
+            sock.connect(sockaddr)
+            self._verify_peer(sock)
+            return sock
+        except Exception:
+            sock.close()
+            raise
+
+    def connect(self) -> None:
+        try:
+            super().connect()
+            if self.sock is None:
+                raise ConnectionError("HTTPS connection did not create a socket")
+            self._verify_peer(self.sock)
+        except Exception:
+            self.close()
+            raise
+
+    def _verify_peer(self, sock: socket.socket) -> None:
+        try:
+            peer = _canonical_ip(sock.getpeername()[0])
+        except (OSError, ValueError, IndexError, TypeError):
+            raise SchemaDriftError("HTTPS connected peer could not be verified") from None
+        if peer != _canonical_ip(self._pinned_address):
+            raise SchemaDriftError("HTTPS connected peer did not match the validated address")
+
+
+class _DirectHttpsTransport:
+    """Direct-only transport; environment proxy configuration is intentionally ignored."""
+
+    def fetch(
+        self,
+        target: _ResolvedTarget,
+        headers: dict[str, str],
+        timeout: float,
+        max_bytes: int,
+    ) -> _TransportResponse:
+        connection = _PinnedHTTPSConnection(
+            target.host,
+            target.port,
+            pinned_address=target.addresses[0],
+            timeout=timeout,
+        )
+        response_received = False
+        try:
+            parsed = urlsplit(target.url)
+            selector = parsed.path or "/"
+            if parsed.query:
+                selector += "?" + parsed.query
+            connection.request("GET", selector, headers=headers)
+            response = connection.getresponse()
+            response_received = True
+            raw_headers = dict(response.headers.items())
+            body = self._read_body(response, raw_headers, max_bytes)
+            return _TransportResponse(
+                status=response.status,
+                url=target.url,
+                headers=raw_headers,
+                body=body,
+            )
+        except (TimeoutError, socket.timeout):
+            if response_received:
+                raise _ApplicationResponseFailure(timed_out=True) from None
+            raise
+        except http.client.HTTPException as error:
+            if response_received:
+                raise _ApplicationResponseFailure() from None
+            if isinstance(error, ConnectionError):
+                raise
+            raise _PreResponseProtocolFailure() from None
+        except (ConnectionError, OSError):
+            if response_received:
+                raise _ApplicationResponseFailure() from None
+            raise
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _read_body(
+        response: http.client.HTTPResponse, headers: Mapping[str, str], max_bytes: int
+    ) -> bytes:
+        content_length: int | None = None
+        raw_length = next(
+            (str(value) for key, value in headers.items() if str(key).lower() == "content-length"),
+            None,
+        )
+        if raw_length is not None:
+            try:
+                content_length = int(raw_length)
+            except ValueError:
+                content_length = None
+            if content_length is not None and content_length < 0:
+                content_length = None
+
+        chunks: list[bytes] = []
+        total = 0
+        while total <= max_bytes:
+            chunk = response.read(min(65_536, max_bytes + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        if total <= max_bytes and content_length is not None and total < content_length:
+            raise http.client.IncompleteRead(b"", content_length - total)
+        return b"".join(chunks)
 
 
 class HttpClient:
@@ -80,7 +262,9 @@ class HttpClient:
         sleeper: Callable[[float], None] | None = None,
         resolver: Callable[[str, int], list[str]] | None = None,
     ) -> None:
-        self._fetch = fetch or self._default_fetch
+        self._transport: _Transport = (
+            _InjectedTransport(fetch) if fetch is not None else _DirectHttpsTransport()
+        )
         self._clock = clock or time.monotonic
         self._sleeper = sleeper or time.sleep
         self._resolver = resolver or _system_resolver
@@ -105,6 +289,8 @@ class HttpClient:
         initial_host = self._validate_url(url, hosts, paths)
         request_headers = {str(key): str(value) for key, value in (headers or {}).items()}
         for key in tuple(request_headers):
+            if key.lower() == "host":
+                raise SchemaDriftError("caller-supplied Host headers are not allowed")
             if key.lower() == "user-agent":
                 del request_headers[key]
         request_headers["User-Agent"] = USER_AGENT
@@ -162,7 +348,8 @@ class HttpClient:
         for attempt in range(2):
             started_at = self._clock()
             try:
-                response = self._fetch(url, dict(headers), timeout, max_bytes)
+                target = self._resolve_target(url)
+                response = self._transport.fetch(target, dict(headers), timeout, max_bytes)
                 if self._clock() - started_at > timeout:
                     raise TimeoutError
                 return response
@@ -173,6 +360,8 @@ class HttpClient:
                     self._raise_response_failure(failure)
             except _ApplicationResponseFailure as failure:
                 self._raise_response_failure(failure)
+            except _PreResponseProtocolFailure:
+                raise SchemaDriftError("public source returned an invalid HTTP response") from None
             except (TimeoutError, socket.timeout):
                 raise AdapterError("public source request timed out", status="timeout", retryable=True) from None
             except URLError as error:
@@ -196,6 +385,21 @@ class HttpClient:
                     "public source is unreachable", status="unreachable", retryable=transient
                 ) from None
         raise AssertionError("unreachable")
+
+    def _resolve_target(self, url: str) -> _ResolvedTarget:
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").encode("idna").decode("ascii").lower().rstrip(".")
+        port = parsed.port or 443
+        addresses = self._resolver(host, port)
+        if not addresses:
+            raise socket.gaierror(socket.EAI_NONAME, "no addresses returned")
+        try:
+            canonical = tuple(str(_canonical_ip(str(address))) for address in addresses)
+        except ValueError as error:
+            raise SchemaDriftError("HTTP host resolution returned an invalid address") from error
+        if any(not _canonical_ip(address).is_global for address in canonical):
+            raise SchemaDriftError("HTTP host resolved to a non-public address")
+        return _ResolvedTarget(url=url, host=host, port=port, addresses=canonical)
 
     @staticmethod
     def _raise_response_failure(failure: _ApplicationResponseFailure) -> None:
@@ -256,21 +460,6 @@ class HttpClient:
         if required_host is not None and host != required_host:
             raise SchemaDriftError("cross-host HTTP redirects are not allowed")
         self._validate_path(parsed.path or "/", allowed_paths)
-        try:
-            addresses = self._resolver(host, port)
-        except (OSError, socket.gaierror):
-            raise AdapterError(
-                "public source host could not be resolved", status="unreachable", retryable=True
-            ) from None
-        if not addresses:
-            raise AdapterError(
-                "public source host could not be resolved", status="unreachable", retryable=True
-            )
-        try:
-            if any(not ipaddress.ip_address(address.split("%", 1)[0]).is_global for address in addresses):
-                raise SchemaDriftError("HTTP host resolved to a non-public address")
-        except ValueError as error:
-            raise SchemaDriftError("HTTP host resolution returned an invalid address") from error
         return host
 
     @staticmethod
@@ -385,7 +574,7 @@ class HttpClient:
             body = error.read(max_bytes + 1)
         except (TimeoutError, socket.timeout):
             raise _ApplicationResponseFailure(timed_out=True) from None
-        except (ConnectionError, OSError):
+        except (ConnectionError, OSError, http.client.HTTPException):
             raise _ApplicationResponseFailure() from None
         return _TransportResponse(
             status=error.code,
@@ -393,26 +582,3 @@ class HttpClient:
             headers=dict(error.headers.items()) if error.headers is not None else {},
             body=body,
         )
-
-    @staticmethod
-    def _default_fetch(
-        url: str, headers: dict[str, str], timeout: float, max_bytes: int
-    ) -> _TransportResponse:
-        request = Request(url, headers=headers, method="GET")
-        opener = build_opener(_NoRedirect())
-        try:
-            response = opener.open(request, timeout=timeout)
-        except HTTPError as error:
-            return HttpClient._http_error_response(error, max_bytes)
-        try:
-            with response:
-                return _TransportResponse(
-                    status=response.status,
-                    url=response.geturl(),
-                    headers=dict(response.headers.items()),
-                    body=response.read(max_bytes + 1),
-                )
-        except (TimeoutError, socket.timeout):
-            raise _ApplicationResponseFailure(timed_out=True) from None
-        except (ConnectionError, OSError):
-            raise _ApplicationResponseFailure() from None

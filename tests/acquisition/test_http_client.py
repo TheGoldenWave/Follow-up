@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import http.client
 import json
+import os
 import socket
 import ssl
 import unittest
@@ -10,6 +12,7 @@ from dataclasses import dataclass
 from unittest.mock import Mock, patch
 from urllib.error import URLError
 
+import follow_up_acquisition.http_client as http_client
 from follow_up_acquisition.http_client import HttpClient, HttpResponse
 from follow_up_acquisition.runtime import AdapterError, RateLimitedError, SchemaDriftError
 
@@ -52,6 +55,47 @@ class BodyReadFailureResponse:
     @property
     def body(self) -> bytes:
         raise ConnectionResetError("response stream reset")
+
+
+class FakeSocket:
+    def __init__(self, peer: str = PUBLIC_ADDRESS):
+        self.peer = peer
+        self.connected_to: object = None
+        self.sent: list[bytes] = []
+        self.closed = False
+
+    def settimeout(self, timeout: float) -> None:
+        self.timeout = timeout
+
+    def bind(self, address: object) -> None:
+        self.bound_to = address
+
+    def connect(self, address: object) -> None:
+        self.connected_to = address
+
+    def getpeername(self) -> tuple[str, int]:
+        return self.peer, 443
+
+    def setsockopt(self, *args: object) -> None:
+        del args
+
+    def sendall(self, data: bytes) -> None:
+        self.sent.append(bytes(data))
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeTlsContext:
+    check_hostname = True
+    verify_mode = ssl.CERT_REQUIRED
+
+    def __init__(self) -> None:
+        self.server_hostnames: list[str] = []
+
+    def wrap_socket(self, sock: FakeSocket, *, server_hostname: str) -> FakeSocket:
+        self.server_hostnames.append(server_hostname)
+        return sock
 
 
 def public_resolver(host: str, port: int) -> list[str]:
@@ -186,6 +230,56 @@ class HttpClientTests(unittest.TestCase):
         self.assertEqual(response.body, "recovered")
         self.assertEqual(len(fetch.calls), 2)
 
+    def test_real_resolver_temporary_failure_is_inside_retry_boundary(self) -> None:
+        resolutions: list[object] = [
+            socket.gaierror(socket.EAI_AGAIN, "temporary DNS failure"),
+            [PUBLIC_ADDRESS],
+        ]
+        calls: list[str] = []
+
+        def resolver(_host: str, _port: int) -> list[str]:
+            outcome = resolutions.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome  # type: ignore[return-value]
+
+        client = HttpClient(
+            fetch=RecordingFetch(RawResponse(body=b"recovered")),
+            resolver=resolver,
+            sleeper=lambda _delay: calls.append("sleep"),
+        )
+
+        response = client.get(
+            "https://api.example.test/v1/items",
+            allowed_hosts={"api.example.test"},
+            allowed_paths={"/v1"},
+        )
+
+        self.assertEqual(response.body, "recovered")
+        self.assertEqual(calls, ["sleep"])
+        self.assertEqual(resolutions, [])
+
+    def test_real_resolver_permanent_failure_is_not_retryable(self) -> None:
+        calls = 0
+
+        def resolver(_host: str, _port: int) -> list[str]:
+            nonlocal calls
+            calls += 1
+            raise socket.gaierror(socket.EAI_NONAME, "host does not exist")
+
+        client = HttpClient(fetch=RecordingFetch(), resolver=resolver, sleeper=lambda _delay: None)
+
+        with self.assertRaises(AdapterError) as caught:
+            client.get(
+                "https://api.example.test/v1/items",
+                allowed_hosts={"api.example.test"},
+                allowed_paths={"/v1"},
+            )
+
+        self.assertEqual(calls, 1)
+        self.assertEqual(caught.exception.status, "unreachable")
+        self.assertFalse(caught.exception.retryable)
+
     def test_non_transient_transport_failures_are_not_retried(self) -> None:
         failures = (
             ssl.SSLCertVerificationError(1, "certificate rejected"),
@@ -232,16 +326,15 @@ class HttpClientTests(unittest.TestCase):
     def test_default_transport_does_not_retry_failure_while_reading_response(self) -> None:
         response = Mock()
         response.status = 200
-        response.geturl.return_value = "https://api.example.test/v1/items"
-        response.headers.items.return_value = [("Content-Type", "text/plain")]
+        response.headers = {"Content-Type": "text/plain"}
         response.read.side_effect = ConnectionResetError("socket reset during read")
-        response.__enter__ = Mock(return_value=response)
-        response.__exit__ = Mock(return_value=False)
-        opener = Mock()
-        opener.open.return_value = response
+        connection = Mock()
+        connection.getresponse.return_value = response
         client = HttpClient(resolver=public_resolver, sleeper=lambda _: None)
 
-        with patch("follow_up_acquisition.http_client.build_opener", return_value=opener):
+        with patch(
+            "follow_up_acquisition.http_client._PinnedHTTPSConnection", return_value=connection
+        ) as factory:
             with self.assertRaises(AdapterError) as caught:
                 client.get(
                     "https://api.example.test/v1/items",
@@ -250,7 +343,7 @@ class HttpClientTests(unittest.TestCase):
                 )
 
         self.assertEqual(caught.exception.status, "unreachable")
-        self.assertEqual(opener.open.call_count, 1)
+        self.assertEqual(factory.call_count, 1)
 
     def test_injected_response_body_failure_is_classified_without_retry(self) -> None:
         fetch = RecordingFetch(BodyReadFailureResponse(), RawResponse(body=b"must not be used"))
@@ -261,6 +354,64 @@ class HttpClientTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, "unreachable")
         self.assertTrue(caught.exception.retryable)
         self.assertEqual(len(fetch.calls), 1)
+
+    def test_http_client_rejects_caller_host_override(self) -> None:
+        fetch = RecordingFetch(RawResponse())
+
+        with self.assertRaises(SchemaDriftError):
+            self.get(fetch, headers={"Host": "127.0.0.1"})
+
+        self.assertEqual(fetch.calls, [])
+
+    def test_incomplete_read_after_headers_is_classified_without_retry(self) -> None:
+        self._assert_default_body_failure_is_classified(
+            http.client.IncompleteRead(b"partial", 3)
+        )
+
+    def test_http_exception_after_headers_is_classified_without_retry(self) -> None:
+        self._assert_default_body_failure_is_classified(http.client.HTTPException("bad framing"))
+
+    def test_fixed_content_length_early_eof_is_classified_without_retry(self) -> None:
+        response = Mock()
+        response.status = 200
+        response.headers = {"Content-Type": "text/plain", "Content-Length": "5"}
+        response.read.side_effect = [b"abc", b""]
+        connection = Mock()
+        connection.getresponse.return_value = response
+        client = HttpClient(resolver=public_resolver)
+
+        with patch(
+            "follow_up_acquisition.http_client._PinnedHTTPSConnection", return_value=connection
+        ) as factory:
+            with self.assertRaises(AdapterError) as caught:
+                client.get(
+                    "https://api.example.test/v1/items",
+                    allowed_hosts={"api.example.test"},
+                    allowed_paths={"/v1"},
+                )
+
+        self.assertEqual(caught.exception.status, "unreachable")
+        self.assertEqual(factory.call_count, 1)
+
+    def test_default_transport_body_limit_wins_over_declared_content_length(self) -> None:
+        response = Mock()
+        response.status = 200
+        response.headers = {"Content-Type": "text/plain", "Content-Length": "10"}
+        response.read.return_value = b"12345"
+        connection = Mock()
+        connection.getresponse.return_value = response
+        client = HttpClient(resolver=public_resolver)
+
+        with patch(
+            "follow_up_acquisition.http_client._PinnedHTTPSConnection", return_value=connection
+        ):
+            with self.assertRaises(SchemaDriftError):
+                client.get(
+                    "https://api.example.test/v1/items",
+                    allowed_hosts={"api.example.test"},
+                    allowed_paths={"/v1"},
+                    max_bytes=4,
+                )
 
     def test_rejects_body_over_limit(self) -> None:
         fetch = RecordingFetch(RawResponse(body=b"12345"))
@@ -360,6 +511,103 @@ class HttpClientTests(unittest.TestCase):
         )
 
         self.assertEqual(json.dumps(response.body, sort_keys=True), '{"ok": true}')
+
+    def _assert_default_body_failure_is_classified(self, failure: BaseException) -> None:
+        response = Mock()
+        response.status = 200
+        response.headers = {"Content-Type": "text/plain"}
+        response.read.side_effect = failure
+        connection = Mock()
+        connection.getresponse.return_value = response
+        client = HttpClient(resolver=public_resolver)
+
+        with patch(
+            "follow_up_acquisition.http_client._PinnedHTTPSConnection", return_value=connection
+        ) as factory:
+            with self.assertRaises(AdapterError) as caught:
+                client.get(
+                    "https://api.example.test/v1/items",
+                    allowed_hosts={"api.example.test"},
+                    allowed_paths={"/v1"},
+                )
+
+        self.assertEqual(caught.exception.status, "unreachable")
+        self.assertEqual(factory.call_count, 1)
+
+
+class PinnedHttpsConnectionTests(unittest.TestCase):
+    def test_connects_to_pinned_numeric_address_and_preserves_origin_identity(self) -> None:
+        raw_socket = FakeSocket()
+        context = FakeTlsContext()
+
+        with patch("follow_up_acquisition.http_client.socket.socket", return_value=raw_socket):
+            connection = http_client._PinnedHTTPSConnection(
+                "api.example.test",
+                443,
+                pinned_address=PUBLIC_ADDRESS,
+                timeout=3,
+                context=context,
+            )
+            connection.connect()
+            connection.request("GET", "/v1/items", headers={"User-Agent": "Follow-up/0.4"})
+
+        wire = b"".join(raw_socket.sent)
+        self.assertEqual(raw_socket.connected_to, (PUBLIC_ADDRESS, 443))
+        self.assertEqual(context.server_hostnames, ["api.example.test"])
+        self.assertIn(b"Host: api.example.test\r\n", wire)
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_rejects_connected_peer_that_does_not_match_pin(self) -> None:
+        raw_socket = FakeSocket(peer="127.0.0.1")
+
+        with patch("follow_up_acquisition.http_client.socket.socket", return_value=raw_socket):
+            connection = http_client._PinnedHTTPSConnection(
+                "api.example.test",
+                443,
+                pinned_address=PUBLIC_ADDRESS,
+                timeout=3,
+                context=FakeTlsContext(),
+            )
+            with self.assertRaises(SchemaDriftError):
+                connection.connect()
+
+        self.assertTrue(raw_socket.closed)
+
+    def test_default_transport_is_direct_only_when_https_proxy_is_set(self) -> None:
+        response = self._fake_response()
+        connection = Mock()
+        connection.getresponse.return_value = response
+        connection.__enter__ = Mock(return_value=connection)
+        connection.__exit__ = Mock(return_value=False)
+        resolver_hosts: list[str] = []
+
+        def resolver(host: str, _port: int) -> list[str]:
+            resolver_hosts.append(host)
+            return [PUBLIC_ADDRESS]
+
+        with (
+            patch.dict(os.environ, {"HTTPS_PROXY": "http://proxy.example.test:8080"}, clear=False),
+            patch("follow_up_acquisition.http_client._PinnedHTTPSConnection", return_value=connection) as factory,
+        ):
+            result = HttpClient(resolver=resolver).get(
+                "https://api.example.test/v1/items",
+                allowed_hosts={"api.example.test"},
+                allowed_paths={"/v1"},
+            )
+
+        self.assertEqual(result.body, "ok")
+        self.assertEqual(resolver_hosts, ["api.example.test"])
+        self.assertEqual(factory.call_args.args[:2], ("api.example.test", 443))
+        self.assertEqual(factory.call_args.kwargs["pinned_address"], PUBLIC_ADDRESS)
+
+    @staticmethod
+    def _fake_response() -> Mock:
+        response = Mock()
+        response.status = 200
+        response.headers = {"Content-Type": "text/plain", "Content-Length": "2"}
+        response.read.side_effect = [b"ok", b""]
+        return response
 
 
 if __name__ == "__main__":
