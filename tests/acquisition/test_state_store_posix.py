@@ -285,6 +285,44 @@ class PosixBackendTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "unsafe-state")
             self.assertFalse((root / "source.json").exists())
 
+    def test_init_lock_replacement_before_publish_aborts_transaction(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir) / "acquisition"
+            parent.mkdir(mode=0o700)
+            root = parent / "source-state"
+            init_lock = parent / ".source-state.init.lock"
+            def replace_init_lock() -> None:
+                init_lock.unlink()
+                init_lock.write_bytes(b"replacement")
+                init_lock.chmod(0o600)
+            backend = PosixStateBackend(
+                root, hooks={"before_publish_identity_check": replace_init_lock},
+            )
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "unsafe-state")
+            self.assertFalse((root / "source.json").exists())
+
+    def test_init_lock_replacement_after_publish_is_durability_uncertain(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir) / "acquisition"
+            parent.mkdir(mode=0o700)
+            root = parent / "source-state"
+            init_lock = parent / ".source-state.init.lock"
+            def replace_init_lock() -> None:
+                init_lock.unlink()
+                init_lock.write_bytes(b"replacement")
+                init_lock.chmod(0o600)
+            backend = PosixStateBackend(root, hooks={"after_replace": replace_init_lock})
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "state-durability-uncertain")
+            self.assertEqual((root / "source.json").read_bytes(), b"new")
+
     def test_rejects_temp_inode_replacement_before_publish(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "state"

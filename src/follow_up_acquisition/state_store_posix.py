@@ -42,6 +42,13 @@ class _PinnedDirectory:
     allow_dynamic_nlink: bool
 
 
+@dataclass(frozen=True)
+class _InitGuard:
+    parent_fd: int
+    lock_fd: int
+    identity: tuple[int, int]
+
+
 def posix_backend_available(platform_name: str | None = None) -> bool:
     """Return whether the secure persistent-state backend is available."""
     selected = os.name if platform_name is None else platform_name
@@ -113,7 +120,7 @@ class PosixStateBackend:
     @contextmanager
     def _pinned_root(
         self, *, create: bool,
-    ) -> Iterator[tuple[int, list[_PinnedDirectory]]]:
+    ) -> Iterator[tuple[int, list[_PinnedDirectory], _InitGuard]]:
         flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
         descriptors: list[int] = []
         links: list[_PinnedDirectory] = []
@@ -218,11 +225,7 @@ class PosixStateBackend:
             self._verify_named_identity(
                 parent_fd, _INIT_LOCK_NAME, init_identity, "state initialization lock",
             )
-            fcntl.flock(init_fd, fcntl.LOCK_UN)
-            init_locked = False
-            os.close(init_fd)
-            init_fd = None
-            yield root_fd, links
+            yield root_fd, links, _InitGuard(parent_fd, init_fd, init_identity)
         finally:
             if init_fd is not None:
                 if init_locked:
@@ -342,6 +345,18 @@ class PosixStateBackend:
         if cls._identity(info) != expected:
             raise PosixBackendError(f"{label} identity changed")
 
+    def _verify_init_guard(self, guard: _InitGuard) -> None:
+        info = os.fstat(guard.lock_fd)
+        self._validate_regular(info, "state initialization lock")
+        if self._identity(info) != guard.identity:
+            raise PosixBackendError("state initialization lock identity changed")
+        self._verify_named_identity(
+            guard.parent_fd,
+            _INIT_LOCK_NAME,
+            guard.identity,
+            "state initialization lock",
+        )
+
     def _open_relative(self, root_fd: int, name: str, flags: int, mode: int = 0o600) -> int:
         try:
             return os.open(
@@ -409,10 +424,12 @@ class PosixStateBackend:
         """Read a private regular file without following any directory symlink."""
         self._validate_name(name)
         try:
-            with self._pinned_root(create=False) as (root_fd, links):
+            with self._pinned_root(create=False) as (root_fd, links, init_guard):
                 self._verify_chain(links)
+                self._verify_init_guard(init_guard)
                 payload, _identity = self._read_relative(root_fd, name, max_bytes)
                 self._verify_chain(links)
+                self._verify_init_guard(init_guard)
                 return payload
         except _RootMissing:
             return None
@@ -426,7 +443,7 @@ class PosixStateBackend:
         self._validate_name(lock_name)
         import fcntl
 
-        with self._pinned_root(create=True) as (root_fd, links):
+        with self._pinned_root(create=True) as (root_fd, links, init_guard):
             self._verify_chain(links)
             lock_fd = self._open_lock(root_fd, lock_name)
             locked = False
@@ -478,6 +495,7 @@ class PosixStateBackend:
                     os.close(temp_fd)
                 self._hook("before_publish_identity_check")
                 self._verify_chain(links)
+                self._verify_init_guard(init_guard)
                 self._verify_named_identity(root_fd, lock_name, lock_identity, "state lock")
                 self._verify_named_identity(root_fd, temp_name, temp_identity, "state temp file")
                 if current_identity is None:
@@ -494,6 +512,9 @@ class PosixStateBackend:
                 os.fsync(root_fd)
                 self._hook("after_directory_fsync")
                 self._verify_chain(links)
+                self._verify_init_guard(init_guard)
+                self._verify_named_identity(root_fd, lock_name, lock_identity, "state lock")
+                self._verify_named_identity(root_fd, name, temp_identity, "state file")
                 return result
             except BaseException as exc:
                 if published and not (
