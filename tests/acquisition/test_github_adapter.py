@@ -63,6 +63,8 @@ class FakeClient:
 
 
 def response(url, body, *, status=200, etag=None, last_modified=None):
+    if isinstance(body, dict) and "total_count" in body and "incomplete_results" not in body:
+        body = {**body, "incomplete_results": False}
     return HttpResponse(status, url, body, etag, last_modified)
 
 
@@ -198,7 +200,8 @@ class GitHubAdapterTests(unittest.TestCase):
                 search = kwargs["payload"]["variables"]["query"]
                 self.assertEqual(
                     search,
-                    "agent systems updated:2026-09-14T00:00:00Z..2026-09-15T08:00:00Z",
+                    "agent systems user:acme sort:updated-desc "
+                    "updated:2026-09-14T00:00:00Z..2026-09-15T08:00:00Z",
                 )
                 return response(url, {
                     "data": {"search": {"nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}}
@@ -943,8 +946,12 @@ class GitHubAdapterTests(unittest.TestCase):
         def handler(method, url, kwargs):
             if method == "POST":
                 search = kwargs["payload"]["variables"]["query"]
-                self.assertTrue(search.startswith("agent systems updated:"))
-                for forbidden in ("user:", "language:", "topic:", "stars:"):
+                self.assertEqual(
+                    search,
+                    "agent systems user:acme sort:updated-desc "
+                    "updated:2026-09-14T00:00:00Z..2026-09-15T08:00:00Z",
+                )
+                for forbidden in ("language:", "topic:", "stars:"):
                     self.assertNotIn(forbidden, search)
                 return response(url, {"data": {"search": {"nodes": [node], "pageInfo": {"hasNextPage": False, "endCursor": None}}}})
             return response(url, {"total_count": 0, "items": []})
@@ -954,6 +961,110 @@ class GitHubAdapterTests(unittest.TestCase):
         ).collect("community:github", {"mode": "shadow", "window": {"start": "2026-09-14T00:00:00Z", "end": NOW}})
         self.assertEqual((result.status, result.code), ("partial", "github-item-schema-drift"))
         self.assertNotIn("discussions", {update.stream_id for update in result.checkpoint_updates})
+
+    def test_search_incomplete_results_is_partial_and_missing_or_wrong_type_is_schema_drift(self):
+        data = fixture("entities.json")
+
+        def incomplete_handler(_method, url, _kwargs):
+            if urlsplit(url).path == "/search/repositories":
+                return HttpResponse(200, url, {
+                    "total_count": 1, "incomplete_results": True,
+                    "items": [data["repository"]],
+                })
+            return response(url, {"total_count": 0, "items": []})
+
+        incomplete = self.make_adapter(
+            source(entities=["repository", "commit"]), incomplete_handler,
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual((incomplete.status, incomplete.code), ("partial", "github-incomplete-results"))
+        self.assertEqual([item.native_id for item in incomplete.candidates], ["github:repository:R_repo"])
+        endpoints = incomplete.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]
+        self.assertEqual(endpoints["repository"], {"complete": False})
+        self.assertEqual(endpoints["commit"], {"complete": True})
+
+        for value in (None, "false", 0):
+            with self.subTest(value=value):
+                body = {"total_count": 0, "items": []}
+                if value is not None:
+                    body["incomplete_results"] = value
+                invalid = self.make_adapter(
+                    source(), lambda _m, url, _k, body=body: HttpResponse(200, url, body),
+                ).collect("community:github", {"mode": "shadow"})
+                self.assertEqual(invalid.status, "schema-drift")
+                self.assertNotEqual(invalid.status, "no-results")
+                self.assertEqual(invalid.checkpoint_updates, ())
+
+    def test_node_identity_is_aggregated_across_all_search_pages(self):
+        data = fixture("entities.json")["repository"]
+        missing = {**data}
+        missing.pop("node_id")
+
+        def handler(_method, url, _kwargs):
+            page = int(parse_qs(urlsplit(url).query)["page"][0])
+            items = [missing] * 100 if page == 1 else [data]
+            return response(url, {"total_count": 101, "items": items})
+
+        result = self.make_adapter(source(), handler).collect(
+            "community:github", {"mode": "shadow", "depth": 2},
+        )
+        self.assertEqual((result.status, result.code), ("ok", "github-node-id-missing"))
+        self.assertEqual([item.native_id for item in result.candidates], ["github:repository:R_repo"])
+        self.assertEqual(result.checkpoint_updates[0].checkpoint["cursor"], {})
+
+    def test_node_identity_is_aggregated_across_release_endpoint(self):
+        data = fixture("entities.json")
+        repos = [
+            data["repository"],
+            {**data["repository"], "node_id": "R_second", "full_name": "acme/second", "html_url": "https://github.com/acme/second"},
+        ]
+        missing = {**data["release"]}
+        missing.pop("node_id")
+        valid = {**data["release"], "node_id": "RE_second", "html_url": "https://github.com/acme/second/releases/tag/v2"}
+
+        def handler(_method, url, _kwargs):
+            path = urlsplit(url).path
+            if path == "/search/repositories":
+                return response(url, {"total_count": 2, "items": repos})
+            return response(url, [missing] if path.startswith("/repos/acme/agent/") else [valid])
+
+        result = self.make_adapter(source(entities=["release"]), handler).collect(
+            "community:github", {"mode": "shadow"},
+        )
+        self.assertEqual((result.status, result.code), ("ok", "github-node-id-missing"))
+        self.assertEqual([item.native_id for item in result.candidates], ["github:release:RE_second"])
+
+    def test_graphql_error_types_have_deterministic_safe_precedence(self):
+        classify = GitHubAdapter._graphql_error_status
+        self.assertEqual(classify([{"type": "RATE_LIMITED"}]), "rate-limited")
+        self.assertEqual(classify([{"type": "FORBIDDEN"}]), "auth-failed")
+        self.assertEqual(classify([{"type": "GRAPHQL_VALIDATION_FAILED"}]), "schema-drift")
+        self.assertEqual(classify([{"type": "BAD_USER_INPUT"}]), "schema-drift")
+        self.assertEqual(classify([{"type": "INTERNAL"}]), "error")
+        self.assertEqual(classify([{"type": "MYSTERY"}, {"type": "RATE_LIMITED"}]), "error")
+        self.assertEqual(classify([{"type": "FORBIDDEN"}, {"type": "RATE_LIMITED"}]), "auth-failed")
+        self.assertEqual(classify([{"type": "FORBIDDEN"}, {"type": "BAD_USER_INPUT"}]), "schema-drift")
+
+    def test_discussion_payload_owner_and_sort_follow_fingerprinted_semantics(self):
+        query = {
+            "id": "owned", "query": "agent systems", "sort": "updated",
+            "filters": {"entities": ["repository"], "owner": "acme", "language": "Python", "topics": ["agents"], "min_stars": 50},
+        }
+        changed = copy.deepcopy(query)
+        changed["filters"]["owner"] = "other"
+        self.assertNotEqual(query_fingerprint("github", query), query_fingerprint("github", changed))
+
+        def handler(method, url, kwargs):
+            if method == "POST":
+                self.assertEqual(
+                    kwargs["payload"]["variables"]["query"],
+                    "agent systems user:acme sort:updated-desc updated:<=2026-09-15T08:00:00Z",
+                )
+                return response(url, {"data": {"search": {"nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}}})
+            return response(url, {"total_count": 0, "items": []})
+
+        self.make_adapter(
+            source(queries=[query], include_discussions=True), handler, lambda _source_id: "token",
+        ).collect("community:github", {"mode": "shadow"})
 
 
 if __name__ == "__main__":

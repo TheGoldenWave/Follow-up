@@ -221,6 +221,9 @@ class GitHubAdapter:
         if "github-search-cap" in stream_codes.values():
             code = "github-search-cap"
             message = "; ".join(f"{stream}: search result cap reached" for stream in stream_codes if stream_codes[stream] == code)
+        elif "github-incomplete-results" in stream_codes.values():
+            code = "github-incomplete-results"
+            message = "; ".join(f"{stream}: search results incomplete" for stream in stream_codes if stream_codes[stream] == code)
         elif "github-item-schema-drift" in stream_codes.values():
             code = "github-item-schema-drift"
             message = "; ".join(f"{stream}: item schema drifted" for stream in stream_codes if stream_codes[stream] == code)
@@ -308,6 +311,7 @@ class GitHubAdapter:
         missing = False
         changed = False
         cap_hit = False
+        incomplete_hit = False
         successful_endpoints = 0
         etag = previous.get("etag") if previous else None
         last_modified = previous.get("last_modified") if previous else None
@@ -347,6 +351,7 @@ class GitHubAdapter:
                 )
                 changed = changed or capped or problem_status is None or bool(found)
                 cap_hit = cap_hit or capped
+                incomplete_hit = incomplete_hit or problem_code == "incomplete"
                 missing = missing or problem_code in {"node", "node-warning"}
                 if entity == "repository":
                     etag = response_etag or etag
@@ -386,6 +391,7 @@ class GitHubAdapter:
         if failures:
             status = "partial" if successful_endpoints or cap_hit or emitted else failures[0][1]
             code = "github-search-cap" if cap_hit else (
+                "github-incomplete-results" if incomplete_hit else
                 "github-node-id-missing" if missing else
                 "github-item-schema-drift" if any(state == "schema-drift" for _entity, state in failures)
                 else "github-endpoint-failure"
@@ -414,19 +420,19 @@ class GitHubAdapter:
             start_page = 1
         if type(start_page) is not int or not 1 <= start_page <= 10:
             raise AdapterError("GitHub endpoint cursor is invalid", status="schema-drift")
-        response, pages, next_page, capped = self._search_pages(
+        response, pages, next_page, capped, incomplete = self._search_pages(
             path, self._search_text(query, entity, request), depth, headers,
             label=entity, sort=api_sort, start_page=start_page,
         )
         if response.status == 304:
             return [], {"complete": True}, False, None, None, response.etag, response.last_modified
         results: list[SourceCandidate] = []
-        node_warning = False
-        fatal_node = False
+        total_entries = 0
+        node_missing = 0
         fatal_schema = False
         other_failure: AdapterError | None = None
         for items in pages:
-            page_missing = 0
+            total_entries += len(items)
             page_schema = 0
             for item in items:
                 try:
@@ -442,20 +448,22 @@ class GitHubAdapter:
                         self._resolve_parent_repository(item, headers, repo_cache)
                     results.append(self._map_rest(entity, item, query, now, repo_cache))
                 except _NodeIdentityMissing:
-                    page_missing += 1
+                    node_missing += 1
                 except _ItemSchemaDrift:
                     page_schema += 1
                 except AdapterError as exc:
                     other_failure = other_failure or exc
             fatal_schema = fatal_schema or bool(page_schema)
-            fatal_node = fatal_node or bool(items and page_missing == len(items))
-            node_warning = node_warning or bool(page_missing and page_missing < len(items))
+        fatal_node = total_entries > 0 and node_missing == total_entries
+        node_warning = 0 < node_missing < total_entries
         if fatal_schema:
             problem_code, problem_status = "schema", "schema-drift"
         elif other_failure is not None:
             problem_code, problem_status = "parent", other_failure.status
         elif fatal_node:
             problem_code, problem_status = "node", "schema-drift"
+        elif incomplete:
+            problem_code, problem_status = "incomplete", "partial"
         elif node_warning:
             problem_code, problem_status = "node-warning", None
         else:
@@ -482,31 +490,29 @@ class GitHubAdapter:
             repo_page = 1
         if type(repo_page) is not int or not 1 <= repo_page <= 10:
             raise AdapterError("GitHub release repository cursor is invalid", status="schema-drift")
-        _response, repo_pages, repo_next, capped = self._search_pages(
+        _response, repo_pages, repo_next, capped, incomplete = self._search_pages(
             "/search/repositories", self._search_text(query, "repository", request),
             depth, headers, label="release repositories", sort=query["sort"],
             start_page=repo_page,
         )
         targets: dict[str, str] = {}
-        repo_warning = False
-        repo_fatal_node = False
+        repo_total = 0
+        repo_missing = 0
         repo_schema = False
         for repo_items in repo_pages:
-            page_missing = 0
+            repo_total += len(repo_items)
             page_schema = 0
             for item in repo_items:
                 full_name = _text(item.get("full_name"))
                 node_id = _text(item.get("node_id"))
                 if not node_id:
-                    page_missing += 1
+                    repo_missing += 1
                     continue
                 if not full_name or _REPO_NAME_RE.fullmatch(full_name) is None:
                     page_schema += 1
                     continue
                 targets[full_name.lower()] = node_id
             repo_schema = repo_schema or bool(page_schema)
-            repo_fatal_node = repo_fatal_node or bool(repo_items and page_missing == len(repo_items))
-            repo_warning = repo_warning or bool(page_missing and page_missing < len(repo_items))
         old_pages = old_state.get("release_pages", {})
         if not isinstance(old_pages, Mapping):
             raise AdapterError("GitHub release cursor is invalid", status="schema-drift")
@@ -519,8 +525,8 @@ class GitHubAdapter:
             targets[full_name] = node_id
         results: list[SourceCandidate] = []
         next_releases: dict[str, dict[str, Any]] = {}
-        release_warning = False
-        release_fatal_node = False
+        release_total = 0
+        release_missing = 0
         release_schema = False
         for full_name in sorted(targets, key=lambda value: value.encode("utf-8")):
             saved = old_pages.get(full_name, {})
@@ -529,26 +535,30 @@ class GitHubAdapter:
                 raise AdapterError("GitHub release cursor is invalid", status="schema-drift")
             release_pages, next_page = self._release_pages(full_name, start, depth, headers)
             for items in release_pages:
-                page_missing = 0
+                release_total += len(items)
                 page_schema = 0
                 for item in items:
                     try:
                         results.append(self._map_rest("release", item, query, now, targets, full_name))
                     except _NodeIdentityMissing:
-                        page_missing += 1
+                        release_missing += 1
                     except _ItemSchemaDrift:
                         page_schema += 1
                 release_schema = release_schema or bool(page_schema)
-                release_fatal_node = release_fatal_node or bool(items and page_missing == len(items))
-                release_warning = release_warning or bool(page_missing and page_missing < len(items))
             if next_page is not None:
                 next_releases[full_name] = {
                     "page": next_page, "repository_node_id": targets[full_name],
                 }
+        repo_fatal_node = repo_total > 0 and repo_missing == repo_total
+        repo_warning = 0 < repo_missing < repo_total
+        release_fatal_node = release_total > 0 and release_missing == release_total
+        release_warning = 0 < release_missing < release_total
         if repo_schema or release_schema:
             problem_code, problem_status = "schema", "schema-drift"
         elif repo_fatal_node or release_fatal_node:
             problem_code, problem_status = "node", "schema-drift"
+        elif incomplete:
+            problem_code, problem_status = "incomplete", "partial"
         elif repo_warning or release_warning:
             problem_code, problem_status = "node-warning", None
         else:
@@ -600,11 +610,12 @@ class GitHubAdapter:
     def _search_pages(
         self, path: str, query_text: str, depth: int, headers: Mapping[str, str], *,
         label: str, sort: str, start_page: int,
-    ) -> tuple[HttpResponse, list[list[Mapping[str, Any]]], int | None, bool]:
+    ) -> tuple[HttpResponse, list[list[Mapping[str, Any]]], int | None, bool, bool]:
         pages: list[list[Mapping[str, Any]]] = []
         first_response: HttpResponse | None = None
         next_page: int | None = start_page
         capped = False
+        incomplete = False
         for page in range(start_page, start_page + depth):
             if page > 10:
                 raise AdapterError("GitHub search exceeds the 1000-result API cap", status="schema-drift")
@@ -618,13 +629,20 @@ class GitHubAdapter:
             if first_response is None:
                 first_response = response
             if response.status == 304:
-                return response, [], None, False
+                return response, [], None, False, False
             if not isinstance(response.body, Mapping) or type(response.body.get("items")) is not list:
                 raise AdapterError(f"{label} response schema drifted", status="schema-drift")
             items = response.body["items"]
+            incomplete_value = response.body.get("incomplete_results")
+            if type(incomplete_value) is not bool:
+                raise _ItemSchemaDrift("search response")
             if any(not isinstance(item, Mapping) for item in items):
                 raise AdapterError(f"{label} response schema drifted", status="schema-drift")
             pages.append(items)
+            if incomplete_value:
+                incomplete = True
+                next_page = None
+                break
             total = response.body.get("total_count")
             complete = not items or len(items) < _PAGE_SIZE
             accessible_total = min(total, 1000) if type(total) is int else None
@@ -636,7 +654,7 @@ class GitHubAdapter:
                 break
             next_page = page + 1
         assert first_response is not None
-        return first_response, pages, next_page, capped
+        return first_response, pages, next_page, capped, incomplete
 
     def _release_pages(
         self, full_name: str, start_page: int, depth: int, headers: Mapping[str, str],
@@ -922,6 +940,11 @@ class GitHubAdapter:
         query: Mapping[str, Any], request: Mapping[str, Any],
     ) -> str:
         parts = [query["query"]]
+        owner = query.get("filters", {}).get("owner")
+        if owner:
+            parts.append(f"user:{owner}")
+        if query.get("sort") == "updated":
+            parts.append("sort:updated-desc")
         window = request.get("window")
         if isinstance(window, Mapping):
             start = window.get("start") or ""
@@ -936,13 +959,23 @@ class GitHubAdapter:
 
     @staticmethod
     def _graphql_error_status(errors: Any) -> str:
-        if isinstance(errors, list):
-            types = {
-                error.get("type") for error in errors if isinstance(error, Mapping)
-            }
-            if types & {"RATE_LIMITED", "RATE_LIMITED_BY_IP"}:
-                return "rate-limited"
-        return "auth-failed"
+        if not isinstance(errors, list) or not errors:
+            return "error"
+        values = [
+            error.get("type") if isinstance(error, Mapping) else None
+            for error in errors
+        ]
+        rate = {"RATE_LIMITED", "RATE_LIMITED_BY_IP"}
+        auth = {"UNAUTHENTICATED", "UNAUTHORIZED", "FORBIDDEN", "INSUFFICIENT_SCOPES"}
+        schema = {"GRAPHQL_VALIDATION_FAILED", "BAD_USER_INPUT"}
+        known = rate | auth | schema
+        if any(value not in known for value in values):
+            return "error"
+        if any(value in schema for value in values):
+            return "schema-drift"
+        if any(value in auth for value in values):
+            return "auth-failed"
+        return "rate-limited"
 
     def _map_discussion(
         self, item: Any, query: Mapping[str, Any], fetched_at: str,
