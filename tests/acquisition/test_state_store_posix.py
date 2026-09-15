@@ -165,7 +165,7 @@ class PosixBackendTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "state-parent-missing")
             self.assertFalse(missing_parent.exists())
 
-    def test_concurrent_different_source_entries_do_not_conflict_on_root_nlink(self) -> None:
+    def test_concurrent_different_source_entries_do_not_conflict_on_root_directory_churn(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "state"
             root.mkdir(mode=0o700)
@@ -190,6 +190,56 @@ class PosixBackendTests(unittest.TestCase):
             self.assertEqual(failures, [])
             self.assertEqual(PosixStateBackend(root).read("a.json", 100), b"a")
             self.assertEqual(PosixStateBackend(root).read("b.json", 100), b"b")
+
+    def test_unrelated_shared_ancestor_sibling_creation_before_publish_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "private" / "state"
+            root.parent.mkdir(mode=0o700)
+            root.mkdir(mode=0o700)
+            sibling = Path(temp_dir).parent / f"{Path(temp_dir).name}-parallel-sibling"
+            try:
+                backend = PosixStateBackend(
+                    root, hooks={"before_publish_identity_check": lambda: sibling.mkdir(mode=0o700)},
+                )
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+                self.assertEqual(backend.read("source.json", 100), b"new")
+            finally:
+                if sibling.exists():
+                    sibling.rmdir()
+
+    def test_unrelated_shared_ancestor_sibling_creation_after_replace_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "private" / "state"
+            root.parent.mkdir(mode=0o700)
+            root.mkdir(mode=0o700)
+            sibling = Path(temp_dir).parent / f"{Path(temp_dir).name}-parallel-sibling"
+            try:
+                backend = PosixStateBackend(
+                    root, hooks={"after_replace": lambda: sibling.mkdir(mode=0o700)},
+                )
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+                self.assertEqual(backend.read("source.json", 100), b"new")
+            finally:
+                if sibling.exists():
+                    sibling.rmdir()
+
+    def test_direct_parent_sibling_churn_during_leaf_initialization_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir) / "private"
+            parent.mkdir(mode=0o700)
+            root = parent / "state"
+            sibling = parent / "unrelated-sibling"
+            backend = PosixStateBackend(
+                root, hooks={"after_directory_created": lambda: sibling.mkdir(mode=0o700)},
+            )
+            backend.atomic_update(
+                "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+            )
+            self.assertEqual(backend.read("source.json", 100), b"new")
 
     def test_backend_probe_rejects_non_posix_without_fallback(self) -> None:
         self.assertTrue(posix_backend_available("posix"))
@@ -451,6 +501,106 @@ class PosixBackendTests(unittest.TestCase):
             self.assertFalse((outside / "source.json").exists())
             self.assertEqual((detached / "source.json").read_bytes(), b"new")
 
+    def test_ancestor_symlink_substitution_before_publish_is_unsafe_and_contained(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            ancestor = base / "ancestor"
+            root = ancestor / "parent" / "state"
+            root.mkdir(parents=True, mode=0o700)
+            root.parent.chmod(0o700)
+            detached = base / "detached"
+            outside = base / "outside"
+            outside_root = outside / "parent" / "state"
+            outside_root.mkdir(parents=True, mode=0o700)
+            outside_root.parent.chmod(0o700)
+            def replace_ancestor() -> None:
+                ancestor.rename(detached)
+                ancestor.symlink_to(outside, target_is_directory=True)
+            backend = PosixStateBackend(
+                root, hooks={"before_publish_identity_check": replace_ancestor},
+            )
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "unsafe-state")
+            self.assertFalse((outside_root / "source.json").exists())
+            self.assertFalse((detached / "parent" / "state" / "source.json").exists())
+
+    def test_ancestor_symlink_substitution_after_publish_is_uncertain_and_contained(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            ancestor = base / "ancestor"
+            root = ancestor / "parent" / "state"
+            root.mkdir(parents=True, mode=0o700)
+            root.parent.chmod(0o700)
+            detached = base / "detached"
+            outside = base / "outside"
+            outside_root = outside / "parent" / "state"
+            outside_root.mkdir(parents=True, mode=0o700)
+            outside_root.parent.chmod(0o700)
+            def replace_ancestor() -> None:
+                ancestor.rename(detached)
+                ancestor.symlink_to(outside, target_is_directory=True)
+            backend = PosixStateBackend(root, hooks={"after_replace": replace_ancestor})
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "state-durability-uncertain")
+            self.assertFalse((outside_root / "source.json").exists())
+            self.assertEqual(
+                (detached / "parent" / "state" / "source.json").read_bytes(), b"new",
+            )
+
+    def test_ancestor_directory_replacement_before_publish_is_unsafe_and_contained(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            ancestor = base / "ancestor"
+            root = ancestor / "parent" / "state"
+            root.mkdir(parents=True, mode=0o700)
+            root.parent.chmod(0o700)
+            detached = base / "detached"
+            replacement_root = ancestor / "parent" / "state"
+            def replace_ancestor() -> None:
+                ancestor.rename(detached)
+                replacement_root.mkdir(parents=True, mode=0o700)
+                replacement_root.parent.chmod(0o700)
+            backend = PosixStateBackend(
+                root, hooks={"before_publish_identity_check": replace_ancestor},
+            )
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "unsafe-state")
+            self.assertFalse((replacement_root / "source.json").exists())
+            self.assertFalse((detached / "parent" / "state" / "source.json").exists())
+
+    def test_ancestor_directory_replacement_after_publish_is_uncertain_and_contained(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            ancestor = base / "ancestor"
+            root = ancestor / "parent" / "state"
+            root.mkdir(parents=True, mode=0o700)
+            root.parent.chmod(0o700)
+            detached = base / "detached"
+            replacement_root = ancestor / "parent" / "state"
+            def replace_ancestor() -> None:
+                ancestor.rename(detached)
+                replacement_root.mkdir(parents=True, mode=0o700)
+                replacement_root.parent.chmod(0o700)
+            backend = PosixStateBackend(root, hooks={"after_replace": replace_ancestor})
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "state-durability-uncertain")
+            self.assertFalse((replacement_root / "source.json").exists())
+            self.assertEqual(
+                (detached / "parent" / "state" / "source.json").read_bytes(), b"new",
+            )
+
     def test_root_mode_change_before_publish_aborts_without_target_change(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "state"
@@ -497,15 +647,29 @@ class PosixBackendTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "state-durability-uncertain")
             self.assertEqual((root / "source.json").read_bytes(), b"new")
 
-    def test_ancestor_nlink_change_after_replace_is_durability_uncertain(self) -> None:
+    def test_direct_parent_sibling_creation_after_replace_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             ancestor = Path(temp_dir) / "private"
             ancestor.mkdir(mode=0o700)
             root = ancestor / "state"
             root.mkdir(mode=0o700)
-            def change_nlink() -> None:
+            def create_sibling() -> None:
                 (ancestor / "new-directory").mkdir(mode=0o700)
-            backend = PosixStateBackend(root, hooks={"after_replace": change_nlink})
+            backend = PosixStateBackend(root, hooks={"after_replace": create_sibling})
+            backend.atomic_update(
+                "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+            )
+            self.assertEqual((root / "source.json").read_bytes(), b"new")
+
+    def test_ancestor_mode_change_after_replace_is_durability_uncertain(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            ancestor = Path(temp_dir) / "private"
+            ancestor.mkdir(mode=0o700)
+            root = ancestor / "state"
+            root.mkdir(mode=0o700)
+            backend = PosixStateBackend(
+                root, hooks={"after_replace": lambda: ancestor.chmod(0o777)},
+            )
             with self.assertRaises(PosixBackendError) as ctx:
                 backend.atomic_update(
                     "source.json", ".source.lock", 100, lambda _current: (b"new", None),

@@ -32,14 +32,13 @@ class _RootMissing(Exception):
 
 @dataclass(frozen=True)
 class _PinnedDirectory:
+    directory_fd: int
     parent_fd: int
     name: str
     device: int
     inode: int
     mode: int
-    nlink: int
     require_private: bool
-    allow_dynamic_nlink: bool
 
 
 @dataclass(frozen=True)
@@ -145,14 +144,13 @@ class PosixStateBackend:
                 if not stat.S_ISDIR(info.st_mode):
                     raise PosixBackendError("state directory chain contains a non-directory")
                 links.append(_PinnedDirectory(
+                    directory_fd=child_fd,
                     parent_fd=parent_fd,
                     name=part,
                     device=info.st_dev,
                     inode=info.st_ino,
                     mode=stat.S_IMODE(info.st_mode),
-                    nlink=info.st_nlink,
                     require_private=index == len(parts) - 1,
-                    allow_dynamic_nlink=False,
                 ))
                 parent_fd = child_fd
             if not links or stat.S_IMODE(os.fstat(parent_fd).st_mode) & 0o077:
@@ -165,10 +163,6 @@ class PosixStateBackend:
             import fcntl
             fcntl.flock(init_fd, fcntl.LOCK_EX)
             init_locked = True
-            # A previous initializer may have created the persistent init lock
-            # or state leaf while this caller waited. Rebaseline only the
-            # immediate parent's nlink after acquiring the shared inode.
-            self._accept_controlled_root_nlink_change(links)
             self._verify_chain(links)
             self._verify_named_identity(
                 parent_fd, _INIT_LOCK_NAME, init_identity, "state initialization lock",
@@ -200,16 +194,15 @@ class PosixStateBackend:
             if not stat.S_ISDIR(root_info.st_mode) or stat.S_IMODE(root_info.st_mode) & 0o077:
                 raise PosixBackendError("state root must be a private directory")
             if created:
-                self._accept_mkdir_parent_nlink_change(links)
+                self._verify_chain(links)
             links.append(_PinnedDirectory(
+                directory_fd=root_fd,
                 parent_fd=parent_fd,
                 name=leaf,
                 device=root_info.st_dev,
                 inode=root_info.st_ino,
                 mode=stat.S_IMODE(root_info.st_mode),
-                nlink=root_info.st_nlink,
                 require_private=True,
-                allow_dynamic_nlink=True,
             ))
             if created:
                 try:
@@ -248,83 +241,26 @@ class PosixStateBackend:
     def _verify_chain(links: list[_PinnedDirectory]) -> None:
         for trusted in links:
             try:
-                info = os.stat(
+                pinned = os.fstat(trusted.directory_fd)
+                named = os.stat(
                     trusted.name, dir_fd=trusted.parent_fd, follow_symlinks=False,
                 )
             except OSError as exc:
                 raise PosixBackendError("state directory identity changed") from exc
-            current_mode = stat.S_IMODE(info.st_mode)
+            pinned_mode = stat.S_IMODE(pinned.st_mode)
+            named_mode = stat.S_IMODE(named.st_mode)
             if (
-                not stat.S_ISDIR(info.st_mode)
-                or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
-                or current_mode != trusted.mode
-                or (trusted.allow_dynamic_nlink and info.st_nlink <= 0)
-                or (not trusted.allow_dynamic_nlink and info.st_nlink != trusted.nlink)
-                or (trusted.require_private and current_mode & 0o077)
+                not stat.S_ISDIR(pinned.st_mode)
+                or not stat.S_ISDIR(named.st_mode)
+                or (pinned.st_dev, pinned.st_ino) != (trusted.device, trusted.inode)
+                or (named.st_dev, named.st_ino) != (pinned.st_dev, pinned.st_ino)
+                or pinned_mode != trusted.mode
+                or named_mode != trusted.mode
+                or pinned.st_nlink <= 0
+                or named.st_nlink <= 0
+                or (trusted.require_private and named_mode & 0o077)
             ):
                 raise PosixBackendError("state directory identity changed")
-
-    @staticmethod
-    def _accept_mkdir_parent_nlink_change(links: list[_PinnedDirectory]) -> None:
-        """Accept only the direct parent's causal +1 nlink from mkdir."""
-        if not links:
-            return
-        refreshed: list[_PinnedDirectory] = []
-        direct_parent = links[-1]
-        for trusted in links:
-            info = os.stat(
-                trusted.name, dir_fd=trusted.parent_fd, follow_symlinks=False,
-            )
-            current_mode = stat.S_IMODE(info.st_mode)
-            expected_nlink = trusted.nlink + 1 if trusted is direct_parent else trusted.nlink
-            if (
-                not stat.S_ISDIR(info.st_mode)
-                or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
-                or current_mode != trusted.mode
-                or info.st_nlink != expected_nlink
-                or (trusted.require_private and current_mode & 0o077)
-            ):
-                raise PosixBackendError("state directory identity changed during mkdir")
-            refreshed.append(_PinnedDirectory(
-                parent_fd=trusted.parent_fd,
-                name=trusted.name,
-                device=trusted.device,
-                inode=trusted.inode,
-                mode=trusted.mode,
-                nlink=expected_nlink,
-                require_private=trusted.require_private,
-                allow_dynamic_nlink=trusted.allow_dynamic_nlink,
-            ))
-        links[:] = refreshed
-
-    @staticmethod
-    def _accept_controlled_root_nlink_change(links: list[_PinnedDirectory]) -> None:
-        """Account for an entry mutation without trusting other metadata changes."""
-        refreshed: list[_PinnedDirectory] = []
-        for trusted in links:
-            info = os.stat(
-                trusted.name, dir_fd=trusted.parent_fd, follow_symlinks=False,
-            )
-            current_mode = stat.S_IMODE(info.st_mode)
-            if (
-                not stat.S_ISDIR(info.st_mode)
-                or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
-                or current_mode != trusted.mode
-                or (trusted is not links[-1] and info.st_nlink != trusted.nlink)
-                or (trusted.require_private and current_mode & 0o077)
-            ):
-                raise PosixBackendError("state directory identity changed")
-            refreshed.append(_PinnedDirectory(
-                parent_fd=trusted.parent_fd,
-                name=trusted.name,
-                device=trusted.device,
-                inode=trusted.inode,
-                mode=trusted.mode,
-                nlink=info.st_nlink if trusted is links[-1] else trusted.nlink,
-                require_private=trusted.require_private,
-                allow_dynamic_nlink=trusted.allow_dynamic_nlink,
-            ))
-        links[:] = refreshed
 
     @staticmethod
     def _validate_regular(info: os.stat_result, label: str) -> None:
@@ -453,7 +389,7 @@ class PosixStateBackend:
                 lock_info = os.fstat(lock_fd)
                 self._validate_regular(lock_info, "state lock")
                 lock_identity = self._identity(lock_info)
-                self._accept_controlled_root_nlink_change(links)
+                self._verify_chain(links)
                 self._hook("after_lock_open")
                 self._verify_named_identity(root_fd, lock_name, lock_identity, "state lock")
                 os.fchmod(lock_fd, 0o600)
@@ -472,7 +408,7 @@ class PosixStateBackend:
                             root_fd, candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL,
                         )
                         temp_name = candidate
-                        self._accept_controlled_root_nlink_change(links)
+                        self._verify_chain(links)
                         break
                     except FileExistsError:
                         continue
@@ -506,7 +442,7 @@ class PosixStateBackend:
                 os.replace(temp_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
                 temp_name = None
                 published = True
-                self._accept_controlled_root_nlink_change(links)
+                self._verify_chain(links)
                 self._hook("after_replace")
                 self._hook("before_directory_fsync")
                 os.fsync(root_fd)
