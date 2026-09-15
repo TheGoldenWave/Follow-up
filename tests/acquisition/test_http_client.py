@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.client
+import inspect
 import json
 import os
 import socket
@@ -18,6 +19,8 @@ from follow_up_acquisition.runtime import AdapterError, RateLimitedError, Schema
 
 
 PUBLIC_ADDRESS = "93.184.216.34"
+SECOND_PUBLIC_ADDRESS = "93.184.216.35"
+PUBLIC_IPV6 = "2606:4700:4700::1111"
 
 
 @dataclass
@@ -128,6 +131,12 @@ class HttpClientTests(unittest.TestCase):
         self.assertEqual(len(fetch.calls), 1)
         self.assertEqual(fetch.calls[0][1]["User-Agent"], "Follow-up/0.4")
         self.assertEqual(fetch.calls[0][1]["Accept"], "application/json")
+
+    def test_constructor_documents_injected_fetch_as_fixture_only(self) -> None:
+        documentation = inspect.getdoc(HttpClient.__init__) or ""
+
+        self.assertIn("offline fixture", documentation.lower())
+        self.assertIn("must not be used as a production network transport", documentation.lower())
 
     def test_rejects_non_https_before_fetch(self) -> None:
         fetch = RecordingFetch()
@@ -536,6 +545,55 @@ class HttpClientTests(unittest.TestCase):
 
 
 class PinnedHttpsConnectionTests(unittest.TestCase):
+    def test_second_attempt_uses_next_validated_public_address(self) -> None:
+        first = Mock()
+        first.request.side_effect = ConnectionRefusedError("first address refused")
+        second = Mock()
+        second.getresponse.return_value = self._fake_response()
+        resolver_calls: list[str] = []
+
+        def resolver(host: str, _port: int) -> list[str]:
+            resolver_calls.append(host)
+            return [PUBLIC_ADDRESS, SECOND_PUBLIC_ADDRESS]
+
+        with patch(
+            "follow_up_acquisition.http_client._PinnedHTTPSConnection",
+            side_effect=[first, second],
+        ) as factory:
+            result = HttpClient(resolver=resolver, sleeper=lambda _delay: None).get(
+                "https://api.example.test/v1/items",
+                allowed_hosts={"api.example.test"},
+                allowed_paths={"/v1"},
+            )
+
+        pins = [call.kwargs["pinned_address"] for call in factory.call_args_list]
+        self.assertEqual(result.body, "ok")
+        self.assertEqual(pins, [PUBLIC_ADDRESS, SECOND_PUBLIC_ADDRESS])
+        self.assertEqual(resolver_calls, ["api.example.test", "api.example.test"])
+        self.assertEqual(factory.call_count, 2)
+
+    def test_retry_never_attempts_address_from_mixed_public_private_answer(self) -> None:
+        first = Mock()
+        first.request.side_effect = ConnectionRefusedError("first address refused")
+        answers = iter(([PUBLIC_ADDRESS], [SECOND_PUBLIC_ADDRESS, "127.0.0.1"]))
+
+        with patch(
+            "follow_up_acquisition.http_client._PinnedHTTPSConnection", return_value=first
+        ) as factory:
+            with self.assertRaises(SchemaDriftError):
+                HttpClient(
+                    resolver=lambda _host, _port: list(next(answers)),
+                    sleeper=lambda _delay: None,
+                ).get(
+                    "https://api.example.test/v1/items",
+                    allowed_hosts={"api.example.test"},
+                    allowed_paths={"/v1"},
+                )
+
+        attempted = [call.kwargs["pinned_address"] for call in factory.call_args_list]
+        self.assertEqual(attempted, [PUBLIC_ADDRESS])
+        self.assertEqual(factory.call_count, 1)
+
     def test_connects_to_pinned_numeric_address_and_preserves_origin_identity(self) -> None:
         raw_socket = FakeSocket()
         context = FakeTlsContext()
@@ -557,6 +615,27 @@ class PinnedHttpsConnectionTests(unittest.TestCase):
         self.assertIn(b"Host: api.example.test\r\n", wire)
         self.assertTrue(context.check_hostname)
         self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+
+    def test_ipv6_pin_normalizes_peer_and_preserves_origin_identity(self) -> None:
+        raw_socket = FakeSocket(peer="2606:4700:4700:0:0:0:0:1111")
+        context = FakeTlsContext()
+
+        with patch("follow_up_acquisition.http_client.socket.socket", return_value=raw_socket) as factory:
+            connection = http_client._PinnedHTTPSConnection(
+                "api.example.test",
+                443,
+                pinned_address=PUBLIC_IPV6,
+                timeout=3,
+                context=context,
+            )
+            connection.connect()
+            connection.request("GET", "/v1/items", headers={"User-Agent": "Follow-up/0.4"})
+
+        wire = b"".join(raw_socket.sent)
+        self.assertEqual(factory.call_args.args[0], socket.AF_INET6)
+        self.assertEqual(raw_socket.connected_to, (PUBLIC_IPV6, 443, 0, 0))
+        self.assertEqual(context.server_hostnames, ["api.example.test"])
+        self.assertIn(b"Host: api.example.test\r\n", wire)
 
     def test_rejects_connected_peer_that_does_not_match_pin(self) -> None:
         raw_socket = FakeSocket(peer="127.0.0.1")

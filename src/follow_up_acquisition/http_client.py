@@ -65,6 +65,7 @@ class _ResolvedTarget:
     host: str
     port: int
     addresses: tuple[str, ...]
+    selected_address: str
 
 
 class _Transport(Protocol):
@@ -180,7 +181,7 @@ class _DirectHttpsTransport:
         connection = _PinnedHTTPSConnection(
             target.host,
             target.port,
-            pinned_address=target.addresses[0],
+            pinned_address=target.selected_address,
             timeout=timeout,
         )
         response_received = False
@@ -262,6 +263,12 @@ class HttpClient:
         sleeper: Callable[[float], None] | None = None,
         resolver: Callable[[str, int], list[str]] | None = None,
     ) -> None:
+        """Create a restricted client.
+
+        ``fetch`` is a legacy injection seam for offline fixture tests.
+        It must not be used as a production network transport; only the
+        built-in direct transport pins a validated address to TLS.
+        """
         self._transport: _Transport = (
             _InjectedTransport(fetch) if fetch is not None else _DirectHttpsTransport()
         )
@@ -348,7 +355,7 @@ class HttpClient:
         for attempt in range(2):
             started_at = self._clock()
             try:
-                target = self._resolve_target(url)
+                target = self._resolve_target(url, attempt)
                 response = self._transport.fetch(target, dict(headers), timeout, max_bytes)
                 if self._clock() - started_at > timeout:
                     raise TimeoutError
@@ -386,7 +393,7 @@ class HttpClient:
                 ) from None
         raise AssertionError("unreachable")
 
-    def _resolve_target(self, url: str) -> _ResolvedTarget:
+    def _resolve_target(self, url: str, attempt: int) -> _ResolvedTarget:
         parsed = urlsplit(url)
         host = (parsed.hostname or "").encode("idna").decode("ascii").lower().rstrip(".")
         port = parsed.port or 443
@@ -394,12 +401,22 @@ class HttpClient:
         if not addresses:
             raise socket.gaierror(socket.EAI_NONAME, "no addresses returned")
         try:
-            canonical = tuple(str(_canonical_ip(str(address))) for address in addresses)
+            canonical_ips = sorted(
+                {_canonical_ip(str(address)) for address in addresses},
+                key=lambda address: (address.version, address.packed),
+            )
         except ValueError as error:
             raise SchemaDriftError("HTTP host resolution returned an invalid address") from error
-        if any(not _canonical_ip(address).is_global for address in canonical):
+        if any(not address.is_global for address in canonical_ips):
             raise SchemaDriftError("HTTP host resolved to a non-public address")
-        return _ResolvedTarget(url=url, host=host, port=port, addresses=canonical)
+        canonical = tuple(str(address) for address in canonical_ips)
+        return _ResolvedTarget(
+            url=url,
+            host=host,
+            port=port,
+            addresses=canonical,
+            selected_address=canonical[attempt % len(canonical)],
+        )
 
     @staticmethod
     def _raise_response_failure(failure: _ApplicationResponseFailure) -> None:
