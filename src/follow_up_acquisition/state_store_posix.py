@@ -94,21 +94,35 @@ class PosixStateBackend:
             descriptors.append(parent_fd)
             parts = self.root.parts[1:]
             for index, part in enumerate(parts):
+                created_info: os.stat_result | None = None
                 try:
                     child_fd = os.open(part, flags, dir_fd=parent_fd)
                 except FileNotFoundError:
                     if not create:
                         raise _RootMissing
+                    self._verify_chain(links)
                     try:
                         os.mkdir(part, 0o700, dir_fd=parent_fd)
-                    except FileExistsError:
-                        pass
+                    except FileExistsError as exc:
+                        raise PosixBackendError(
+                            "state directory appeared concurrently during setup",
+                        ) from exc
+                    self._hook("after_directory_created")
+                    self._accept_mkdir_parent_nlink_change(links)
+                    created_info = os.stat(part, dir_fd=parent_fd, follow_symlinks=False)
                     child_fd = os.open(part, flags, dir_fd=parent_fd)
                 except OSError as exc:
                     raise PosixBackendError("state directory chain is unsafe") from exc
                 info = os.fstat(child_fd)
                 if not stat.S_ISDIR(info.st_mode):
                     raise PosixBackendError("state directory chain contains a non-directory")
+                if created_info is not None and (
+                    not stat.S_ISDIR(created_info.st_mode)
+                    or self._identity(info) != self._identity(created_info)
+                    or stat.S_IMODE(info.st_mode) != stat.S_IMODE(created_info.st_mode)
+                    or info.st_nlink != created_info.st_nlink
+                ):
+                    raise PosixBackendError("created state directory identity changed")
                 links.append(_PinnedDirectory(
                     parent_fd=parent_fd,
                     name=part,
@@ -124,10 +138,6 @@ class PosixStateBackend:
             root_info = os.fstat(root_fd)
             if stat.S_IMODE(root_info.st_mode) & 0o077:
                 raise PosixBackendError("state root permissions exceed 0700")
-            # Creating a missing child directory legitimately increments its
-            # parent's nlink. Freeze the trusted metadata only after the full
-            # chain exists so later changes are meaningful.
-            self._refresh_chain(links)
             yield root_fd, links
         finally:
             for descriptor in reversed(descriptors):
@@ -157,20 +167,33 @@ class PosixStateBackend:
                 raise PosixBackendError("state directory identity changed")
 
     @staticmethod
-    def _refresh_chain(links: list[_PinnedDirectory]) -> None:
-        """Refresh metadata after a backend-controlled root entry mutation."""
+    def _accept_mkdir_parent_nlink_change(links: list[_PinnedDirectory]) -> None:
+        """Accept only the direct parent's causal +1 nlink from mkdir."""
+        if not links:
+            return
         refreshed: list[_PinnedDirectory] = []
+        direct_parent = links[-1]
         for trusted in links:
             info = os.stat(
                 trusted.name, dir_fd=trusted.parent_fd, follow_symlinks=False,
             )
+            current_mode = stat.S_IMODE(info.st_mode)
+            expected_nlink = trusted.nlink + 1 if trusted is direct_parent else trusted.nlink
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
+                or current_mode != trusted.mode
+                or info.st_nlink != expected_nlink
+                or (trusted.require_private and current_mode & 0o077)
+            ):
+                raise PosixBackendError("state directory identity changed during mkdir")
             refreshed.append(_PinnedDirectory(
                 parent_fd=trusted.parent_fd,
                 name=trusted.name,
-                device=info.st_dev,
-                inode=info.st_ino,
-                mode=stat.S_IMODE(info.st_mode),
-                nlink=info.st_nlink,
+                device=trusted.device,
+                inode=trusted.inode,
+                mode=trusted.mode,
+                nlink=expected_nlink,
                 require_private=trusted.require_private,
             ))
         links[:] = refreshed
