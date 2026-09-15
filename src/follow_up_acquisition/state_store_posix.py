@@ -48,17 +48,24 @@ class _InitGuard:
     identity: tuple[int, int]
 
 
-def posix_backend_available(platform_name: str | None = None) -> bool:
+def posix_backend_available(
+    platform_name: str | None = None, *, system_name: str | None = None,
+) -> bool:
     """Return whether the secure persistent-state backend is available."""
     selected = os.name if platform_name is None else platform_name
+    selected_system = platform.system() if system_name is None else system_name
     required = ("O_DIRECTORY", "O_NOFOLLOW", "O_EXCL")
-    if selected != "posix" or not all(hasattr(os, name) for name in required):
+    if (
+        selected != "posix"
+        or selected_system not in {"Darwin", "Linux"}
+        or not all(hasattr(os, name) for name in required)
+    ):
         return False
     try:
-        import fcntl  # noqa: F401
+        import fcntl
     except ImportError:
         return False
-    return True
+    return hasattr(fcntl, "flock")
 
 
 def _normalize_system_alias(absolute: str, *, system_name: str | None = None) -> str:
@@ -89,7 +96,7 @@ class PosixStateBackend:
         system_name: str | None = None,
         hooks: Mapping[str, Callable[[], None]] | None = None,
     ) -> None:
-        if not posix_backend_available(platform_name):
+        if not posix_backend_available(platform_name, system_name=system_name):
             raise PosixBackendError(
                 "persistent source state requires the POSIX secure backend",
                 code="unsupported-platform",
@@ -218,6 +225,11 @@ class PosixStateBackend:
             self._verify_named_identity(
                 parent_fd, _INIT_LOCK_NAME, init_identity, "state initialization lock",
             )
+            try:
+                fcntl.flock(init_fd, fcntl.LOCK_UN)
+            except OSError as exc:
+                raise PosixBackendError("state initialization lock could not be released") from exc
+            init_locked = False
             yield root_fd, links, _InitGuard(parent_fd, init_fd, init_identity)
         finally:
             if init_fd is not None:

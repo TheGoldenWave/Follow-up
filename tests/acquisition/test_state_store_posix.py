@@ -16,6 +16,7 @@ from follow_up_acquisition.state_store_posix import (
     PosixStateBackend,
     posix_backend_available,
 )
+from follow_up_acquisition.source_state import state_store_available
 
 
 class PosixBackendTests(unittest.TestCase):
@@ -167,27 +168,44 @@ class PosixBackendTests(unittest.TestCase):
 
     def test_concurrent_different_source_entries_do_not_conflict_on_root_directory_churn(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "state"
+            parent = Path(temp_dir) / "private"
+            parent.mkdir(mode=0o700)
+            root = parent / "state"
             root.mkdir(mode=0o700)
-            barrier = threading.Barrier(3)
+            both_in_transform = threading.Barrier(3)
+            release_transforms = threading.Event()
             failures: list[BaseException] = []
+            outcomes: list[str] = []
+            outcome_lock = threading.Lock()
+            def transform(name: str) -> tuple[bytes, None]:
+                both_in_transform.wait(timeout=5)
+                if not release_transforms.wait(timeout=5):
+                    raise RuntimeError("test transform release timed out")
+                return name.encode("ascii"), None
             def write(name: str) -> None:
-                barrier.wait()
                 try:
                     PosixStateBackend(root).atomic_update(
                         f"{name}.json", f".{name}.lock", 100,
-                        lambda _current: (name.encode("ascii"), None),
+                        lambda _current: transform(name),
                     )
+                    with outcome_lock:
+                        outcomes.append(name)
                 except BaseException as exc:
-                    failures.append(exc)
+                    with outcome_lock:
+                        failures.append(exc)
             threads = [threading.Thread(target=write, args=(name,)) for name in ("a", "b")]
             for thread in threads:
                 thread.start()
-            barrier.wait()
-            for thread in threads:
-                thread.join(timeout=5)
-                self.assertFalse(thread.is_alive())
+            try:
+                both_in_transform.wait(timeout=5)
+                (parent / "unrelated-sibling").mkdir(mode=0o700)
+            finally:
+                release_transforms.set()
+                for thread in threads:
+                    thread.join(timeout=5)
+                    self.assertFalse(thread.is_alive())
             self.assertEqual(failures, [])
+            self.assertCountEqual(outcomes, ["a", "b"])
             self.assertEqual(PosixStateBackend(root).read("a.json", 100), b"a")
             self.assertEqual(PosixStateBackend(root).read("b.json", 100), b"b")
 
@@ -242,14 +260,37 @@ class PosixBackendTests(unittest.TestCase):
             self.assertEqual(backend.read("source.json", 100), b"new")
 
     def test_backend_probe_rejects_non_posix_without_fallback(self) -> None:
-        self.assertTrue(posix_backend_available("posix"))
+        self.assertTrue(posix_backend_available("posix", system_name="Darwin"))
+        self.assertTrue(posix_backend_available("posix", system_name="Linux"))
         self.assertFalse(posix_backend_available("nt"))
         with tempfile.TemporaryDirectory() as temp_dir, self.assertRaises(PosixBackendError) as ctx:
             PosixStateBackend(Path(temp_dir), platform_name="nt").read("source.json", 100)
         self.assertEqual(ctx.exception.code, "unsupported-platform")
 
+    def test_backend_probe_rejects_unverified_posix_platforms(self) -> None:
+        for system_name in ("FreeBSD", "OpenBSD", "SunOS"):
+            with self.subTest(system_name=system_name):
+                self.assertFalse(posix_backend_available("posix", system_name=system_name))
+                with tempfile.TemporaryDirectory() as temp_dir, self.assertRaises(
+                    PosixBackendError,
+                ) as ctx:
+                    PosixStateBackend(
+                        Path(temp_dir), platform_name="posix", system_name=system_name,
+                    )
+                self.assertEqual(ctx.exception.code, "unsupported-platform")
+
+    def test_state_store_probe_supports_only_darwin_and_linux(self) -> None:
+        for system_name, expected in (("Darwin", True), ("Linux", True), ("FreeBSD", False)):
+            with self.subTest(system_name=system_name), patch(
+                "follow_up_acquisition.state_store_posix.platform.system",
+                return_value=system_name,
+            ):
+                self.assertEqual(state_store_available("posix"), expected)
+
     def test_backend_probe_requires_fcntl(self) -> None:
         with patch.dict(sys.modules, {"fcntl": None}):
+            self.assertFalse(posix_backend_available("posix"))
+        with patch.dict(sys.modules, {"fcntl": object()}):
             self.assertFalse(posix_backend_available("posix"))
 
     def test_atomic_update_round_trips_private_regular_file(self) -> None:
@@ -354,6 +395,30 @@ class PosixBackendTests(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.code, "unsafe-state")
             self.assertFalse((root / "source.json").exists())
+
+    def test_init_lock_is_unlocked_before_source_transform(self) -> None:
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir) / "acquisition"
+            parent.mkdir(mode=0o700)
+            root = parent / "source-state"
+            init_lock = parent / ".source-state.init.lock"
+            def transform(_current: bytes | None) -> tuple[bytes, None]:
+                probe_fd = os.open(
+                    init_lock,
+                    os.O_RDWR | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0),
+                )
+                try:
+                    fcntl.flock(probe_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(probe_fd, fcntl.LOCK_UN)
+                finally:
+                    os.close(probe_fd)
+                return b"new", None
+            PosixStateBackend(root).atomic_update(
+                "source.json", ".source.lock", 100, transform,
+            )
+            self.assertEqual((root / "source.json").read_bytes(), b"new")
 
     def test_init_lock_replacement_after_publish_is_durability_uncertain(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
