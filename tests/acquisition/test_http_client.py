@@ -50,6 +50,27 @@ class RecordingFetch:
         return outcome  # type: ignore[return-value]
 
 
+class RecordingRequestFetch:
+    def __init__(self, *outcomes: object):
+        self.outcomes = list(outcomes)
+        self.calls: list[tuple[str, dict[str, str], float, int, str, bytes | None]] = []
+
+    def __call__(
+        self,
+        url: str,
+        headers: dict[str, str],
+        timeout: float,
+        max_bytes: int,
+        method: str,
+        body: bytes | None,
+    ) -> RawResponse:
+        self.calls.append((url, headers, timeout, max_bytes, method, body))
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome  # type: ignore[return-value]
+
+
 class BodyReadFailureResponse:
     status = 200
     url = "https://api.example.test/v1/items"
@@ -115,6 +136,277 @@ class HttpClientTests(unittest.TestCase):
         }
         options.update(kwargs)
         return client.get("https://api.example.test/v1/items", **options)
+
+    def post(
+        self, fetch: RecordingRequestFetch, payload: object, **kwargs: object
+    ) -> HttpResponse:
+        client = HttpClient(fetch=fetch, resolver=public_resolver, sleeper=lambda _: None)
+        options = {
+            "allowed_hosts": {"api.example.test"},
+            "allowed_paths": {"/v1"},
+        }
+        options.update(kwargs)
+        return client.post_json("https://api.example.test/v1/items", payload, **options)
+
+    def test_post_json_sends_canonical_utf8_with_fixed_content_headers(self) -> None:
+        fetch = RecordingRequestFetch(
+            RawResponse(headers={"Content-Type": "application/json"}, body=b'{"ok":true}')
+        )
+
+        response = self.post(
+            fetch,
+            {"z": "caf\u00e9", "a": [True, None, 3]},
+            headers={"Authorization": "Bearer private", "User-Agent": "ignored"},
+        )
+
+        url, headers, timeout, max_bytes, method, body = fetch.calls[0]
+        self.assertEqual(response.body, {"ok": True})
+        self.assertEqual(url, "https://api.example.test/v1/items")
+        self.assertEqual((timeout, max_bytes, method), (15.0, 2_000_000, "POST"))
+        self.assertEqual(body, '{"a":[true,null,3],"z":"caf\u00e9"}'.encode())
+        self.assertEqual(headers["Content-Type"], "application/json")
+        self.assertEqual(headers["Content-Length"], str(len(body or b"")))
+        self.assertEqual(headers["User-Agent"], "Follow-up/0.4")
+        self.assertEqual(headers["Authorization"], "Bearer private")
+
+    def test_get_injected_transport_retains_legacy_four_argument_contract(self) -> None:
+        fetch = RecordingFetch(RawResponse())
+
+        self.get(fetch)
+
+        self.assertEqual(len(fetch.calls[0]), 4)
+        self.assertNotIn("Content-Length", fetch.calls[0][1])
+        self.assertNotIn("Content-Type", fetch.calls[0][1])
+
+    def test_post_json_default_transport_sends_exact_method_body_host_and_sni(self) -> None:
+        raw_socket = FakeSocket()
+        context = FakeTlsContext()
+        response = Mock()
+        response.status = 200
+        response.headers = {"Content-Type": "application/json", "Content-Length": "11"}
+        response.read.side_effect = [b'{"ok":true}', b""]
+        connection_class = http_client._PinnedHTTPSConnection
+
+        def connection_factory(
+            host: str,
+            port: int,
+            *,
+            pinned_address: str,
+            timeout: float,
+        ) -> http_client._PinnedHTTPSConnection:
+            return connection_class(
+                host,
+                port,
+                pinned_address=pinned_address,
+                timeout=timeout,
+                context=context,
+            )
+
+        with (
+            patch("follow_up_acquisition.http_client.socket.socket", return_value=raw_socket),
+            patch(
+                "follow_up_acquisition.http_client._PinnedHTTPSConnection",
+                side_effect=connection_factory,
+            ),
+            patch.object(http.client.HTTPConnection, "getresponse", return_value=response),
+        ):
+            result = HttpClient(resolver=public_resolver).post_json(
+                "https://api.example.test/v1/graphql",
+                {"query": "{viewer{login}}"},
+                allowed_hosts={"api.example.test"},
+                allowed_paths={"/v1"},
+            )
+
+        wire = b"".join(raw_socket.sent)
+        body = b'{"query":"{viewer{login}}"}'
+        self.assertEqual(result.body, {"ok": True})
+        self.assertEqual(context.server_hostnames, ["api.example.test"])
+        self.assertIn(b"POST /v1/graphql HTTP/1.1\r\n", wire)
+        self.assertIn(b"Host: api.example.test\r\n", wire)
+        self.assertIn(b"Content-Type: application/json\r\n", wire)
+        self.assertIn(f"Content-Length: {len(body)}\r\n".encode(), wire)
+        self.assertTrue(wire.endswith(b"\r\n\r\n" + body))
+
+    def test_post_json_rejects_non_json_shapes_cycles_depth_and_node_count(self) -> None:
+        cyclic: list[object] = []
+        cyclic.append(cyclic)
+        deep: object = None
+        for _ in range(65):
+            deep = [deep]
+        invalid = (
+            {1: "non-string key"},
+            ("tuple",),
+            {"bytes": b"no"},
+            {"surrogate": "\ud800"},
+            {"nan": float("nan")},
+            {"inf": float("inf")},
+            cyclic,
+            deep,
+            [None] * 10_001,
+        )
+        for payload in invalid:
+            with self.subTest(payload_type=type(payload).__name__):
+                fetch = RecordingRequestFetch()
+                with self.assertRaises(SchemaDriftError):
+                    self.post(fetch, payload)
+                self.assertEqual(fetch.calls, [])
+
+    def test_post_json_enforces_exact_multibyte_request_boundary_before_dumps(self) -> None:
+        payload = {"v": "\u732b"}
+        exact = len('{"v":"\u732b"}'.encode())
+        with patch("follow_up_acquisition.http_client.json.dumps", wraps=json.dumps) as dumps:
+            fetch = RecordingRequestFetch(RawResponse())
+            self.post(fetch, payload, max_request_bytes=exact)
+            self.assertEqual(dumps.call_count, 1)
+
+        with patch("follow_up_acquisition.http_client.json.dumps", wraps=json.dumps) as dumps:
+            fetch = RecordingRequestFetch()
+            with self.assertRaises(SchemaDriftError):
+                self.post(fetch, payload, max_request_bytes=exact - 1)
+            self.assertEqual(dumps.call_count, 0)
+        self.assertEqual(fetch.calls, [])
+
+        escaped = {"v": "\"\n\x01\u732b"}
+        escaped_size = len(
+            json.dumps(
+                escaped, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode()
+        )
+        fetch = RecordingRequestFetch(RawResponse())
+        self.post(fetch, escaped, max_request_bytes=escaped_size)
+        self.assertEqual(len(fetch.calls[0][5] or b""), escaped_size)
+
+    def test_post_json_rejects_giant_integer_before_json_dumps(self) -> None:
+        with patch("follow_up_acquisition.http_client.json.dumps", wraps=json.dumps) as dumps:
+            fetch = RecordingRequestFetch()
+            with self.assertRaises(SchemaDriftError):
+                self.post(fetch, 1 << 1_000_000, max_request_bytes=32)
+
+        self.assertEqual(dumps.call_count, 0)
+        self.assertEqual(fetch.calls, [])
+
+    def test_post_json_rejects_reserved_hop_by_hop_and_injected_headers(self) -> None:
+        forbidden = {
+            "Host": "evil.example",
+            "Content-Length": "0",
+            "Transfer-Encoding": "chunked",
+            "Content-Type": "text/plain",
+            "Connection": "close",
+            "Proxy-Authorization": "secret",
+            "X-Bad\r\nHost": "evil",
+            "X-Test": "ok\nAuthorization: secret",
+            "X-Control": "bad\x00value",
+        }
+        for name, value in forbidden.items():
+            with self.subTest(name=name):
+                fetch = RecordingRequestFetch()
+                with self.assertRaises(SchemaDriftError) as caught:
+                    self.post(fetch, {}, headers={name: value})
+                self.assertNotIn("secret", str(caught.exception))
+                self.assertEqual(fetch.calls, [])
+
+    def test_post_json_only_preserves_body_for_307_and_308_redirects(self) -> None:
+        for status in (307, 308):
+            with self.subTest(status=status):
+                fetch = RecordingRequestFetch(
+                    RawResponse(status=status, headers={"Location": "/v1/next"}, body=b""),
+                    RawResponse(
+                        url="https://api.example.test/v1/next",
+                        headers={"Content-Type": "application/json"},
+                        body=b'{"ok":true}',
+                    ),
+                )
+                self.post(fetch, {"query": "safe"})
+                self.assertEqual([call[4] for call in fetch.calls], ["POST", "POST"])
+                self.assertEqual(fetch.calls[0][5], fetch.calls[1][5])
+
+        for status in (301, 302, 303):
+            with self.subTest(status=status):
+                fetch = RecordingRequestFetch(
+                    RawResponse(status=status, headers={"Location": "/v1/next"}, body=b"")
+                )
+                with self.assertRaises(SchemaDriftError):
+                    self.post(fetch, {"query": "safe"})
+                self.assertEqual(len(fetch.calls), 1)
+
+    def test_post_json_revalidates_redirect_dns_path_and_host(self) -> None:
+        cases = (
+            ("https://evil.example/v1/next", public_resolver),
+            ("/admin/next", public_resolver),
+            ("/v1/next", lambda _host, _port: ["127.0.0.1"]),
+        )
+        for location, redirect_resolver in cases:
+            with self.subTest(location=location):
+                fetch = RecordingRequestFetch(
+                    RawResponse(status=307, headers={"Location": location}, body=b"")
+                )
+                resolutions = 0
+
+                def resolver(host: str, port: int) -> list[str]:
+                    nonlocal resolutions
+                    resolutions += 1
+                    if resolutions == 1:
+                        return [PUBLIC_ADDRESS]
+                    return redirect_resolver(host, port)
+
+                client = HttpClient(fetch=fetch, resolver=resolver)
+                with self.assertRaises(SchemaDriftError):
+                    client.post_json(
+                        "https://api.example.test/v1/items",
+                        {},
+                        allowed_hosts={"api.example.test"},
+                        allowed_paths={"/v1"},
+                    )
+                self.assertEqual(len(fetch.calls), 1)
+
+    def test_post_json_does_not_retry_application_response_or_body_failure(self) -> None:
+        rate_limited = RecordingRequestFetch(
+            RawResponse(status=429, headers={"Authorization": "Bearer secret"}, body=b"no"),
+            RawResponse(body=b"must not be used"),
+        )
+        with self.assertRaises(RateLimitedError) as caught:
+            self.post(rate_limited, {}, headers={"Authorization": "Bearer secret"})
+        self.assertNotIn("secret", str(caught.exception))
+        self.assertEqual(len(rate_limited.calls), 1)
+
+        truncated = RecordingRequestFetch(
+            BodyReadFailureResponse(), RawResponse(body=b"must not be used")
+        )
+        with self.assertRaises(AdapterError):
+            self.post(truncated, {})
+        self.assertEqual(len(truncated.calls), 1)
+
+    def test_post_json_retries_only_transient_pre_response_failure_and_rotates_pin(self) -> None:
+        first = Mock()
+        first.request.side_effect = ConnectionRefusedError("first")
+        second = Mock()
+        second.getresponse.return_value = PinnedHttpsConnectionTests._fake_response()
+        resolver_calls: list[str] = []
+
+        def resolver(host: str, _port: int) -> list[str]:
+            resolver_calls.append(host)
+            return [PUBLIC_ADDRESS, SECOND_PUBLIC_ADDRESS, PUBLIC_IPV6]
+
+        with patch(
+            "follow_up_acquisition.http_client._PinnedHTTPSConnection", side_effect=[first, second]
+        ) as factory:
+            response = HttpClient(resolver=resolver, sleeper=lambda _: None).post_json(
+                "https://api.example.test/v1/items",
+                {"query": "safe"},
+                allowed_hosts={"api.example.test"},
+                allowed_paths={"/v1"},
+            )
+
+        self.assertEqual(response.body, "ok")
+        self.assertEqual(
+            [call.kwargs["pinned_address"] for call in factory.call_args_list],
+            [PUBLIC_ADDRESS, SECOND_PUBLIC_ADDRESS],
+        )
+        self.assertEqual(resolver_calls, ["api.example.test", "api.example.test"])
+        for connection in (first, second):
+            args, kwargs = connection.request.call_args
+            self.assertEqual(args[:2], ("POST", "/v1/items"))
+            self.assertEqual(kwargs["body"], b'{"query":"safe"}')
 
     def assert_schema_drift(self, client: HttpClient, url: str, **kwargs: object) -> None:
         with self.assertRaises(SchemaDriftError) as caught:

@@ -11,6 +11,7 @@ import errno
 import http.client
 import ipaddress
 import json
+import math
 import socket
 import ssl
 import time
@@ -26,6 +27,26 @@ from .runtime import AdapterError, RateLimitedError, SchemaDriftError
 USER_AGENT = "Follow-up/0.4"
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _MAX_REDIRECTS = 5
+_MAX_JSON_DEPTH = 64
+_MAX_JSON_NODES = 10_000
+_FORBIDDEN_POST_HEADERS = frozenset(
+    {
+        "connection",
+        "content-length",
+        "content-type",
+        "host",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "transfer-encoding",
+        "upgrade",
+    }
+)
+_HEADER_TOKEN_CHARS = frozenset(
+    "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
 
 
 @dataclass(frozen=True)
@@ -75,11 +96,13 @@ class _Transport(Protocol):
         headers: dict[str, str],
         timeout: float,
         max_bytes: int,
+        method: str,
+        body: bytes | None,
     ) -> Any: ...
 
 
 class _InjectedTransport:
-    def __init__(self, fetch: Callable[[str, dict[str, str], float, int], Any]) -> None:
+    def __init__(self, fetch: Callable[..., Any]) -> None:
         self._fetch = fetch
 
     def fetch(
@@ -88,8 +111,12 @@ class _InjectedTransport:
         headers: dict[str, str],
         timeout: float,
         max_bytes: int,
+        method: str,
+        body: bytes | None,
     ) -> Any:
-        return self._fetch(target.url, headers, timeout, max_bytes)
+        if method == "GET":
+            return self._fetch(target.url, headers, timeout, max_bytes)
+        return self._fetch(target.url, headers, timeout, max_bytes, method, body)
 
 
 def _system_resolver(host: str, port: int) -> list[str]:
@@ -177,6 +204,8 @@ class _DirectHttpsTransport:
         headers: dict[str, str],
         timeout: float,
         max_bytes: int,
+        method: str,
+        body: bytes | None,
     ) -> _TransportResponse:
         connection = _PinnedHTTPSConnection(
             target.host,
@@ -190,7 +219,10 @@ class _DirectHttpsTransport:
             selector = parsed.path or "/"
             if parsed.query:
                 selector += "?" + parsed.query
-            connection.request("GET", selector, headers=headers)
+            if method == "GET":
+                connection.request("GET", selector, headers=headers)
+            else:
+                connection.request(method, selector, body=body, headers=headers)
             response = connection.getresponse()
             response_received = True
             raw_headers = dict(response.headers.items())
@@ -251,14 +283,16 @@ class _DirectHttpsTransport:
 class HttpClient:
     """HTTPS-only HTTP client with allowlists and SSRF protections.
 
-    An injected ``fetch`` receives ``(url, headers, timeout, max_bytes)`` and
-    returns a response-like object with ``status``, ``url``, ``headers``, and
-    ``body`` attributes.  This narrow boundary keeps adapter tests fully offline.
+    For GET, an injected ``fetch`` receives the legacy
+    ``(url, headers, timeout, max_bytes)`` arguments. For JSON POST it receives
+    those arguments followed by ``method`` and ``body``. It returns a
+    response-like object with ``status``, ``url``, ``headers``, and ``body``
+    attributes. This narrow boundary keeps adapter tests fully offline.
     """
 
     def __init__(
         self,
-        fetch: Callable[[str, dict[str, str], float, int], Any] | None = None,
+        fetch: Callable[..., Any] | None = None,
         clock: Callable[[], float] | None = None,
         sleeper: Callable[[float], None] | None = None,
         resolver: Callable[[str, int], list[str]] | None = None,
@@ -286,6 +320,78 @@ class HttpClient:
         timeout: float = 15,
         max_bytes: int = 2_000_000,
     ) -> HttpResponse:
+        return self._send(
+            url,
+            method="GET",
+            body=None,
+            allowed_hosts=allowed_hosts,
+            allowed_paths=allowed_paths,
+            headers=headers,
+            timeout=timeout,
+            max_bytes=max_bytes,
+            preserve_only_redirects=False,
+        )
+
+    def post_json(
+        self,
+        url: str,
+        payload: Any,
+        *,
+        allowed_hosts: set[str] | frozenset[str] | tuple[str, ...] | list[str],
+        allowed_paths: set[str] | frozenset[str] | tuple[str, ...] | list[str],
+        headers: Mapping[str, str] | None = None,
+        timeout: float = 15,
+        max_request_bytes: int = 262_144,
+        max_bytes: int = 2_000_000,
+    ) -> HttpResponse:
+        if (
+            not isinstance(max_request_bytes, int)
+            or isinstance(max_request_bytes, bool)
+            or max_request_bytes <= 0
+        ):
+            raise SchemaDriftError("HTTP request body limit must be a positive integer")
+        self._preflight_json(payload, max_request_bytes)
+        try:
+            body = json.dumps(
+                payload,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            ).encode("utf-8")
+        except (TypeError, ValueError, UnicodeEncodeError) as error:
+            raise SchemaDriftError("HTTP JSON payload is invalid") from error
+        if len(body) > max_request_bytes:
+            raise SchemaDriftError("HTTP JSON request body exceeded the configured limit")
+
+        request_headers = self._post_headers(headers, len(body))
+        return self._send(
+            url,
+            method="POST",
+            body=body,
+            allowed_hosts=allowed_hosts,
+            allowed_paths=allowed_paths,
+            headers=request_headers,
+            timeout=timeout,
+            max_bytes=max_bytes,
+            preserve_only_redirects=True,
+            headers_are_prepared=True,
+        )
+
+    def _send(
+        self,
+        url: str,
+        *,
+        method: str,
+        body: bytes | None,
+        allowed_hosts: set[str] | frozenset[str] | tuple[str, ...] | list[str],
+        allowed_paths: set[str] | frozenset[str] | tuple[str, ...] | list[str],
+        headers: Mapping[str, str] | None,
+        timeout: float,
+        max_bytes: int,
+        preserve_only_redirects: bool,
+        headers_are_prepared: bool = False,
+    ) -> HttpResponse:
         if not isinstance(timeout, (int, float)) or timeout <= 0:
             raise SchemaDriftError("HTTP timeout must be positive")
         if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes <= 0:
@@ -294,18 +400,23 @@ class HttpClient:
         hosts = self._normalize_hosts(allowed_hosts)
         paths = self._normalize_paths(allowed_paths)
         initial_host = self._validate_url(url, hosts, paths)
-        request_headers = {str(key): str(value) for key, value in (headers or {}).items()}
-        for key in tuple(request_headers):
-            if key.lower() == "host":
-                raise SchemaDriftError("caller-supplied Host headers are not allowed")
-            if key.lower() == "user-agent":
-                del request_headers[key]
-        request_headers["User-Agent"] = USER_AGENT
+        if headers_are_prepared:
+            request_headers = dict(headers or {})
+        else:
+            request_headers = {str(key): str(value) for key, value in (headers or {}).items()}
+            for key in tuple(request_headers):
+                if key.lower() == "host":
+                    raise SchemaDriftError("caller-supplied Host headers are not allowed")
+                if key.lower() == "user-agent":
+                    del request_headers[key]
+            request_headers["User-Agent"] = USER_AGENT
 
         current_url = url
         redirects = 0
         while True:
-            response = self._request(current_url, request_headers, float(timeout), max_bytes)
+            response = self._request(
+                current_url, request_headers, float(timeout), max_bytes, method, body
+            )
             response_url = str(self._response_field(response, "url"))
             self._validate_url(response_url, hosts, paths, required_host=initial_host)
             status = self._parse_status(self._response_field(response, "status"))
@@ -315,6 +426,8 @@ class HttpClient:
             safe_headers = {str(key).lower(): str(value) for key, value in raw_headers.items()}
 
             if status in _REDIRECT_STATUSES:
+                if preserve_only_redirects and status in (301, 302, 303):
+                    raise SchemaDriftError("HTTP redirect cannot safely preserve POST")
                 location = safe_headers.get("location")
                 if not location:
                     raise SchemaDriftError("HTTP redirect omitted its location")
@@ -350,13 +463,21 @@ class HttpClient:
             )
 
     def _request(
-        self, url: str, headers: dict[str, str], timeout: float, max_bytes: int
+        self,
+        url: str,
+        headers: dict[str, str],
+        timeout: float,
+        max_bytes: int,
+        method: str,
+        body: bytes | None,
     ) -> Any:
         for attempt in range(2):
             started_at = self._clock()
             try:
                 target = self._resolve_target(url, attempt)
-                response = self._transport.fetch(target, dict(headers), timeout, max_bytes)
+                response = self._transport.fetch(
+                    target, dict(headers), timeout, max_bytes, method, body
+                )
                 if self._clock() - started_at > timeout:
                     raise TimeoutError
                 return response
@@ -392,6 +513,128 @@ class HttpClient:
                     "public source is unreachable", status="unreachable", retryable=transient
                 ) from None
         raise AssertionError("unreachable")
+
+    @staticmethod
+    def _post_headers(headers: Mapping[str, str] | None, body_length: int) -> dict[str, str]:
+        if headers is not None and not isinstance(headers, Mapping):
+            raise SchemaDriftError("HTTP request headers have an invalid shape")
+        prepared: dict[str, str] = {}
+        for key, value in (headers or {}).items():
+            if type(key) is not str or type(value) is not str:
+                raise SchemaDriftError("HTTP request headers have an invalid shape")
+            lowered = key.lower()
+            if (
+                not key
+                or any(character not in _HEADER_TOKEN_CHARS for character in key)
+                or any(ord(character) < 32 or ord(character) == 127 for character in value)
+                or lowered in _FORBIDDEN_POST_HEADERS
+            ):
+                raise SchemaDriftError("HTTP request header is not allowed")
+            if lowered == "user-agent":
+                continue
+            prepared[key] = value
+        prepared["Content-Type"] = "application/json"
+        prepared["Content-Length"] = str(body_length)
+        prepared["User-Agent"] = USER_AGENT
+        return prepared
+
+    @staticmethod
+    def _preflight_json(payload: Any, max_bytes: int) -> None:
+        total_bytes = 0
+        node_count = 0
+        ancestors: set[int] = set()
+
+        def add(fragment: str) -> None:
+            nonlocal total_bytes
+            total_bytes += len(fragment)
+            if total_bytes > max_bytes:
+                raise SchemaDriftError("HTTP JSON request body exceeded the configured limit")
+
+        def add_json_string(value: str) -> None:
+            add('"')
+            for character in value:
+                codepoint = ord(character)
+                if character in {'"', "\\", "\b", "\f", "\n", "\r", "\t"}:
+                    width = 2
+                elif codepoint < 0x20:
+                    width = 6
+                elif codepoint <= 0x7F:
+                    width = 1
+                elif codepoint <= 0x7FF:
+                    width = 2
+                elif 0xD800 <= codepoint <= 0xDFFF:
+                    raise SchemaDriftError("HTTP JSON payload contains invalid Unicode")
+                elif codepoint <= 0xFFFF:
+                    width = 3
+                else:
+                    width = 4
+                add("x" * width)
+            add('"')
+
+        def visit(value: Any, depth: int) -> None:
+            nonlocal node_count
+            node_count += 1
+            if node_count > _MAX_JSON_NODES:
+                raise SchemaDriftError("HTTP JSON payload exceeded the node limit")
+            if depth > _MAX_JSON_DEPTH:
+                raise SchemaDriftError("HTTP JSON payload exceeded the depth limit")
+
+            value_type = type(value)
+            if value is None:
+                add("null")
+            elif value_type is bool:
+                add("true" if value else "false")
+            elif value_type is int:
+                if value.bit_length() > max(max_bytes - total_bytes, 0) * 4 + 4:
+                    raise SchemaDriftError(
+                        "HTTP JSON request body exceeded the configured limit"
+                    )
+                try:
+                    add(str(value))
+                except ValueError as error:
+                    raise SchemaDriftError("HTTP JSON integer cannot be encoded") from error
+            elif value_type is float:
+                if not math.isfinite(value):
+                    raise SchemaDriftError("HTTP JSON payload contains a non-finite number")
+                add(repr(value))
+            elif value_type is str:
+                add_json_string(value)
+            elif value_type is list:
+                identity = id(value)
+                if identity in ancestors:
+                    raise SchemaDriftError("HTTP JSON payload contains a cycle")
+                ancestors.add(identity)
+                try:
+                    add("[")
+                    for index, item in enumerate(value):
+                        if index:
+                            add(",")
+                        visit(item, depth + 1)
+                    add("]")
+                finally:
+                    ancestors.remove(identity)
+            elif value_type is dict:
+                identity = id(value)
+                if identity in ancestors:
+                    raise SchemaDriftError("HTTP JSON payload contains a cycle")
+                if any(type(key) is not str for key in value):
+                    raise SchemaDriftError("HTTP JSON object keys must be strings")
+                ancestors.add(identity)
+                try:
+                    add("{")
+                    for index, key in enumerate(sorted(value)):
+                        if index:
+                            add(",")
+                        add_json_string(key)
+                        add(":")
+                        visit(value[key], depth + 1)
+                    add("}")
+                finally:
+                    ancestors.remove(identity)
+            else:
+                raise SchemaDriftError("HTTP JSON payload contains an unsupported value")
+
+        visit(payload, 0)
 
     def _resolve_target(self, url: str, attempt: int) -> _ResolvedTarget:
         parsed = urlsplit(url)
