@@ -7,9 +7,11 @@ server metadata cannot accidentally enter checkpoints or logs.
 
 from __future__ import annotations
 
+import errno
 import ipaddress
 import json
 import socket
+import ssl
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -113,7 +115,7 @@ class HttpClient:
             response = self._request(current_url, request_headers, float(timeout), max_bytes)
             response_url = str(self._response_field(response, "url"))
             self._validate_url(response_url, hosts, paths, required_host=initial_host)
-            status = int(self._response_field(response, "status"))
+            status = self._parse_status(self._response_field(response, "status"))
             raw_headers = self._response_field(response, "headers") or {}
             if not isinstance(raw_headers, Mapping):
                 raise SchemaDriftError("HTTP response headers have an invalid shape")
@@ -178,18 +180,20 @@ class HttpClient:
                     raise AdapterError(
                         "public source request timed out", status="timeout", retryable=True
                     ) from None
-                if attempt == 0:
+                transient = self._is_transient_connection_failure(error)
+                if attempt == 0 and transient:
                     self._sleeper(0.0)
                     continue
                 raise AdapterError(
-                    "public source is unreachable", status="unreachable", retryable=True
+                    "public source is unreachable", status="unreachable", retryable=transient
                 ) from None
-            except (ConnectionError, OSError):
-                if attempt == 0:
+            except (ConnectionError, OSError) as error:
+                transient = self._is_transient_connection_failure(error)
+                if attempt == 0 and transient:
                     self._sleeper(0.0)
                     continue
                 raise AdapterError(
-                    "public source is unreachable", status="unreachable", retryable=True
+                    "public source is unreachable", status="unreachable", retryable=transient
                 ) from None
         raise AssertionError("unreachable")
 
@@ -202,6 +206,31 @@ class HttpClient:
         raise AdapterError(
             "public source response could not be read", status="unreachable", retryable=True
         ) from None
+
+    @staticmethod
+    def _is_transient_connection_failure(error: BaseException) -> bool:
+        reason = error.reason if isinstance(error, URLError) else error
+        if isinstance(reason, socket.gaierror):
+            return reason.errno == socket.EAI_AGAIN
+        if isinstance(reason, (ssl.SSLError, PermissionError, FileNotFoundError)):
+            return False
+        if isinstance(
+            reason,
+            (ConnectionResetError, ConnectionRefusedError, ConnectionAbortedError, BrokenPipeError),
+        ):
+            return True
+        if type(reason) is ConnectionError:
+            return True
+        if isinstance(reason, OSError):
+            return reason.errno in {
+                errno.ECONNABORTED,
+                errno.ECONNREFUSED,
+                errno.ECONNRESET,
+                errno.EHOSTUNREACH,
+                errno.ENETDOWN,
+                errno.ENETUNREACH,
+            }
+        return False
 
     def _validate_url(
         self,
@@ -300,14 +329,30 @@ class HttpClient:
 
     @staticmethod
     def _response_field(response: Any, field: str) -> Any:
-        if isinstance(response, Mapping):
-            if field not in response:
-                raise SchemaDriftError("HTTP transport returned an invalid response")
-            return response[field]
         try:
+            if isinstance(response, Mapping):
+                if field not in response:
+                    raise SchemaDriftError("HTTP transport returned an invalid response")
+                return response[field]
             return getattr(response, field)
         except AttributeError as error:
             raise SchemaDriftError("HTTP transport returned an invalid response") from error
+        except (TimeoutError, socket.timeout):
+            raise AdapterError(
+                "public source response timed out", status="timeout", retryable=True
+            ) from None
+        except (ConnectionError, OSError) as error:
+            raise AdapterError(
+                "public source response could not be read",
+                status="unreachable",
+                retryable=HttpClient._is_transient_connection_failure(error),
+            ) from None
+
+    @staticmethod
+    def _parse_status(value: Any) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or not 100 <= value <= 599:
+            raise SchemaDriftError("HTTP response status is invalid")
+        return value
 
     @staticmethod
     def _is_explicit_rate_limit(status: int, headers: Mapping[str, str]) -> bool:

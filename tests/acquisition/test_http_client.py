@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import socket
+import ssl
 import unittest
 from dataclasses import dataclass
 from unittest.mock import Mock, patch
@@ -41,6 +42,16 @@ class RecordingFetch:
         if isinstance(outcome, BaseException):
             raise outcome
         return outcome  # type: ignore[return-value]
+
+
+class BodyReadFailureResponse:
+    status = 200
+    url = "https://api.example.test/v1/items"
+    headers = {"Content-Type": "text/plain"}
+
+    @property
+    def body(self) -> bytes:
+        raise ConnectionResetError("response stream reset")
 
 
 def public_resolver(host: str, port: int) -> list[str]:
@@ -164,8 +175,40 @@ class HttpClientTests(unittest.TestCase):
         self.assertEqual(len(fetch.calls), 2)
         self.assertEqual(sleeps, [0.0])
 
+    def test_temporary_dns_failure_retries_once(self) -> None:
+        fetch = RecordingFetch(
+            URLError(socket.gaierror(socket.EAI_AGAIN, "temporary DNS failure")),
+            RawResponse(body=b"recovered"),
+        )
+
+        response = self.get(fetch)
+
+        self.assertEqual(response.body, "recovered")
+        self.assertEqual(len(fetch.calls), 2)
+
+    def test_non_transient_transport_failures_are_not_retried(self) -> None:
+        failures = (
+            ssl.SSLCertVerificationError(1, "certificate rejected"),
+            PermissionError("operation denied"),
+            FileNotFoundError("local file missing"),
+            URLError(socket.gaierror(socket.EAI_NONAME, "host does not exist")),
+        )
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__):
+                fetch = RecordingFetch(failure, RawResponse(body=b"must not be used"))
+
+                with self.assertRaises(AdapterError) as caught:
+                    self.get(fetch)
+
+                self.assertEqual(caught.exception.status, "unreachable")
+                self.assertFalse(caught.exception.retryable)
+                self.assertEqual(len(fetch.calls), 1)
+
     def test_connection_failure_after_retry_is_unreachable_and_sanitized(self) -> None:
-        fetch = RecordingFetch(URLError("/local/private/path"), ConnectionError("token=secret"))
+        fetch = RecordingFetch(
+            URLError(ConnectionResetError("/local/private/path")),
+            ConnectionError("token=secret"),
+        )
 
         with self.assertRaises(AdapterError) as caught:
             self.get(fetch)
@@ -209,11 +252,30 @@ class HttpClientTests(unittest.TestCase):
         self.assertEqual(caught.exception.status, "unreachable")
         self.assertEqual(opener.open.call_count, 1)
 
+    def test_injected_response_body_failure_is_classified_without_retry(self) -> None:
+        fetch = RecordingFetch(BodyReadFailureResponse(), RawResponse(body=b"must not be used"))
+
+        with self.assertRaises(AdapterError) as caught:
+            self.get(fetch)
+
+        self.assertEqual(caught.exception.status, "unreachable")
+        self.assertTrue(caught.exception.retryable)
+        self.assertEqual(len(fetch.calls), 1)
+
     def test_rejects_body_over_limit(self) -> None:
         fetch = RecordingFetch(RawResponse(body=b"12345"))
 
         with self.assertRaises(SchemaDriftError):
             self.get(fetch, max_bytes=4)
+
+    def test_malformed_response_status_maps_to_schema_drift(self) -> None:
+        fetch = RecordingFetch(RawResponse(status="bogus"))  # type: ignore[arg-type]
+
+        with self.assertRaises(SchemaDriftError) as caught:
+            self.get(fetch)
+
+        self.assertEqual(caught.exception.status, "schema-drift")
+        self.assertFalse(caught.exception.retryable)
 
     def test_429_maps_to_rate_limited_without_retry_or_header_leak(self) -> None:
         fetch = RecordingFetch(
