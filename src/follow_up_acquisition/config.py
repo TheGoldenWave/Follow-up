@@ -8,6 +8,7 @@ once a source has been migrated into the registry.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 from pathlib import Path
 import re
@@ -35,6 +36,7 @@ _REGISTRY_SCHEMA_VERSION = "1.0"
 
 _QUERY_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_DNS_LABEL_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _MAX_STRING_LENGTH = 4096
 _MAX_METRIC_FILTER = 1_000_000_000
 _MAX_BUDGET = 1000
@@ -186,12 +188,49 @@ def _require_https_url(value: Any, label: str, *, template: bool = False) -> Non
     try:
         parsed = urlparse(candidate)
         hostname = parsed.hostname
+        port = parsed.port
     except ValueError as exc:
         raise ConfigError(f"{label} must be a public HTTPS URL") from exc
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
         raise ConfigError(f"{label} must be a public HTTPS URL")
     if not hostname:
         raise ConfigError(f"{label} must be a public HTTPS URL")
+    if any(character.isspace() for character in parsed.netloc):
+        raise ConfigError(f"{label} has invalid HTTPS authority whitespace")
+    if port is not None and not 1 <= port <= 65535:
+        raise ConfigError(f"{label} has an invalid HTTPS port")
+    if parsed.netloc.endswith(":"):
+        raise ConfigError(f"{label} has an invalid HTTPS port")
+    if ":" in hostname:
+        try:
+            ipaddress.IPv6Address(hostname)
+        except ValueError as exc:
+            raise ConfigError(f"{label} has an invalid IPv6 host") from exc
+        if not parsed.netloc.startswith("["):
+            raise ConfigError(f"{label} must bracket an IPv6 host")
+        return
+    if all(character.isdigit() or character == "." for character in hostname):
+        try:
+            ipaddress.IPv4Address(hostname)
+        except ValueError as exc:
+            raise ConfigError(f"{label} has an invalid IPv4 host") from exc
+        return
+    labels = hostname.split(".")
+    if not labels or any(not item for item in labels):
+        raise ConfigError(f"{label} has an invalid DNS host")
+    ascii_labels: list[str] = []
+    for host_label in labels:
+        if any(character.isspace() for character in host_label):
+            raise ConfigError(f"{label} has invalid HTTPS authority whitespace")
+        try:
+            ascii_label = host_label.encode("idna").decode("ascii")
+        except (UnicodeError, ValueError) as exc:
+            raise ConfigError(f"{label} has an invalid IDNA host") from exc
+        if len(ascii_label) > 63 or _DNS_LABEL_RE.fullmatch(ascii_label) is None:
+            raise ConfigError(f"{label} has an invalid DNS label")
+        ascii_labels.append(ascii_label)
+    if len(".".join(ascii_labels)) > 253:
+        raise ConfigError(f"{label} has an invalid DNS host")
 
 
 def _require_path_url_template(value: Any, label: str) -> None:
@@ -456,15 +495,31 @@ def load_source_registry(path: str | Path) -> list[dict[str, Any]]:
         return validate_source_registry(json.load(handle))
 
 
+def _validate_credential_tree(value: Any, path: str) -> None:
+    if type(value) is dict:
+        for key, child in value.items():
+            _require_string(key, f"{path} field name")
+            child_path = f"{path}.{key}"
+            if is_credential_key(key):
+                reference = _require_closed_fields(
+                    child, child_path, allowed={"ref"}, required={"ref"},
+                )
+                _require_string(reference["ref"], f"{child_path}.ref")
+            _validate_credential_tree(child, child_path)
+        return
+    if type(value) is list:
+        for index, child in enumerate(value):
+            _validate_credential_tree(child, f"{path}[{index}]")
+        return
+    if type(value) not in {str, int, float, bool, type(None)}:
+        raise ConfigError(f"{path} must use exact JSON container and scalar types")
+
+
 def validate_credential_references(config: Any) -> None:
     """Reject raw credential values: credential keys must reference a secret store."""
-    if not isinstance(config, dict):
-        raise ConfigError("config must be an object")
-    for path, value in _iter_credential_keys(config):
-        if not isinstance(value, dict) or "ref" not in value:
-            raise ConfigError(
-                f"{path} must be a credential reference (an object with a 'ref' field)"
-            )
+    if type(config) is not dict:
+        raise ConfigError("$ must be an exact config object")
+    _validate_credential_tree(config, "$")
 
 
 def validate_acquisition_mode(mode: Any) -> None:

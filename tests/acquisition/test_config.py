@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -438,6 +440,36 @@ class AdapterInputAdversarialTests(unittest.TestCase):
                 validate_source_registry(_registry([source]))
             self.assertNotIn(str(value), str(caught.exception))
 
+    def test_https_authority_rejects_malformed_ports_hosts_and_userinfo(self):
+        invalid_urls = (
+            "https://example.com:abc/feed", "https://example.com:/feed",
+            "https://example.com:0/feed", "https://example.com:65536/feed", "https://example.com:-1/feed",
+            "https://example.com:+443/feed", "https://user@example.com/feed",
+            "https://user:pass@example.com/feed", "https:// example.com/feed",
+            "https://example .com/feed", "https://example\u00a0.com/feed",
+            "https://foo..example.com/feed", "https://.example.com/feed",
+            "https://example.com./feed", f"https://{'a' * 64}.example/feed",
+            "https://-bad.example/feed", "https://bad-.example/feed",
+            "https://bad_host.example/feed", "https://999.1.1.1/feed",
+            "https://1.2.3/feed", "https://[gggg::1]/feed", "https://2001:db8::1/feed",
+            "https://[2001:db8::1]suffix/feed", "https://[2001:db8::1]:443:444/feed",
+        )
+        for url in invalid_urls:
+            with self.subTest(url=url):
+                with self.assertRaises(ConfigError) as caught:
+                    validate_source_registry(_registry([_source_for_adapter("rss", {"rss_url": url})]))
+                self.assertNotIn(url, str(caught.exception))
+
+    def test_https_authority_accepts_valid_dns_idna_ipv4_ipv6_and_ports(self):
+        valid_urls = (
+            "https://example.com/feed", "https://sub.example.com:8443/feed",
+            "https://127.0.0.1:443/feed", "https://[2001:db8::1]/feed",
+            "https://[2001:db8::1]:8443/feed", "https://例子.测试/feed",
+        )
+        for url in valid_urls:
+            with self.subTest(url=url):
+                validate_source_registry(_registry([_source_for_adapter("rss", {"rss_url": url})]))
+
     def test_boolean_and_integer_fields_reject_coercible_or_unbounded_values(self):
         boolean_cases = [1, 0, "false", None]
         for value in boolean_cases:
@@ -522,6 +554,68 @@ class CredentialReferenceTests(unittest.TestCase):
 
     def test_ignores_benign_keys(self):
         validate_credential_references({"mode": "central", "depth": 3, "enabled": True})
+
+    def test_rejects_root_and_nested_container_subclasses_at_their_paths(self):
+        class DictSubclass(dict):
+            pass
+
+        class ListSubclass(list):
+            pass
+
+        cases = (
+            (DictSubclass(mode="central"), "$"),
+            ({"delivery": DictSubclass(mode="central")}, "$.delivery"),
+            ({"delivery": ListSubclass([{"mode": "central"}])}, "$.delivery"),
+            ({"api_key": DictSubclass(ref="env.X_API_KEY")}, "$.api_key"),
+        )
+        for config, path in cases:
+            with self.subTest(path=path), self.assertRaisesRegex(ConfigError, re.escape(path)):
+                validate_credential_references(config)
+
+    def test_rejects_hostile_mapping_without_iterating_or_rendering_it(self):
+        class HostileMapping(Mapping):
+            iterated = False
+            rendered = False
+
+            def __getitem__(self, key):
+                raise AssertionError("must not index hostile mapping")
+
+            def __iter__(self):
+                type(self).iterated = True
+                raise AssertionError("must not iterate hostile mapping")
+
+            def __len__(self):
+                raise AssertionError("must not size hostile mapping")
+
+            def __repr__(self):
+                type(self).rendered = True
+                raise AssertionError("must not render hostile mapping")
+
+        hostile = HostileMapping()
+        for config, path in ((hostile, "$"), ({"nested": hostile}, "$.nested")):
+            with self.subTest(path=path), self.assertRaisesRegex(ConfigError, re.escape(path)):
+                validate_credential_references(config)
+        self.assertFalse(HostileMapping.iterated)
+        self.assertFalse(HostileMapping.rendered)
+
+    def test_credential_reference_requires_exact_safe_ref_and_no_raw_sibling(self):
+        class StringSubclass(str):
+            pass
+
+        invalid = (
+            {"api_key": {"ref": StringSubclass("env.X_API_KEY")}},
+            {"api_key": {"ref": ""}},
+            {"api_key": {"ref": "env.X\x00_API_KEY"}},
+            {"api_key": {"ref": "env.X_API_KEY", "token": "raw"}},
+        )
+        for config in invalid:
+            with self.subTest(), self.assertRaises(ConfigError):
+                validate_credential_references(config)
+
+    def test_allows_safe_nested_exact_builtin_credential_tree(self):
+        validate_credential_references({
+            "delivery": [{"provider": "example", "api_key": {"ref": "env.X_API_KEY"}}],
+        })
 
 
 class AcquisitionModeTests(unittest.TestCase):
