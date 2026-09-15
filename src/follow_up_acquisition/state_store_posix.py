@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import dataclass
 import errno
 import os
 from pathlib import Path
@@ -24,6 +25,17 @@ class PosixBackendError(OSError):
 
 class _RootMissing(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class _PinnedDirectory:
+    parent_fd: int
+    name: str
+    device: int
+    inode: int
+    mode: int
+    nlink: int
+    require_private: bool
 
 
 def posix_backend_available(platform_name: str | None = None) -> bool:
@@ -71,14 +83,17 @@ class PosixStateBackend:
         return info.st_dev, info.st_ino
 
     @contextmanager
-    def _pinned_root(self, *, create: bool) -> Iterator[tuple[int, list[tuple[int, str, tuple[int, int]]]]]:
+    def _pinned_root(
+        self, *, create: bool,
+    ) -> Iterator[tuple[int, list[_PinnedDirectory]]]:
         flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
         descriptors: list[int] = []
-        links: list[tuple[int, str, tuple[int, int]]] = []
+        links: list[_PinnedDirectory] = []
         try:
             parent_fd = os.open(self.root.anchor, flags)
             descriptors.append(parent_fd)
-            for part in self.root.parts[1:]:
+            parts = self.root.parts[1:]
+            for index, part in enumerate(parts):
                 try:
                     child_fd = os.open(part, flags, dir_fd=parent_fd)
                 except FileNotFoundError:
@@ -94,13 +109,25 @@ class PosixStateBackend:
                 info = os.fstat(child_fd)
                 if not stat.S_ISDIR(info.st_mode):
                     raise PosixBackendError("state directory chain contains a non-directory")
-                links.append((parent_fd, part, self._identity(info)))
+                links.append(_PinnedDirectory(
+                    parent_fd=parent_fd,
+                    name=part,
+                    device=info.st_dev,
+                    inode=info.st_ino,
+                    mode=stat.S_IMODE(info.st_mode),
+                    nlink=info.st_nlink,
+                    require_private=index == len(parts) - 1,
+                ))
                 descriptors.append(child_fd)
                 parent_fd = child_fd
             root_fd = descriptors[-1]
             root_info = os.fstat(root_fd)
             if stat.S_IMODE(root_info.st_mode) & 0o077:
                 raise PosixBackendError("state root permissions exceed 0700")
+            # Creating a missing child directory legitimately increments its
+            # parent's nlink. Freeze the trusted metadata only after the full
+            # chain exists so later changes are meaningful.
+            self._refresh_chain(links)
             yield root_fd, links
         finally:
             for descriptor in reversed(descriptors):
@@ -110,14 +137,71 @@ class PosixStateBackend:
                     pass
 
     @staticmethod
-    def _verify_chain(links: list[tuple[int, str, tuple[int, int]]]) -> None:
-        for parent_fd, name, expected in links:
+    def _verify_chain(links: list[_PinnedDirectory]) -> None:
+        for trusted in links:
             try:
-                info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+                info = os.stat(
+                    trusted.name, dir_fd=trusted.parent_fd, follow_symlinks=False,
+                )
             except OSError as exc:
                 raise PosixBackendError("state directory identity changed") from exc
-            if not stat.S_ISDIR(info.st_mode) or (info.st_dev, info.st_ino) != expected:
+            current_mode = stat.S_IMODE(info.st_mode)
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
+                or current_mode != trusted.mode
+                or (trusted.require_private and info.st_nlink <= 0)
+                or (not trusted.require_private and info.st_nlink != trusted.nlink)
+                or (trusted.require_private and current_mode & 0o077)
+            ):
                 raise PosixBackendError("state directory identity changed")
+
+    @staticmethod
+    def _refresh_chain(links: list[_PinnedDirectory]) -> None:
+        """Refresh metadata after a backend-controlled root entry mutation."""
+        refreshed: list[_PinnedDirectory] = []
+        for trusted in links:
+            info = os.stat(
+                trusted.name, dir_fd=trusted.parent_fd, follow_symlinks=False,
+            )
+            refreshed.append(_PinnedDirectory(
+                parent_fd=trusted.parent_fd,
+                name=trusted.name,
+                device=info.st_dev,
+                inode=info.st_ino,
+                mode=stat.S_IMODE(info.st_mode),
+                nlink=info.st_nlink,
+                require_private=trusted.require_private,
+            ))
+        links[:] = refreshed
+
+    @staticmethod
+    def _accept_controlled_root_nlink_change(links: list[_PinnedDirectory]) -> None:
+        """Account for an entry mutation without trusting other metadata changes."""
+        refreshed: list[_PinnedDirectory] = []
+        for trusted in links:
+            info = os.stat(
+                trusted.name, dir_fd=trusted.parent_fd, follow_symlinks=False,
+            )
+            current_mode = stat.S_IMODE(info.st_mode)
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
+                or current_mode != trusted.mode
+                or (not trusted.require_private and info.st_nlink != trusted.nlink)
+                or (trusted.require_private and current_mode & 0o077)
+            ):
+                raise PosixBackendError("state directory identity changed")
+            refreshed.append(_PinnedDirectory(
+                parent_fd=trusted.parent_fd,
+                name=trusted.name,
+                device=trusted.device,
+                inode=trusted.inode,
+                mode=trusted.mode,
+                nlink=trusted.nlink,
+                require_private=trusted.require_private,
+            ))
+        links[:] = refreshed
 
     @staticmethod
     def _validate_regular(info: os.stat_result, label: str) -> None:
@@ -232,6 +316,7 @@ class PosixStateBackend:
                 lock_info = os.fstat(lock_fd)
                 self._validate_regular(lock_info, "state lock")
                 lock_identity = self._identity(lock_info)
+                self._accept_controlled_root_nlink_change(links)
                 self._hook("after_lock_open")
                 self._verify_named_identity(root_fd, lock_name, lock_identity, "state lock")
                 os.fchmod(lock_fd, 0o600)
@@ -250,6 +335,7 @@ class PosixStateBackend:
                             root_fd, candidate, os.O_WRONLY | os.O_CREAT | os.O_EXCL,
                         )
                         temp_name = candidate
+                        self._accept_controlled_root_nlink_change(links)
                         break
                     except FileExistsError:
                         continue
@@ -281,6 +367,7 @@ class PosixStateBackend:
                 os.replace(temp_name, name, src_dir_fd=root_fd, dst_dir_fd=root_fd)
                 temp_name = None
                 published = True
+                self._accept_controlled_root_nlink_change(links)
                 self._hook("after_replace")
                 self._hook("before_directory_fsync")
                 os.fsync(root_fd)
