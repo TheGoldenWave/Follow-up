@@ -93,3 +93,21 @@ test('createSourceRegistry rejects malformed canonical documents', () => {
     /schema/i,
   );
 });
+
+test('source IDs accept 128 characters and reject 129 without echoing the ID', () => {
+  const source = (id) => ({
+    id, name: 'Boundary', channel: 'x', channel_policy: 'fixed', adapter: 'x',
+    requires_credentials: true, default_enabled: false, cadence: 'daily', budget: 1,
+    input: { handle: 'boundary' }, legacy: { feed: 'feed-x.json' },
+  });
+  const accepted = `x:${'a'.repeat(126)}`;
+  const rejected = `x:${'a'.repeat(127)}`;
+  assert.equal(accepted.length, 128);
+  assert.equal(rejected.length, 129);
+  assert.equal(createSourceRegistry({ schema_version: '1.0', sources: [source(accepted)] },
+    { scope: 'all' })[0].id, accepted);
+  assert.throws(
+    () => createSourceRegistry({ schema_version: '1.0', sources: [source(rejected)] }, { scope: 'all' }),
+    (error) => /source id length/i.test(error.message) && !error.message.includes(rejected),
+  );
+});

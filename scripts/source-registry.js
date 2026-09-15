@@ -55,7 +55,11 @@ function validateDocument(document) {
   if (!Array.isArray(document.sources)) throw new TypeError('source registry sources must be an array');
   const seen = new Set();
   for (const source of document.sources) {
-    if (!source || typeof source !== 'object' || !ID_PATTERN.test(source.id ?? '')) {
+    if (!source || typeof source !== 'object' || typeof source.id !== 'string') {
+      throw new TypeError('each source requires an explicit namespaced source id');
+    }
+    if (source.id.length > 128) throw new TypeError('source id length must not exceed 128 characters');
+    if (!ID_PATTERN.test(source.id)) {
       throw new TypeError('each source requires an explicit namespaced source id');
     }
     if (seen.has(source.id)) throw new TypeError(`Duplicate source id: ${source.id}`);
