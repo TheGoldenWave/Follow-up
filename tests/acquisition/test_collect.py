@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from follow_up_acquisition.adapters.rss import RssAdapter
 from follow_up_acquisition.adapters.web_publication import WebPublicationAdapter
 from follow_up_acquisition.collect import (
+    CollectionRun,
     SHADOW_REQUEST,
     build_source_pairs,
+    collect_run,
     collect_sources,
+    derive_active_stream_ids,
 )
+from follow_up_acquisition.runtime import CheckpointUpdate, FrozenMapping, SourceResult
 
 
 def _source(source_id: str, adapter: str) -> dict:
@@ -59,6 +64,47 @@ class CollectSourcesTests(unittest.TestCase):
     def test_collect_sources_returns_empty_when_nothing_collectable(self):
         sources = [_source("x:a", "x")]
         self.assertEqual(collect_sources(sources), {})
+
+    def test_collect_run_retains_immutable_checkpoint_updates(self):
+        source = _source("newsletter:x", "rss")
+        update = CheckpointUpdate("rss", None, FrozenMapping({"cursor": None}))
+        fake_result = SourceResult("rss", "1.0", source["id"], "ok", checkpoint_updates=(update,))
+        batch = {"source": source["id"], "batch_id": "batch-1"}
+        with patch("follow_up_acquisition.collect.AcquisitionRuntime.collect_one", return_value=fake_result), \
+             patch("follow_up_acquisition.collect.AcquisitionRuntime.build_batch", return_value=batch):
+            result = collect_run([source])
+            compatible = collect_sources([source])
+        self.assertIsInstance(result, CollectionRun)
+        self.assertEqual(result.batches, {source["id"]: batch})
+        retained = result.checkpoint_updates[source["id"]][0]
+        self.assertIsInstance(retained.checkpoint, FrozenMapping)
+        self.assertEqual(compatible, {source["id"]: batch})
+
+    def test_active_stream_ids_are_adapter_defined_and_canonically_sorted(self):
+        github = _source("community:github", "github")
+        github["input"] = {
+            "include_discussions": True,
+            "queries": [{"id": "zeta"}, {"id": "alpha"}],
+        }
+        hn = _source("community:hacker-news", "hackernews")
+        hn["input"] = {
+            "top_enabled": True, "new_enabled": False,
+            "queries": [{"id": "zeta"}, {"id": "alpha"}],
+        }
+        hf = _source("academic:hugging-face-papers", "hugging-face-papers")
+        hf["input"] = {"views": ["weekly", "daily", "trending"]}
+        self.assertEqual(
+            derive_active_stream_ids(github),
+            ("discussions", "query.alpha", "query.zeta"),
+        )
+        self.assertEqual(
+            derive_active_stream_ids(hn),
+            ("search.alpha", "search.zeta", "top"),
+        )
+        self.assertEqual(
+            derive_active_stream_ids(hf),
+            ("daily", "trending", "weekly"),
+        )
 
 
 if __name__ == "__main__":

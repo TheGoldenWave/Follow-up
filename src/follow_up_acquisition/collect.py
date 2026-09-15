@@ -8,17 +8,52 @@ rest of the run.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from .adapters.rss import RssAdapter
 from .adapters.web_publication import WebPublicationAdapter
 from .runtime import AcquisitionRuntime
+from .runtime import CheckpointUpdate
 
 SHADOW_REQUEST: dict[str, str] = {"mode": "shadow"}
 
 # Adapters wired for v0.3.0 local collection. The remaining adapter ids in the
 # registry stay deferred to later versions per the frozen scope.
 _COLLECTABLE_ADAPTERS = frozenset({"rss", "web-publication"})
+
+
+@dataclass(frozen=True)
+class CollectionRun:
+    """One staged collection with pending state deliberately kept separate."""
+
+    batches: dict[str, dict[str, Any]]
+    checkpoint_updates: dict[str, tuple[CheckpointUpdate, ...]]
+    active_stream_ids: dict[str, tuple[str, ...]]
+
+
+def derive_active_stream_ids(source: dict[str, Any]) -> tuple[str, ...]:
+    """Derive the complete stable stream set from one validated registry row."""
+    adapter = source["adapter"]
+    values = source.get("input", {})
+    streams: list[str] = []
+    if adapter == "github":
+        streams.extend(f"query.{query['id']}" for query in values.get("queries", []))
+        if values.get("include_discussions"):
+            streams.append("discussions")
+    elif adapter == "hackernews":
+        if values.get("top_enabled"):
+            streams.append("top")
+        if values.get("new_enabled"):
+            streams.append("new")
+        streams.extend(f"search.{query['id']}" for query in values.get("queries", []))
+    elif adapter == "techmeme":
+        streams.extend(("front", "archive"))
+    elif adapter == "arxiv":
+        streams.extend(("rss", "metadata"))
+    elif adapter == "hugging-face-papers":
+        streams.extend(values.get("views", ()))
+    return tuple(sorted(set(streams), key=lambda item: item.encode("utf-8")))
 
 
 def build_source_pairs(sources: list[dict[str, Any]]) -> list[tuple[Any, str]]:
@@ -42,10 +77,29 @@ def collect_sources(
     source_ids: set[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Collect the given sources and return ``{source_id: batch}``."""
+    return collect_run(sources, request, source_ids).batches
+
+
+def collect_run(
+    sources: list[dict[str, Any]],
+    request: dict[str, Any] | None = None,
+    source_ids: set[str] | None = None,
+) -> CollectionRun:
+    """Collect batches while retaining validated immutable checkpoint updates."""
     pairs = build_source_pairs(sources)
     runtime = AcquisitionRuntime()
-    return runtime.run(
-        pairs,
-        request if request is not None else SHADOW_REQUEST,
-        source_ids=source_ids,
-    )
+    effective_request = request if request is not None else SHADOW_REQUEST
+    by_id = {source["id"]: source for source in sources}
+    batches: dict[str, dict[str, Any]] = {}
+    updates: dict[str, tuple[CheckpointUpdate, ...]] = {}
+    active: dict[str, tuple[str, ...]] = {}
+    for adapter, source_id in pairs:
+        if source_ids is not None and source_id not in source_ids:
+            continue
+        result = runtime.collect_one(adapter, source_id, effective_request)
+        batches[source_id] = runtime.build_batch(
+            adapter, source_id, effective_request, result,
+        )
+        updates[source_id] = result.checkpoint_updates
+        active[source_id] = derive_active_stream_ids(by_id[source_id])
+    return CollectionRun(batches, updates, active)

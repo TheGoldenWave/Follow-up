@@ -5,11 +5,20 @@ import { validateConfig } from '../config-contract.js';
 import { collectAndPrepare, main } from '../collect-and-prepare.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { recordRun, saveMigrationState, loadMigrationState } from '../lib/migration-state.js';
+
+async function writeEmptyIntent(checkpointOut, runId, batches) {
+  await writeFile(checkpointOut, JSON.stringify({
+    schema_version: '1.0', run_id: runId, generated_at: '2026-09-15T08:00:00Z',
+    sources: Object.values(batches).map(value => ({
+      source_id: value.source, batch_id: value.batch_id, active_stream_ids: [], updates: [],
+    })).sort((left, right) => Buffer.from(left.source_id).compare(Buffer.from(right.source_id))),
+  }));
+}
 
 test('secret output rolls back a cutover source without persisting leaked text', async (t) => {
   const home = await mkdtemp(join(tmpdir(), 'entry-secret-'));
@@ -26,16 +35,19 @@ test('secret output rolls back a cutover source without persisting leaked text',
   local.items[0].text = 'ghp_' + 'a'.repeat(36);
   const code = await main({ userDir, now: '2026-09-09T12:00:00.000Z', argv: ['--request-out', join(home, 'request.json')],
     stdout: { write() {} }, stderr: { write() {} },
-    invokeRun: async ({ outputDir }) => {
+    invokeRun: async ({ outputDir, checkpointOut, runId }) => {
       await mkdir(outputDir, { recursive: true });
       await writeFile(join(outputDir, `${local.source}.json`), JSON.stringify(local));
+      await writeEmptyIntent(checkpointOut, runId, { [local.source]: local });
     },
+    commitCheckpoints: async () => ({ checkpointStatus: 'committed', report: {} }),
   });
   assert.equal(code, 1);
   const updated = await loadMigrationState(join(acq, 'migration.json'));
   assert.equal(updated.sources[local.source].input, 'central');
   assert.equal(updated.sources[local.source].rollback_reason, 'secret-leak');
   assert.equal(JSON.stringify(updated).includes(local.items[0].text), false);
+  assert.equal((await stat(acq)).mode & 0o777, 0o700);
   await assert.rejects(readFile(join(acq, 'latest', `${local.source}.json`)), { code: 'ENOENT' });
 });
 
@@ -92,10 +104,12 @@ test('local mode invokes acquisition and publishes atomically', async () => {
     now: '2026-09-08T10:00:00.000Z',
     randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     userDir: '/tmp/follow-builders',
-    invokeRun: async ({ outputDir }) => { calls.push(['run', outputDir]); },
+    invokeRun: async ({ outputDir, checkpointOut, runId }) => { calls.push(['run', outputDir, checkpointOut, runId]); },
     loadBatches: async ({ outputDir }) => ({ 'blog:test': batch('blog:test') }),
+    loadIntent: async () => ({ run_id: 'run', sources: [] }),
     publishRun: async (batches, opts) => { calls.push(['publish-run', opts.runsDir, opts.runId]); },
     publishPointers: async (batches, opts) => { calls.push(['publish-pointers', opts.latestDir, opts.runId]); },
+    commitCheckpoints: async () => { calls.push(['commit']); return { checkpointStatus: 'committed' }; },
   });
 
   assert.equal(result.collected, true);
@@ -104,8 +118,57 @@ test('local mode invokes acquisition and publishes atomically', async () => {
   assert.equal(result.runId, '2026-09-08T10-00-00-000Z-aaaaaaaa');
   assert.equal(calls[0][0], 'run');
   assert.match(calls[0][1], /acquisition\/staging\/2026-09-08T10-00-00-000Z-aaaaaaaa$/);
+  assert.equal(calls[0][2], join(calls[0][1], 'checkpoint-intent.json'));
+  assert.equal(calls[0][3], result.runId);
   assert.equal(calls[1][0], 'publish-run');
   assert.equal(calls[2][0], 'publish-pointers');
+  assert.equal(calls[3][0], 'commit');
+  assert.equal(result.checkpointStatus, 'committed');
+});
+
+test('checkpoint commit happens only after run and every pointer publish', async () => {
+  const calls = [];
+  const common = {
+    config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
+    invokeRun: async () => calls.push('run'),
+    loadBatches: async () => { calls.push('load-batches'); return { 'blog:test': batch('blog:test') }; },
+    loadIntent: async () => { calls.push('load-intent'); return { sources: [] }; },
+    publishRun: async () => calls.push('publish-run'),
+    publishPointers: async () => calls.push('publish-pointers'),
+    commitCheckpoints: async () => { calls.push('commit'); return { checkpointStatus: 'committed' }; },
+  };
+  await collectAndPrepare(common);
+  assert.deepEqual(calls, ['run', 'load-batches', 'load-intent', 'publish-run', 'publish-pointers', 'commit']);
+  calls.length = 0;
+  await assert.rejects(() => collectAndPrepare({ ...common, publishPointers: async () => { calls.push('publish-pointers'); throw new Error('pointer'); } }), /pointer/);
+  assert.equal(calls.includes('commit'), false);
+});
+
+test('invalid checkpoint intent cannot publish or commit', async () => {
+  let published = false;
+  let committed = false;
+  await assert.rejects(() => collectAndPrepare({
+    config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
+    invokeRun: async () => {}, loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
+    loadIntent: async () => { throw new Error('invalid checkpoint intent'); },
+    publishRun: async () => { published = true; }, publishPointers: async () => { published = true; },
+    commitCheckpoints: async () => { committed = true; },
+  }), /invalid checkpoint intent/);
+  assert.equal(published, false);
+  assert.equal(committed, false);
+});
+
+test('checkpoint conflict preserves published run and continues preparation', async () => {
+  let prepared = false;
+  const result = await collectAndPrepare({
+    config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
+    invokeRun: async () => {}, loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
+    loadIntent: async () => ({ sources: [] }), publishRun: async () => {}, publishPointers: async () => {},
+    commitCheckpoints: async () => ({ checkpointStatus: 'partial', code: 3 }),
+    prepare: async () => { prepared = true; return { status: 'request-ready' }; },
+  });
+  assert.equal(result.checkpointStatus, 'partial');
+  assert.equal(prepared, true);
 });
 
 test('unknown mode is rejected', async () => {
@@ -146,6 +209,7 @@ test('semantic validation failure cannot publish a latest pointer', async () => 
   await assert.rejects(collectAndPrepare({
     config: { acquisition: { mode: 'local' } },
     invokeRun: async () => {}, loadBatches: async () => ({ 'blog:a': batch('blog:a') }),
+    loadIntent: async () => ({ sources: [] }),
     validateBatches: () => { throw new Error('item source mismatch'); },
     publishRun: async () => { published = true; },
     publishPointers: async () => { published = true; },
@@ -170,11 +234,13 @@ for (const mode of ['central', 'shadow', 'hybrid', 'local']) {
     const output = join(home, 'request.json');
     const code = await main({ userDir, now, argv: ['--request-out', output],
       stdout: { write() {} }, stderr: { write(message) { errors.push(message); } },
-      invokeRun: async ({ outputDir }) => {
+      invokeRun: async ({ outputDir, checkpointOut, runId }) => {
         acquired++;
         await mkdir(outputDir, { recursive: true });
         await writeFile(join(outputDir, `${local.source}.json`), JSON.stringify(local));
+        await writeEmptyIntent(checkpointOut, runId, { [local.source]: local });
       },
+      commitCheckpoints: async () => ({ checkpointStatus: 'committed', report: {} }),
       preparation: { deliveryEvents: [], loadCurationPrompt: async () => 'curate', loadCandidateFeed: async () => {
         fetched++;
         if (mode === 'local') throw new Error('central forbidden');
