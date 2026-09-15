@@ -7,6 +7,7 @@ from collections.abc import Mapping
 import json
 import re
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from follow_up_acquisition.config import (
@@ -193,6 +194,15 @@ class GeneratedRegistryTests(unittest.TestCase):
         self.assertEqual(hf["views"], ["daily", "trending", "weekly"])
         self.assertEqual(hf["timezone"], "Asia/Shanghai")
 
+    def test_canonical_registry_preserves_legacy_tags(self):
+        sources = {source["id"]: source for source in load_source_registry(REGISTRY_PATH)}
+        self.assertEqual(sources["newsletter:stratechery"]["input"]["tags"],
+                         ["newsletter", "tech-strategy", "daily"])
+        self.assertEqual(sources["academic:arxiv-cs-ai"]["input"]["tags"],
+                         ["academic", "ai", "daily"])
+        self.assertEqual(sources["zh-tech:36kr"]["input"]["tags"],
+                         ["zh", "tech-business", "daily"])
+
     def test_generated_registry_has_expected_live_count(self):
         sources = load_source_registry(REGISTRY_PATH)
         live = [s for s in sources if s["legacy"]["feed"] is not None]
@@ -220,8 +230,21 @@ class SourceRegistryValidationTests(unittest.TestCase):
             validate_source_registry(registry)
 
     def test_rejects_duplicate_id(self):
-        with self.assertRaises(ConfigError):
+        with self.assertRaisesRegex(ConfigError, r"sources\[0\].*sources\[1\]") as caught:
             validate_source_registry(_registry([VALID_SOURCE, VALID_SOURCE]))
+        self.assertNotIn(VALID_SOURCE["id"], str(caught.exception))
+
+    def test_source_ids_use_the_exact_shared_node_grammar(self):
+        class StringSubclass(str):
+            pass
+
+        invalid_ids = (
+            StringSubclass("x:test"), "X:test", "x:Test", "x:test:extra", "x:../test",
+            "x:test/path", "x:test value", "é:test", "x:测试", "x:test\x00", "x:" + "a" * 127,
+        )
+        for source_id in invalid_ids:
+            with self.subTest(kind=type(source_id).__name__), self.assertRaises(ConfigError):
+                validate_source_registry(_registry([_mutate(id=source_id)]))
 
     def test_rejects_non_namespaced_id(self):
         with self.assertRaises(ConfigError):
@@ -324,6 +347,12 @@ class SourceRegistryValidationTests(unittest.TestCase):
                              adapter="github", input={**base, "queries": queries}, legacy={"feed": None})
             with self.assertRaises(ConfigError):
                 validate_source_registry(_registry([source]))
+
+    def test_query_validation_reuses_authoritative_fingerprint_contract(self):
+        source = _source_for_adapter("github")
+        with patch("follow_up_acquisition.config.query_fingerprint", return_value="a" * 64) as fingerprint:
+            validate_source_registry(_registry([source]))
+        fingerprint.assert_called_once_with("github", source["input"]["queries"][0])
 
     def test_rejects_hackernews_unknown_tags_and_filters(self):
         base = {
@@ -466,10 +495,25 @@ class AdapterInputAdversarialTests(unittest.TestCase):
             "https://example.com/feed", "https://sub.example.com:8443/feed",
             "https://127.0.0.1:443/feed", "https://[2001:db8::1]/feed",
             "https://[2001:db8::1]:8443/feed", "https://例子.测试/feed",
+            "https://example。com/feed",
         )
         for url in valid_urls:
             with self.subTest(url=url):
                 validate_source_registry(_registry([_source_for_adapter("rss", {"rss_url": url})]))
+
+    def test_json_discovery_origin_normalizes_idna_and_default_https_port(self):
+        value = {
+            "url": "https://例子.测试:443/blog", "language": "en",
+            "discovery": [{
+                "type": "json", "url": "https://xn--fsqu00a.xn--0zwm56d/api",
+                "publicUrl": "https://例子.测试/posts/{path}",
+                "detailUrl": "https://xn--fsqu00a.xn--0zwm56d/api/{path}",
+            }],
+            "article_url_patterns": [r"^https://例子\.测试/posts/[^/]+$"],
+            "fetch_url_patterns": [r"^https://xn--fsqu00a\.xn--0zwm56d/api/[^/]+$"],
+            "exclude_url_patterns": [], "parser": None,
+        }
+        validate_source_registry(_registry([_source_for_adapter("web-publication", value)]))
 
     def test_boolean_and_integer_fields_reject_coercible_or_unbounded_values(self):
         boolean_cases = [1, 0, "false", None]
@@ -608,10 +652,32 @@ class CredentialReferenceTests(unittest.TestCase):
             {"api_key": {"ref": ""}},
             {"api_key": {"ref": "env.X\x00_API_KEY"}},
             {"api_key": {"ref": "env.X_API_KEY", "token": "raw"}},
+            {"api_key": {"ref": "env.lowercase"}},
+            {"api_key": {"ref": "env.PATH/TO/KEY"}},
+            {"api_key": {"ref": "file.X_API_KEY"}},
         )
         for config in invalid:
             with self.subTest(), self.assertRaises(ConfigError):
                 validate_credential_references(config)
+
+    def test_rejects_high_confidence_secret_values_without_echoing_them(self):
+        secrets = (
+            "gh" + "p_" + "a" * 36,
+            "github_" + "pat_" + "A" * 70,
+            "s" + "k-" + "A" * 32,
+            "AK" + "IA" + "A" * 16,
+            "-----BEGIN " + "PRIVATE KEY-----",
+        )
+        for secret in secrets:
+            with self.subTest(prefix=secret[:2]):
+                with self.assertRaises(ConfigError) as caught:
+                    validate_credential_references({"note": secret})
+                self.assertNotIn(secret, str(caught.exception))
+
+    def test_rejects_nonfinite_floats_at_any_config_path(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=str(value)), self.assertRaisesRegex(ConfigError, r"\$\.nested\[0\]"):
+                validate_credential_references({"nested": [value]})
 
     def test_allows_safe_nested_exact_builtin_credential_tree(self):
         validate_credential_references({

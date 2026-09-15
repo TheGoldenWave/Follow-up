@@ -13,7 +13,8 @@
       "budget": 5,
       "input": {
         "rss_url": "https://rss.arxiv.org/rss/cs.AI",
-        "url": "https://arxiv.org/list/cs.AI/recent"
+        "url": "https://arxiv.org/list/cs.AI/recent",
+        "tags": ["academic", "ai", "daily"]
       },
       "legacy": {
         "feed": "feed-academic.json"
@@ -31,7 +32,8 @@
       "budget": 5,
       "input": {
         "rss_url": "https://rss.arxiv.org/rss/cs.CL",
-        "url": "https://arxiv.org/list/cs.CL/recent"
+        "url": "https://arxiv.org/list/cs.CL/recent",
+        "tags": ["academic", "nlp", "daily"]
       },
       "legacy": {
         "feed": "feed-academic.json"
@@ -49,7 +51,8 @@
       "budget": 2,
       "input": {
         "rss_url": "https://rss.arxiv.org/rss/cs.CR",
-        "url": "https://arxiv.org/list/cs.CR/recent"
+        "url": "https://arxiv.org/list/cs.CR/recent",
+        "tags": ["academic", "security", "daily"]
       },
       "legacy": {
         "feed": "feed-academic.json"
@@ -67,7 +70,8 @@
       "budget": 3,
       "input": {
         "rss_url": "https://rss.arxiv.org/rss/cs.CV",
-        "url": "https://arxiv.org/list/cs.CV/recent"
+        "url": "https://arxiv.org/list/cs.CV/recent",
+        "tags": ["academic", "vision", "daily"]
       },
       "legacy": {
         "feed": "feed-academic.json"
@@ -85,7 +89,8 @@
       "budget": 3,
       "input": {
         "rss_url": "https://rss.arxiv.org/rss/cs.LG",
-        "url": "https://arxiv.org/list/cs.LG/recent"
+        "url": "https://arxiv.org/list/cs.LG/recent",
+        "tags": ["academic", "ml", "daily"]
       },
       "legacy": {
         "feed": "feed-academic.json"
@@ -103,7 +108,8 @@
       "budget": 2,
       "input": {
         "rss_url": "https://rss.arxiv.org/rss/cs.RO",
-        "url": "https://arxiv.org/list/cs.RO/recent"
+        "url": "https://arxiv.org/list/cs.RO/recent",
+        "tags": ["academic", "robotics", "daily"]
       },
       "legacy": {
         "feed": "feed-academic.json"
@@ -842,7 +848,8 @@
       "budget": 2,
       "input": {
         "rss_url": "https://aisnakeoil.substack.com/feed",
-        "url": "https://aisnakeoil.substack.com/"
+        "url": "https://aisnakeoil.substack.com/",
+        "tags": ["newsletter", "ai-critique", "weekly"]
       },
       "legacy": {
         "feed": "feed-newsletters.json"
@@ -860,7 +867,8 @@
       "budget": 2,
       "input": {
         "rss_url": "https://thealgorithmicbridge.com/feed",
-        "url": "https://thealgorithmicbridge.com/"
+        "url": "https://thealgorithmicbridge.com/",
+        "tags": ["newsletter", "ai-analysis", "weekly"]
       },
       "legacy": {
         "feed": "feed-newsletters.json"
@@ -914,7 +922,8 @@
       "budget": 2,
       "input": {
         "rss_url": "https://oneusefulthing.org/feed",
-        "url": "https://oneusefulthing.org/"
+        "url": "https://oneusefulthing.org/",
+        "tags": ["newsletter", "ai-practice", "weekly"]
       },
       "legacy": {
         "feed": "feed-newsletters.json"
@@ -932,7 +941,8 @@
       "budget": 2,
       "input": {
         "rss_url": "https://stratechery.com/feed/",
-        "url": "https://stratechery.com/"
+        "url": "https://stratechery.com/",
+        "tags": ["newsletter", "tech-strategy", "daily"]
       },
       "legacy": {
         "feed": "feed-newsletters.json"
@@ -1780,7 +1790,8 @@
       "input": {
         "rss_url": "https://36kr.com/feed",
         "url": "https://36kr.com/",
-        "language": "zh"
+        "language": "zh",
+        "tags": ["zh", "tech-business", "daily"]
       },
       "legacy": {
         "feed": "feed-zh-tech.json"
@@ -1837,7 +1848,8 @@
       "input": {
         "rss_url": "https://www.qbitai.com/rss",
         "url": "https://www.qbitai.com/",
-        "language": "zh"
+        "language": "zh",
+        "tags": ["zh", "ai", "daily"]
       },
       "legacy": {
         "feed": "feed-zh-tech.json"
@@ -1856,7 +1868,8 @@
       "input": {
         "rss_url": "https://sspai.com/feed",
         "url": "https://sspai.com/",
-        "language": "zh"
+        "language": "zh",
+        "tags": ["zh", "tech", "daily"]
       },
       "legacy": {
         "feed": "feed-zh-tech.json"

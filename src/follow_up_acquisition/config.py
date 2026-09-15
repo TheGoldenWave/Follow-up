@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import urlparse
 
 from .contracts import is_credential_key
+from .source_state import SourceStateError, query_fingerprint
 
 CHANNEL_IDS = frozenset({
     "x", "podcasts", "blogs", "newsletters", "academic", "zh-tech", "reports",
@@ -35,6 +37,15 @@ ACQUISITION_MODES = frozenset({"central", "shadow", "hybrid", "local"})
 _REGISTRY_SCHEMA_VERSION = "1.0"
 
 _QUERY_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
+_SOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$")
+_CREDENTIAL_REF_RE = re.compile(r"^env\.[A-Z_][A-Z0-9_]{0,127}$")
+_SECRET_VALUE_PATTERNS = (
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,255}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,255}\b"),
+    re.compile(r"\bsk-[A-Za-z0-9]{32,255}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+)
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _DNS_LABEL_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _MAX_STRING_LENGTH = 4096
@@ -42,10 +53,10 @@ _MAX_METRIC_FILTER = 1_000_000_000
 _MAX_BUDGET = 1000
 _INPUT_FIELDS = {
     "x": frozenset({"handle", "url"}),
-    "rss": frozenset({"rss_url", "url", "language"}),
-    "newsletter": frozenset({"rss_url", "url", "language"}),
+    "rss": frozenset({"rss_url", "url", "language", "tags"}),
+    "newsletter": frozenset({"rss_url", "url", "language", "tags"}),
     "podcast": frozenset({"rss_url", "url", "language"}),
-    "arxiv": frozenset({"rss_url", "url"}),
+    "arxiv": frozenset({"rss_url", "url", "tags"}),
     "report": frozenset({"url"}),
     "web-publication": frozenset({
         "url", "language", "discovery", "article_url_patterns",
@@ -70,6 +81,7 @@ _REQUIRED_INPUT_FIELDS = {adapter: fields for adapter, fields in _INPUT_FIELDS.i
 _REQUIRED_INPUT_FIELDS["x"] = frozenset({"handle"})
 for _feed_adapter in ("rss", "newsletter", "podcast"):
     _REQUIRED_INPUT_FIELDS[_feed_adapter] = frozenset({"rss_url"})
+_REQUIRED_INPUT_FIELDS["arxiv"] = frozenset({"rss_url", "url"})
 _REQUIRED_INPUT_FIELDS["web-publication"] = frozenset({
     "url", "language", "discovery", "article_url_patterns", "exclude_url_patterns",
 })
@@ -216,17 +228,17 @@ def _require_https_url(value: Any, label: str, *, template: bool = False) -> Non
         except ValueError as exc:
             raise ConfigError(f"{label} has an invalid IPv4 host") from exc
         return
-    labels = hostname.split(".")
+    if any(character.isspace() for character in hostname):
+        raise ConfigError(f"{label} has invalid HTTPS authority whitespace")
+    try:
+        ascii_hostname = hostname.encode("idna").decode("ascii")
+    except (UnicodeError, ValueError) as exc:
+        raise ConfigError(f"{label} has an invalid IDNA host") from exc
+    labels = ascii_hostname.split(".")
     if not labels or any(not item for item in labels):
         raise ConfigError(f"{label} has an invalid DNS host")
     ascii_labels: list[str] = []
-    for host_label in labels:
-        if any(character.isspace() for character in host_label):
-            raise ConfigError(f"{label} has invalid HTTPS authority whitespace")
-        try:
-            ascii_label = host_label.encode("idna").decode("ascii")
-        except (UnicodeError, ValueError) as exc:
-            raise ConfigError(f"{label} has an invalid IDNA host") from exc
+    for ascii_label in labels:
         if len(ascii_label) > 63 or _DNS_LABEL_RE.fullmatch(ascii_label) is None:
             raise ConfigError(f"{label} has an invalid DNS label")
         ascii_labels.append(ascii_label)
@@ -251,11 +263,16 @@ def _validate_regex_list(value: Any, label: str, *, nonempty: bool) -> None:
 
 
 def _same_url_origin(left: str, right: str) -> bool:
-    left_url = urlparse(left)
-    right_url = urlparse(right)
-    return (left_url.scheme.lower(), left_url.netloc.lower()) == (
-        right_url.scheme.lower(), right_url.netloc.lower(),
-    )
+    def origin(value: str) -> tuple[str, str, int]:
+        parsed = urlparse(value)
+        hostname = parsed.hostname or ""
+        try:
+            host = ipaddress.ip_address(hostname).compressed
+        except ValueError:
+            host = hostname.encode("idna").decode("ascii").lower()
+        return parsed.scheme.lower(), host, parsed.port or 443
+
+    return origin(left) == origin(right)
 
 
 def _validate_queries(value: Any, label: str, *, adapter: str) -> None:
@@ -301,6 +318,10 @@ def _validate_queries(value: Any, label: str, *, adapter: str) -> None:
                 raise ConfigError(f"{query_label}.filters.min_stars requires repository entities")
         elif "tags" in filters and set(filters["tags"]) - _HN_TAGS:
             raise ConfigError(f"{query_label}.filters.tags contains an unknown tag")
+        try:
+            query_fingerprint(adapter, query)
+        except SourceStateError as exc:
+            raise ConfigError(f"{query_label} violates the authoritative query contract") from exc
 
 
 def _validate_input(source: dict[str, Any], index: int) -> None:
@@ -319,6 +340,8 @@ def _validate_input(source: dict[str, Any], index: int) -> None:
     elif adapter in {"rss", "newsletter", "podcast"}:
         if "language" in value:
             _require_string(value["language"], f"{label}.language")
+    if "tags" in value:
+        _require_string_list(value["tags"], f"{label}.tags", nonempty=True)
     if adapter == "web-publication":
         _require_string(value["language"], f"{label}.language")
         discovery_items = _require_exact_list(value["discovery"], f"{label}.discovery", nonempty=True)
@@ -416,13 +439,13 @@ def validate_source_registry(registry: Any) -> list[dict[str, Any]]:
         raise ConfigError(f"registry.schema_version must be '{_REGISTRY_SCHEMA_VERSION}'")
     sources = _require_exact_list(registry.get("sources"), "registry.sources")
 
-    seen_ids: set[str] = set()
+    seen_ids: dict[str, int] = {}
     for index, source in enumerate(sources):
         _validate_source(source, index, seen_ids)
     return sources
 
 
-def _validate_source(source: Any, index: int, seen_ids: set[str]) -> None:
+def _validate_source(source: Any, index: int, seen_ids: dict[str, int]) -> None:
     label = f"sources[{index}]"
     source = _require_closed_fields(
         source, label, allowed=set(_REGISTRY_REQUIRED), required=set(_REGISTRY_REQUIRED),
@@ -430,13 +453,11 @@ def _validate_source(source: Any, index: int, seen_ids: set[str]) -> None:
 
     source_id = source["id"]
     _require_non_empty_string(source_id, f"sources[{index}].id")
-    if ":" not in source_id or not source_id.split(":", 1)[1]:
-        raise ConfigError(
-            f"sources[{index}].id must be namespaced (e.g. 'x:karpathy')"
-        )
+    if len(source_id) > 128 or _SOURCE_ID_RE.fullmatch(source_id) is None:
+        raise ConfigError(f"sources[{index}].id must match the canonical source ID grammar")
     if source_id in seen_ids:
-        raise ConfigError(f"duplicate source id: {source_id}")
-    seen_ids.add(source_id)
+        raise ConfigError(f"sources[{seen_ids[source_id]}].id duplicates sources[{index}].id")
+    seen_ids[source_id] = index
 
     _require_non_empty_string(source["name"], f"sources[{index}].name")
 
@@ -505,13 +526,19 @@ def _validate_credential_tree(value: Any, path: str) -> None:
                 reference = _require_closed_fields(
                     child, child_path, allowed={"ref"}, required={"ref"},
                 )
-                _require_string(reference["ref"], f"{child_path}.ref")
+                ref = _require_string(reference["ref"], f"{child_path}.ref")
+                if _CREDENTIAL_REF_RE.fullmatch(ref) is None:
+                    raise ConfigError(f"{child_path}.ref must use env.VARIABLE_NAME")
             _validate_credential_tree(child, child_path)
         return
     if type(value) is list:
         for index, child in enumerate(value):
             _validate_credential_tree(child, f"{path}[{index}]")
         return
+    if type(value) is str and any(pattern.search(value) for pattern in _SECRET_VALUE_PATTERNS):
+        raise ConfigError(f"{path} contains a forbidden credential value")
+    if type(value) is float and not math.isfinite(value):
+        raise ConfigError(f"{path} must be a finite number")
     if type(value) not in {str, int, float, bool, type(None)}:
         raise ConfigError(f"{path} must use exact JSON container and scalar types")
 

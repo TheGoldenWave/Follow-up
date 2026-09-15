@@ -588,10 +588,10 @@ export async function main({
       stdout.write(`${JSON.stringify(result)}\n`);
       return 0;
     }
-    const acquisitionMode = normalizeAcquisitionMode(loadedConfig?.acquisition?.mode);
-    const registryScope = acquisitionMode === 'central' ? 'central-live' : 'local-enabled';
     const loadedRegistry = registry ?? await loadSourceRegistry({
-      scope: registryScope,
+      // Staged compatibility: Community Task 5 switches non-central modes only
+      // when nullable core-topic source statuses land atomically downstream.
+      scope: 'central-live',
       readFileImpl: fsImpl.readFile.bind(fsImpl),
     });
     const events = deliveryEvents ?? await readDeliveryLedger({ ...paths, ledgerPath: paths.ledgerPath });

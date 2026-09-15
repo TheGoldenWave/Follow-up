@@ -15,6 +15,7 @@ import {
   resolveInstalledPromptsDir,
   writeJsonAtomic,
 } from '../prepare-digest.js';
+import { loadSourceRegistry } from '../source-registry.js';
 
 const fixtures = new URL('./fixtures/', import.meta.url);
 
@@ -50,6 +51,32 @@ const registry = [
   { id: 'blog:official', channel: 'blogs', name: 'Official' },
   { id: 'x:builder', channel: 'x', name: 'Builder' },
 ];
+
+test('staged canonical registry keeps all four preparation modes on central-live', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'prepare-canonical-modes-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const canonical = await loadSourceRegistry({ scope: 'central-live' });
+  const item = candidate('canonical', 'blogs', 'blog:anthropic-engineering');
+  const statuses = canonical.map((source) => ({
+    sourceId: source.id, channel: source.channel, sourceName: source.name,
+    status: source.id === item.sourceId ? 'ok' : 'no-results',
+    candidateCount: source.id === item.sourceId ? 1 : 0,
+  }));
+  const canonicalFeed = feed([item], { registry: statuses });
+  for (const mode of ['central', 'shadow', 'hybrid', 'local']) {
+    const stderr = { value: '', write(chunk) { this.value += chunk; } };
+    const code = await main({
+      argv: ['--request-out', join(root, `${mode}.json`)],
+      config: { onboardingComplete: true, enabledChannels: ['blogs'], acquisition: { mode } },
+      now: '2026-09-06T08:00:00.000Z', deliveryEvents: [], stderr, stdout: { write() {} },
+      loadCandidateFeed: async () => canonicalFeed,
+      loadLocalSignalBatches: async () => ({ candidates: [item], sourceStatuses: statuses }),
+      loadCurationPrompt: async () => 'curate',
+      randomUUID: () => '12121212-1212-4121-8121-121212121212',
+    });
+    assert.equal(code, 0, `${mode}: ${stderr.value}`);
+  }
+});
 
 test('local preparation never loads central content and discloses missing sources', async () => {
   const localCandidate = candidate('local');

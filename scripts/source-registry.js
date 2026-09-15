@@ -38,6 +38,8 @@ function projectCompatibility(source) {
     ...(input.content_selectors ? { contentSelectors: input.content_selectors } : {}),
     ...(input.content_selector_priority !== undefined
       ? { contentSelectorPriority: input.content_selector_priority } : {}),
+    ...(input.tags ? { tags: input.tags } : {}),
+    maxArticles: source.budget,
   };
   if (projected.parser === null) delete projected.parser;
   return deepFreeze(projected);

@@ -1,169 +1,93 @@
 #!/usr/bin/env python3
-"""Build ``config/sources.json`` from the legacy source config files.
-
-Run once per migration: the emitted file is the authoritative source registry,
-and the legacy central-Feed config files become generated compatibility
-artifacts. Pure standard library.
-"""
-
+"""Read-only validator for the canonical source registry and legacy projections."""
 from __future__ import annotations
-
 import json
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config"
-
-# Reports have no legacy runtime config yet; their IDs are assigned here and
-# are immutable once emitted.
-REPORT_IDS = {
-    "State of AI Report": "report:state-of-ai",
-    "Stanford HAI AI Index": "report:stanford-ai-index",
-    "a16z AI Canon": "report:a16z-ai-canon",
-    "CB Insights AI Research": "report:cbinsights-ai",
-    "FirstMark MAD Landscape": "report:firstmark-mad",
-}
-
 
 def _load(name: str) -> dict:
     with open(CONFIG / name, encoding="utf-8") as handle:
         return json.load(handle)
 
+def _expect(errors: list[str], source: dict, field: str, expected) -> None:
+    if source.get(field) != expected:
+        errors.append(f"{source.get('id', '<missing>')}: canonical {field} metadata drift")
 
-def _entry(
-    source_id: str,
-    name: str,
-    channel: str,
-    adapter: str,
-    requires_credentials: bool,
-    default_enabled: bool,
-    cadence: str,
-    budget: int,
-    input_: dict,
-    feed: str | None,
-) -> dict:
-    return {
-        "id": source_id,
-        "name": name,
-        "channel": channel,
-        "channel_policy": "fixed",
-        "adapter": adapter,
-        "requires_credentials": requires_credentials,
-        "default_enabled": default_enabled,
-        "cadence": cadence,
-        "budget": budget,
-        "input": input_,
-        "legacy": {"feed": feed},
-    }
+def validate() -> list[str]:
+    document = _load("sources.json")
+    sources = document.get("sources")
+    if document.get("schema_version") != "1.0" or not isinstance(sources, list):
+        return ["canonical registry envelope is invalid"]
+    errors: list[str] = []
+    if len(sources) != 89:
+        errors.append("canonical registry must contain 89 sources")
+    by_id = {source.get("id"): source for source in sources if isinstance(source, dict)}
+    if len(by_id) != len(sources):
+        errors.append("canonical registry source IDs must be unique")
+    central = [source for source in sources if source.get("legacy", {}).get("feed") is not None]
+    if len(central) != 70:
+        errors.append("canonical registry must contain 70 central-live sources")
+    default = _load("default-sources.json")
+    groups = [
+        ("feed-x.json", default["x_accounts"]),
+        ("feed-podcasts.json", default["podcasts"]),
+        ("feed-blogs.json", _load("feed-blogs.json")["sources"]),
+        ("feed-newsletters.json", _load("feed-newsletters.json")["sources"]),
+        ("feed-academic.json", _load("feed-academic.json")["sources"]),
+        ("feed-zh-tech.json", _load("feed-zh-tech.json")["sources"]),
+    ]
+    checked = 0
+    for feed_name, legacy_sources in groups:
+        for legacy in legacy_sources:
+            checked += 1
+            source = by_id.get(legacy.get("id"))
+            if source is None:
+                errors.append(f"{feed_name}: legacy source ID is absent from canonical registry")
+                continue
+            if source.get("legacy", {}).get("feed") != feed_name:
+                errors.append(f"{feed_name}: canonical legacy.feed metadata drift")
+            _expect(errors, source, "name", legacy.get("name"))
+            input_value = source.get("input", {})
+            if "handle" in legacy:
+                _expect(errors, input_value, "handle", legacy["handle"])
+            rss = legacy.get("rss") or legacy.get("rssUrl")
+            if rss is not None:
+                _expect(errors, input_value, "rss_url", rss)
+            if legacy.get("url") is not None:
+                _expect(errors, input_value, "url", legacy["url"])
+            if "tags" in legacy:
+                _expect(errors, input_value, "tags", legacy["tags"])
+            if "maxArticles" in legacy:
+                _expect(errors, source, "budget", legacy["maxArticles"])
+            if "cadence" in legacy:
+                _expect(errors, source, "cadence", legacy["cadence"])
+            for legacy_key, canonical_key in (
+                ("language", "language"),
+                ("discovery", "discovery"),
+                ("articleUrlPatterns", "article_url_patterns"),
+                ("excludeUrlPatterns", "exclude_url_patterns"),
+                ("fetchUrlPatterns", "fetch_url_patterns"),
+                ("parser", "parser"),
+                ("contentSelectors", "content_selectors"),
+                ("contentSelectorPriority", "content_selector_priority"),
+            ):
+                if legacy_key in legacy:
+                    _expect(errors, input_value, canonical_key, legacy[legacy_key])
+    if checked != 70:
+        errors.append("legacy compatibility inputs must contain exactly 70 sources")
+    return errors
 
-
-def build() -> dict:
-    sources: list[dict] = []
-    default_sources = _load("default-sources.json")
-
-    for account in default_sources["x_accounts"]:
-        sources.append(_entry(
-            account["id"], account["name"], "x", "x",
-            requires_credentials=True, default_enabled=False,
-            cadence="daily", budget=5,
-            input_={"handle": account["handle"]}, feed="feed-x.json",
-        ))
-
-    for podcast in default_sources["podcasts"]:
-        sources.append(_entry(
-            podcast["id"], podcast["name"], "podcasts", "podcast",
-            requires_credentials=False, default_enabled=True,
-            cadence="daily", budget=3,
-            input_={"rss_url": podcast["rssUrl"], "url": podcast["url"]},
-            feed="feed-podcasts.json",
-        ))
-
-    for blog in _load("feed-blogs.json")["sources"]:
-        sources.append(_entry(
-            blog["id"], blog["name"], "blogs", "web-publication",
-            requires_credentials=False, default_enabled=True,
-            cadence="daily", budget=3,
-            input_={
-                "url": blog["url"],
-                "language": blog.get("language", "en"),
-                "discovery": blog.get("discovery", []),
-                "article_url_patterns": blog.get("articleUrlPatterns", []),
-                "exclude_url_patterns": blog.get("excludeUrlPatterns", []),
-                "parser": blog.get("parser"),
-            },
-            feed="feed-blogs.json",
-        ))
-
-    newsletter_by_id: dict[str, dict] = {}
-    for newsletter in _load("feed-newsletters.json")["sources"]:
-        newsletter_by_id[newsletter["id"]] = newsletter
-    for newsletter in default_sources["newsletters"]:
-        newsletter_by_id.setdefault(newsletter["id"], newsletter)
-
-    live_newsletters = {n["id"] for n in _load("feed-newsletters.json")["sources"]}
-    for source_id in sorted(newsletter_by_id):
-        newsletter = newsletter_by_id[source_id]
-        live = source_id in live_newsletters
-        sources.append(_entry(
-            source_id, newsletter["name"], "newsletters", "rss",
-            requires_credentials=False, default_enabled=True,
-            cadence=newsletter.get("cadence", "weekly"),
-            budget=newsletter.get("maxArticles", 2),
-            input_={
-                "rss_url": newsletter.get("rss") or newsletter.get("rssUrl"),
-                "url": newsletter.get("url"),
-            },
-            feed="feed-newsletters.json" if live else None,
-        ))
-
-    for paper in _load("feed-academic.json")["sources"]:
-        sources.append(_entry(
-            paper["id"], paper["name"], "academic", "arxiv",
-            requires_credentials=False, default_enabled=True,
-            cadence="daily", budget=paper.get("maxArticles", 3),
-            input_={"rss_url": paper["rss"], "url": paper["url"]},
-            feed="feed-academic.json",
-        ))
-
-    zh_by_id: dict[str, dict] = {}
-    for source in _load("feed-zh-tech.json")["sources"]:
-        zh_by_id[source["id"]] = source
-    for source in default_sources["chinese_tech"]:
-        zh_by_id.setdefault(source["id"], source)
-
-    live_zh = {s["id"] for s in _load("feed-zh-tech.json")["sources"]}
-    for source_id in sorted(zh_by_id):
-        source = zh_by_id[source_id]
-        live = source_id in live_zh
-        sources.append(_entry(
-            source_id, source["name"], "zh-tech", "rss",
-            requires_credentials=False, default_enabled=True,
-            cadence="daily", budget=source.get("maxArticles", 3),
-            input_={
-                "rss_url": source.get("rss") or source.get("rssUrl"),
-                "url": source.get("url"),
-                "language": "zh",
-            },
-            feed="feed-zh-tech.json" if live else None,
-        ))
-
-    for report in default_sources["reports"]:
-        sources.append(_entry(
-            REPORT_IDS[report["name"]], report["name"], "reports", "report",
-            requires_credentials=False, default_enabled=False,
-            cadence="monthly", budget=1,
-            input_={"url": report["url"]}, feed=None,
-        ))
-
-    sources.sort(key=lambda source: source["id"])
-    return {"schema_version": "1.0", "sources": sources}
-
+def main() -> int:
+    errors = validate()
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("canonical source registry valid: 89 total, 70 central-live")
+    return 0
 
 if __name__ == "__main__":
-    registry = build()
-    out = CONFIG / "sources.json"
-    out.write_text(
-        json.dumps(registry, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    print(f"wrote {out} ({len(registry['sources'])} sources)")
+    raise SystemExit(main())

@@ -60,6 +60,8 @@ test('compatibility projection preserves central identity selectors', async () =
   assert.equal(blog.articleUrlPatterns, blog.input.article_url_patterns);
   assert.equal(academic.rss, academic.input.rss_url);
   assert.equal(academic.url, academic.input.url);
+  assert.deepEqual(academic.tags, ['academic', 'ai', 'daily']);
+  assert.equal(academic.maxArticles, academic.budget);
 });
 
 test('registry is deeply frozen and detached from caller input', () => {
