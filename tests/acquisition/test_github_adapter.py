@@ -161,6 +161,7 @@ class GitHubAdapterTests(unittest.TestCase):
         discussion_update = next(u for u in first.checkpoint_updates if u.stream_id == "discussions")
         self.assertEqual(discussion_update.checkpoint["cursor"], {
             "query_id": "agents", "after": "next", "window": {"start": None, "end": NOW},
+            "counts": {"total_entries_seen": 0, "node_missing_seen": 0, "valid_seen": 0, "mapping_errors_seen": 0},
         })
         self.assertIsNone(discussion_update.checkpoint["successful_window_end"])
 
@@ -402,7 +403,10 @@ class GitHubAdapterTests(unittest.TestCase):
             "checkpoint_at": "2026-09-14T08:00:00Z",
             "cursor": {
                 "window": {"start": None, "end": NOW},
-                "endpoints": {"repository": {"complete": False, "page": 2}},
+                "endpoints": {"repository": {
+                    "complete": False, "page": 2,
+                    "counts": {"total_entries_seen": 100, "node_missing_seen": 0, "valid_seen": 100, "mapping_errors_seen": 0},
+                }},
             },
             "etag": None, "last_modified": None, "recent_native_ids": [],
             "successful_window_end": None, "query_fingerprint": query_fingerprint("github", query),
@@ -427,7 +431,10 @@ class GitHubAdapterTests(unittest.TestCase):
             "checkpoint_at": "2026-09-14T08:00:00Z",
             "cursor": {
                 "window": {"start": None, "end": NOW},
-                "endpoints": {"repository": {"complete": False, "page": 10}},
+                "endpoints": {"repository": {
+                    "complete": False, "page": 10,
+                    "counts": {"total_entries_seen": 900, "node_missing_seen": 0, "valid_seen": 900, "mapping_errors_seen": 0},
+                }},
             },
             "etag": None, "last_modified": None, "recent_native_ids": [],
             "successful_window_end": None, "query_fingerprint": query_fingerprint("github", query),
@@ -448,10 +455,9 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(pages, [10])
         self.assertEqual(result.status, "partial")
         self.assertEqual(result.code, "github-search-cap")
-        self.assertEqual(
-            result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"],
-            {"complete": False, "capped": True},
-        )
+        endpoint = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"]
+        self.assertTrue(endpoint["capped"])
+        self.assertEqual(endpoint["counts"]["valid_seen"], 1000)
 
     def test_repository_304_does_not_skip_other_enabled_entities(self):
         data = fixture("entities.json")
@@ -677,8 +683,10 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(len(first.candidates), 1)
         update = first.checkpoint_updates[0]
         self.assertIsNone(update.checkpoint["successful_window_end"])
+        self.assertEqual(len(validate_checkpoint_updates("community:github", first.checkpoint_updates)), 1)
         endpoint = update.checkpoint["cursor"]["endpoints"]["repository"]
-        self.assertEqual(endpoint, {"complete": False, "capped": True})
+        self.assertTrue(endpoint["capped"])
+        self.assertEqual(endpoint["counts"]["valid_seen"], 1000)
 
         previous = copy.deepcopy(update.checkpoint)
         previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
@@ -859,7 +867,7 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual([item.native_id for item in mixed.candidates], ["github:repository:R_repo"])
         self.assertFalse(mixed.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"]["complete"])
 
-    def test_full_failed_rest_page_does_not_persist_next_page_when_other_endpoint_succeeds(self):
+    def test_full_all_missing_rest_page_persists_progress_until_endpoint_finishes(self):
         missing = {**fixture("entities.json")["repository"]}
         missing.pop("node_id")
 
@@ -871,12 +879,15 @@ class GitHubAdapterTests(unittest.TestCase):
         result = self.make_adapter(
             source(entities=["repository", "commit"]), handler,
         ).collect("community:github", {"mode": "shadow", "depth": 1})
-        self.assertEqual((result.status, result.code), ("partial", "github-node-id-missing"))
+        self.assertEqual((result.status, result.code), ("partial", "github-endpoint-progress"))
         endpoints = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]
-        self.assertEqual(endpoints["repository"], {"complete": False})
+        self.assertEqual(endpoints["repository"], {
+            "complete": False, "page": 2,
+            "counts": {"total_entries_seen": 100, "node_missing_seen": 100, "valid_seen": 0, "mapping_errors_seen": 0},
+        })
         self.assertEqual(endpoints["commit"], {"complete": True})
 
-    def test_full_failed_release_page_does_not_persist_next_release_page(self):
+    def test_full_all_missing_release_page_persists_progress_until_parent_finishes(self):
         data = fixture("entities.json")
         missing = {**data["release"]}
         missing.pop("node_id")
@@ -892,9 +903,10 @@ class GitHubAdapterTests(unittest.TestCase):
         result = self.make_adapter(
             source(entities=["release", "commit"]), handler,
         ).collect("community:github", {"mode": "shadow", "depth": 1})
-        self.assertEqual((result.status, result.code), ("partial", "github-node-id-missing"))
+        self.assertEqual((result.status, result.code), ("partial", "github-endpoint-progress"))
         endpoints = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]
-        self.assertEqual(endpoints["release"], {"complete": False})
+        self.assertEqual(endpoints["release"]["release_counts"]["node_missing_seen"], 100)
+        self.assertEqual(endpoints["release"]["release_pages"]["acme/agent"]["page"], 2)
         self.assertEqual(endpoints["commit"], {"complete": True})
 
     def test_discussion_mixed_missing_id_warns_but_completes_and_requires_parent_repo(self):
@@ -1065,6 +1077,204 @@ class GitHubAdapterTests(unittest.TestCase):
         self.make_adapter(
             source(queries=[query], include_discussions=True), handler, lambda _source_id: "token",
         ).collect("community:github", {"mode": "shadow"})
+
+    def test_rest_identity_counts_resume_then_mixed_page_completes_with_warning(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        valid = fixture("entities.json")["repository"]
+        missing = {**valid}
+        missing.pop("node_id")
+
+        def first_handler(_method, url, _kwargs):
+            self.assertEqual(int(parse_qs(urlsplit(url).query)["page"][0]), 1)
+            return response(url, {"total_count": 101, "items": [missing] * 100})
+
+        first = self.make_adapter(source(queries=[query]), first_handler).collect(
+            "community:github", {"mode": "shadow", "depth": 1},
+        )
+        self.assertEqual(first.status, "partial")
+        update = first.checkpoint_updates[0]
+        endpoint = update.checkpoint["cursor"]["endpoints"]["repository"]
+        self.assertEqual(endpoint, {
+            "complete": False, "page": 2,
+            "counts": {"total_entries_seen": 100, "node_missing_seen": 100, "valid_seen": 0, "mapping_errors_seen": 0},
+        })
+        self.assertIsNone(update.checkpoint["successful_window_end"])
+        self.assertEqual(len(validate_checkpoint_updates("community:github", first.checkpoint_updates)), 1)
+
+        previous = copy.deepcopy(update.checkpoint)
+        previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
+
+        def second_handler(_method, url, _kwargs):
+            self.assertEqual(int(parse_qs(urlsplit(url).query)["page"][0]), 2)
+            return response(url, {"total_count": 101, "items": [valid]})
+
+        second = GitHubAdapter(
+            resolve_source=lambda _source_id: source(queries=[query]),
+            http_client=FakeClient(second_handler), clock=lambda: "2026-09-16T08:00:00Z",
+            credential_resolver=lambda _source_id: None,
+            checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual((second.status, second.code), ("ok", "github-node-id-missing"))
+        self.assertEqual([item.native_id for item in second.candidates], ["github:repository:R_repo"])
+        self.assertEqual(second.checkpoint_updates[0].checkpoint["cursor"], {})
+
+    def test_rest_all_missing_becomes_fatal_only_when_resumed_pagination_completes(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        item = fixture("entities.json")["repository"]
+        missing = {**item}
+        missing.pop("node_id")
+        first = self.make_adapter(
+            source(queries=[query]),
+            lambda _m, url, _k: response(url, {"total_count": 101, "items": [missing] * 100}),
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual(first.status, "partial")
+        previous = copy.deepcopy(first.checkpoint_updates[0].checkpoint)
+        previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
+        second = self.make_adapter(
+            source(queries=[query]),
+            lambda _m, url, _k: response(url, {"total_count": 101, "items": [missing]}),
+            checkpoint={"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual((second.status, second.code), ("schema-drift", "github-node-id-missing"))
+        self.assertEqual(second.checkpoint_updates, ())
+
+    def test_release_identity_counts_resume_per_parent_without_replaying_repo_search(self):
+        data = fixture("entities.json")
+        missing = {**data["release"]}
+        missing.pop("node_id")
+
+        def first_handler(_method, url, _kwargs):
+            if urlsplit(url).path == "/search/repositories":
+                return response(url, {"total_count": 1, "items": [data["repository"]]})
+            return response(url, [missing] * 100)
+
+        first = self.make_adapter(source(entities=["release"]), first_handler).collect(
+            "community:github", {"mode": "shadow", "depth": 1},
+        )
+        self.assertEqual(first.status, "partial")
+        endpoint = first.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["release"]
+        self.assertTrue(endpoint["repository_complete"])
+        self.assertEqual(endpoint["release_counts"]["node_missing_seen"], 100)
+        previous = copy.deepcopy(first.checkpoint_updates[0].checkpoint)
+        previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
+
+        def second_handler(_method, url, _kwargs):
+            self.assertEqual(urlsplit(url).path, "/repos/acme/agent/releases")
+            return response(url, [data["release"]])
+
+        second = self.make_adapter(
+            source(entities=["release"]), second_handler,
+            checkpoint={"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual((second.status, second.code), ("ok", "github-node-id-missing"))
+        self.assertEqual(second.checkpoint_updates[0].checkpoint["cursor"], {})
+
+    def test_discussion_identity_counts_resume_before_all_missing_decision(self):
+        valid = fixture("discussion.json")["data"]["search"]["nodes"][0]
+        missing = {**valid}
+        missing.pop("id")
+        page_one = {"data": {"search": {"nodes": [missing], "pageInfo": {"hasNextPage": True, "endCursor": "next"}}}}
+        page_two_valid = {"data": {"search": {"nodes": [valid], "pageInfo": {"hasNextPage": False, "endCursor": "done"}}}}
+
+        def handler_for(body):
+            return lambda method, url, _kwargs: response(url, body) if method == "POST" else response(url, {"total_count": 0, "items": []})
+
+        first = self.make_adapter(
+            source(include_discussions=True), handler_for(page_one), lambda _source_id: "token",
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual(first.status, "partial")
+        discussion = next(update for update in first.checkpoint_updates if update.stream_id == "discussions")
+        self.assertEqual(discussion.checkpoint["cursor"]["counts"], {
+            "total_entries_seen": 1, "node_missing_seen": 1, "valid_seen": 0, "mapping_errors_seen": 0,
+        })
+        previous = copy.deepcopy(discussion.checkpoint)
+        previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
+        second = self.make_adapter(
+            source(include_discussions=True), handler_for(page_two_valid), lambda _source_id: "token",
+            checkpoint={"streams": {"discussions": previous}},
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual((second.status, second.code), ("ok", "github-node-id-missing"))
+        completed = next(update for update in second.checkpoint_updates if update.stream_id == "discussions")
+        self.assertEqual(completed.checkpoint["cursor"], {})
+
+        page_two_missing = {"data": {"search": {"nodes": [missing], "pageInfo": {"hasNextPage": False, "endCursor": "done"}}}}
+        fatal = self.make_adapter(
+            source(include_discussions=True), handler_for(page_two_missing), lambda _source_id: "token",
+            checkpoint={"streams": {"discussions": previous}},
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual((fatal.status, fatal.code), ("partial", "github-node-id-missing"))
+        self.assertNotIn("discussions", {update.stream_id for update in fatal.checkpoint_updates})
+
+    def test_hostile_endpoint_counter_checkpoint_fails_closed_before_http(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        base = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "query_fingerprint": query_fingerprint("github", query),
+        }
+        for counts in (
+            None,
+            "omit",
+            {"total_entries_seen": True, "node_missing_seen": 0, "valid_seen": 0, "mapping_errors_seen": 0},
+            {"total_entries_seen": 1, "node_missing_seen": -1, "valid_seen": 2, "mapping_errors_seen": 0},
+            {"total_entries_seen": 10**30, "node_missing_seen": 0, "valid_seen": 0, "mapping_errors_seen": 0},
+            {"total_entries_seen": 1, "node_missing_seen": 0, "valid_seen": 0, "mapping_errors_seen": 0, "extra": 1},
+        ):
+            with self.subTest(counts=counts):
+                endpoint = {"complete": False, "page": 2}
+                if counts != "omit":
+                    endpoint["counts"] = counts
+                previous = {**base, "cursor": {
+                    "window": {"start": None, "end": NOW},
+                    "endpoints": {"repository": endpoint},
+                }}
+                result = self.make_adapter(
+                    source(queries=[query]), lambda *_args: self.fail("invalid counters must not fetch"),
+                    checkpoint={"streams": {"query.agents": previous}},
+                ).collect("community:github", {"mode": "shadow", "depth": 1})
+                self.assertEqual(result.status, "schema-drift")
+                self.assertEqual(result.checkpoint_updates, ())
+
+    def test_resumed_release_and_discussion_require_exact_counters_before_their_http(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["release"]}}
+        base = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "query_fingerprint": query_fingerprint("github", query),
+        }
+        release_previous = {**base, "cursor": {
+            "window": {"start": None, "end": NOW},
+            "endpoints": {"release": {
+                "complete": False, "repository_complete": True,
+                "release_pages": {"acme/agent": {"page": 2, "repository_node_id": "R_repo"}},
+            }},
+        }}
+        release = self.make_adapter(
+            source(queries=[query]), lambda *_args: self.fail("release counters must validate before HTTP"),
+            checkpoint={"streams": {"query.agents": release_previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(release.status, "schema-drift")
+        self.assertEqual(release.checkpoint_updates, ())
+
+        discussion_previous = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "cursor": {"query_id": "agents", "after": "next", "window": {"start": None, "end": NOW}},
+        }
+        methods = []
+
+        def discussion_handler(method, url, _kwargs):
+            methods.append(method)
+            if method == "POST":
+                self.fail("discussion counters must validate before GraphQL HTTP")
+            return response(url, {"total_count": 0, "items": []})
+
+        discussion = self.make_adapter(
+            source(include_discussions=True), discussion_handler, lambda _source_id: "token",
+            checkpoint={"streams": {"discussions": discussion_previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(discussion.status, "partial")
+        self.assertNotIn("POST", methods)
 
 
 if __name__ == "__main__":

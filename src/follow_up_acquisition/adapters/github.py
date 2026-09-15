@@ -30,6 +30,10 @@ _MAX_DEPTH = 10
 _DEFAULT_DEPTH = 3
 _PAGE_SIZE = 100
 _MAX_STREAMS = 128
+_COUNT_FIELDS = frozenset({
+    "total_entries_seen", "node_missing_seen", "valid_seen", "mapping_errors_seen",
+})
+_MAX_IDENTITY_COUNT = 1_000_000
 
 _DISCUSSION_QUERY = """query($query:String!,$first:Int!,$after:String){
   search(query:$query,type:DISCUSSION,first:$first,after:$after){
@@ -95,6 +99,38 @@ def _canonical_timestamp(value: Any, endpoint: str) -> str | None:
     if parsed.tzinfo is None:
         raise _ItemSchemaDrift(endpoint)
     return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _empty_counts() -> dict[str, int]:
+    return {
+        "total_entries_seen": 0, "node_missing_seen": 0,
+        "valid_seen": 0, "mapping_errors_seen": 0,
+    }
+
+
+def _read_counts(
+    container: Mapping[str, Any], field: str = "counts", *, required: bool = False,
+) -> dict[str, int]:
+    if field not in container:
+        if required:
+            raise AdapterError("GitHub checkpoint counters are required", status="schema-drift")
+        return _empty_counts()
+    value = container[field]
+    if not isinstance(value, Mapping) or frozenset(value) != _COUNT_FIELDS:
+        raise AdapterError("GitHub checkpoint counters are invalid", status="schema-drift")
+    counts = dict(value)
+    if any(type(item) is not int or not 0 <= item <= _MAX_IDENTITY_COUNT for item in counts.values()):
+        raise AdapterError("GitHub checkpoint counters are invalid", status="schema-drift")
+    if sum(counts[name] for name in _COUNT_FIELDS if name != "total_entries_seen") != counts["total_entries_seen"]:
+        raise AdapterError("GitHub checkpoint counters are inconsistent", status="schema-drift")
+    return counts
+
+
+def _merge_counts(left: Mapping[str, int], right: Mapping[str, int]) -> dict[str, int]:
+    merged = {name: left[name] + right[name] for name in _COUNT_FIELDS}
+    if any(value > _MAX_IDENTITY_COUNT for value in merged.values()):
+        raise AdapterError("GitHub checkpoint counters exceed their limit", status="schema-drift")
+    return merged
 
 
 class GitHubAdapter:
@@ -224,6 +260,9 @@ class GitHubAdapter:
         elif "github-incomplete-results" in stream_codes.values():
             code = "github-incomplete-results"
             message = "; ".join(f"{stream}: search results incomplete" for stream in stream_codes if stream_codes[stream] == code)
+        elif "github-endpoint-progress" in stream_codes.values():
+            code = "github-endpoint-progress"
+            message = "; ".join(f"{stream}: endpoint pagination in progress" for stream in stream_codes if stream_codes[stream] == code)
         elif "github-item-schema-drift" in stream_codes.values():
             code = "github-item-schema-drift"
             message = "; ".join(f"{stream}: item schema drifted" for stream in stream_codes if stream_codes[stream] == code)
@@ -312,6 +351,7 @@ class GitHubAdapter:
         changed = False
         cap_hit = False
         incomplete_hit = False
+        progress_hit = False
         successful_endpoints = 0
         etag = previous.get("etag") if previous else None
         last_modified = previous.get("last_modified") if previous else None
@@ -352,11 +392,14 @@ class GitHubAdapter:
                 changed = changed or capped or problem_status is None or bool(found)
                 cap_hit = cap_hit or capped
                 incomplete_hit = incomplete_hit or problem_code == "incomplete"
+                progress_hit = progress_hit or problem_code == "progress"
                 missing = missing or problem_code in {"node", "node-warning"}
                 if entity == "repository":
                     etag = response_etag or etag
                     last_modified = response_modified or last_modified
                 if capped:
+                    failures.append((entity, "partial"))
+                elif problem_code == "progress":
                     failures.append((entity, "partial"))
                 elif problem_status:
                     failures.append((entity, problem_status))
@@ -392,6 +435,7 @@ class GitHubAdapter:
             status = "partial" if successful_endpoints or cap_hit or emitted else failures[0][1]
             code = "github-search-cap" if cap_hit else (
                 "github-incomplete-results" if incomplete_hit else
+                "github-endpoint-progress" if progress_hit else
                 "github-node-id-missing" if missing else
                 "github-item-schema-drift" if any(state == "schema-drift" for _entity, state in failures)
                 else "github-endpoint-failure"
@@ -416,8 +460,15 @@ class GitHubAdapter:
             "committer-date" if entity == "commit" else "updated"
         )
         start_page = old_state.get("page", 1)
+        counters_required = old_state.get("capped") is True or (
+            type(start_page) is int and start_page > 1
+        )
+        validated_old_counts = _read_counts(old_state, required=counters_required)
         if old_state.get("capped") is True:
             start_page = 1
+            old_counts = _empty_counts()
+        else:
+            old_counts = validated_old_counts
         if type(start_page) is not int or not 1 <= start_page <= 10:
             raise AdapterError("GitHub endpoint cursor is invalid", status="schema-drift")
         response, pages, next_page, capped, incomplete = self._search_pages(
@@ -429,7 +480,7 @@ class GitHubAdapter:
         results: list[SourceCandidate] = []
         total_entries = 0
         node_missing = 0
-        fatal_schema = False
+        mapping_errors = 0
         other_failure: AdapterError | None = None
         for items in pages:
             total_entries += len(items)
@@ -452,26 +503,36 @@ class GitHubAdapter:
                 except _ItemSchemaDrift:
                     page_schema += 1
                 except AdapterError as exc:
+                    page_schema += 1
                     other_failure = other_failure or exc
-            fatal_schema = fatal_schema or bool(page_schema)
-        fatal_node = total_entries > 0 and node_missing == total_entries
-        node_warning = 0 < node_missing < total_entries
-        if fatal_schema:
-            problem_code, problem_status = "schema", "schema-drift"
-        elif other_failure is not None:
+            mapping_errors += page_schema
+        current_counts = {
+            "total_entries_seen": total_entries,
+            "node_missing_seen": node_missing,
+            "valid_seen": len(results),
+            "mapping_errors_seen": mapping_errors,
+        }
+        counts = _merge_counts(old_counts, current_counts)
+        if other_failure is not None:
             problem_code, problem_status = "parent", other_failure.status
-        elif fatal_node:
-            problem_code, problem_status = "node", "schema-drift"
+        elif mapping_errors:
+            problem_code, problem_status = "schema", "schema-drift"
         elif incomplete:
             problem_code, problem_status = "incomplete", "partial"
-        elif node_warning:
+        elif capped:
+            problem_code = problem_status = None
+        elif next_page is not None:
+            problem_code, problem_status = "progress", None
+        elif counts["total_entries_seen"] > 0 and counts["valid_seen"] == 0 and counts["node_missing_seen"] == counts["total_entries_seen"]:
+            problem_code, problem_status = "node", "schema-drift"
+        elif counts["node_missing_seen"]:
             problem_code, problem_status = "node-warning", None
         else:
             problem_code = problem_status = None
         if capped:
-            state = {"complete": False, "capped": True}
+            state = {"complete": False, "capped": True, "counts": counts}
         elif next_page is not None:
-            state = {"complete": False, "page": next_page}
+            state = {"complete": False, "page": next_page, "counts": counts}
         elif problem_status:
             state = {"complete": False}
         else:
@@ -486,19 +547,45 @@ class GitHubAdapter:
         headers: Mapping[str, str], old_state: Mapping[str, Any], now: str,
     ) -> tuple[list[SourceCandidate], dict[str, Any], bool, str | None, str | None]:
         repo_page = old_state.get("repository_page", 1)
+        release_pages_marker = old_state.get("release_pages", {})
+        has_progress = (
+            old_state.get("capped") is True
+            or (type(repo_page) is int and repo_page > 1)
+            or old_state.get("repository_complete") is True
+            or bool(release_pages_marker)
+        )
+        validated_repo_counts = _read_counts(
+            old_state, "repository_counts", required=has_progress,
+        )
+        validated_release_counts = _read_counts(
+            old_state, "release_counts", required=has_progress,
+        )
         if old_state.get("capped") is True:
             repo_page = 1
+            old_repo_counts = _empty_counts()
+            old_release_counts = _empty_counts()
+        else:
+            old_repo_counts = validated_repo_counts
+            old_release_counts = validated_release_counts
         if type(repo_page) is not int or not 1 <= repo_page <= 10:
             raise AdapterError("GitHub release repository cursor is invalid", status="schema-drift")
-        _response, repo_pages, repo_next, capped, incomplete = self._search_pages(
-            "/search/repositories", self._search_text(query, "repository", request),
-            depth, headers, label="release repositories", sort=query["sort"],
-            start_page=repo_page,
-        )
+        repository_complete = old_state.get("repository_complete", False)
+        if type(repository_complete) is not bool:
+            raise AdapterError("GitHub release repository cursor is invalid", status="schema-drift")
+        if repository_complete:
+            repo_pages: list[list[Mapping[str, Any]]] = []
+            repo_next = None
+            capped = incomplete = False
+        else:
+            _response, repo_pages, repo_next, capped, incomplete = self._search_pages(
+                "/search/repositories", self._search_text(query, "repository", request),
+                depth, headers, label="release repositories", sort=query["sort"],
+                start_page=repo_page,
+            )
         targets: dict[str, str] = {}
         repo_total = 0
         repo_missing = 0
-        repo_schema = False
+        repo_mapping_errors = 0
         for repo_items in repo_pages:
             repo_total += len(repo_items)
             page_schema = 0
@@ -512,8 +599,14 @@ class GitHubAdapter:
                     page_schema += 1
                     continue
                 targets[full_name.lower()] = node_id
-            repo_schema = repo_schema or bool(page_schema)
-        old_pages = old_state.get("release_pages", {})
+            repo_mapping_errors += page_schema
+        repo_current_counts = {
+            "total_entries_seen": repo_total, "node_missing_seen": repo_missing,
+            "valid_seen": repo_total - repo_missing - repo_mapping_errors,
+            "mapping_errors_seen": repo_mapping_errors,
+        }
+        repo_counts = _merge_counts(old_repo_counts, repo_current_counts)
+        old_pages = release_pages_marker
         if not isinstance(old_pages, Mapping):
             raise AdapterError("GitHub release cursor is invalid", status="schema-drift")
         for full_name, saved in old_pages.items():
@@ -527,7 +620,7 @@ class GitHubAdapter:
         next_releases: dict[str, dict[str, Any]] = {}
         release_total = 0
         release_missing = 0
-        release_schema = False
+        release_mapping_errors = 0
         for full_name in sorted(targets, key=lambda value: value.encode("utf-8")):
             saved = old_pages.get(full_name, {})
             start = saved.get("page", 1) if isinstance(saved, Mapping) else 1
@@ -544,31 +637,51 @@ class GitHubAdapter:
                         release_missing += 1
                     except _ItemSchemaDrift:
                         page_schema += 1
-                release_schema = release_schema or bool(page_schema)
+                release_mapping_errors += page_schema
             if next_page is not None:
                 next_releases[full_name] = {
                     "page": next_page, "repository_node_id": targets[full_name],
                 }
-        repo_fatal_node = repo_total > 0 and repo_missing == repo_total
-        repo_warning = 0 < repo_missing < repo_total
-        release_fatal_node = release_total > 0 and release_missing == release_total
-        release_warning = 0 < release_missing < release_total
-        if repo_schema or release_schema:
+        release_current_counts = {
+            "total_entries_seen": release_total, "node_missing_seen": release_missing,
+            "valid_seen": len(results), "mapping_errors_seen": release_mapping_errors,
+        }
+        release_counts = _merge_counts(old_release_counts, release_current_counts)
+        endpoint_complete = (repository_complete or repo_next is None) and not next_releases
+        if repo_mapping_errors or release_mapping_errors:
             problem_code, problem_status = "schema", "schema-drift"
-        elif repo_fatal_node or release_fatal_node:
-            problem_code, problem_status = "node", "schema-drift"
         elif incomplete:
             problem_code, problem_status = "incomplete", "partial"
-        elif repo_warning or release_warning:
+        elif capped:
+            problem_code = problem_status = None
+        elif not endpoint_complete:
+            problem_code, problem_status = "progress", None
+        elif (
+            (repo_counts["total_entries_seen"] > 0 and repo_counts["valid_seen"] == 0
+             and repo_counts["node_missing_seen"] == repo_counts["total_entries_seen"])
+            or (release_counts["total_entries_seen"] > 0 and release_counts["valid_seen"] == 0
+                and release_counts["node_missing_seen"] == release_counts["total_entries_seen"])
+        ):
+            problem_code, problem_status = "node", "schema-drift"
+        elif repo_counts["node_missing_seen"] or release_counts["node_missing_seen"]:
             problem_code, problem_status = "node-warning", None
         else:
             problem_code = problem_status = None
         if capped:
-            state: dict[str, Any] = {"complete": False, "capped": True}
+            state: dict[str, Any] = {
+                "complete": False, "capped": True,
+                "repository_counts": repo_counts,
+                "release_counts": release_counts,
+            }
             if next_releases:
                 state["release_pages"] = next_releases
         elif repo_next is not None or next_releases or problem_status:
-            state = {"complete": False}
+            state = {
+                "complete": False,
+                "repository_complete": repo_next is None,
+                "repository_counts": repo_counts,
+                "release_counts": release_counts,
+            }
             if repo_next is not None:
                 state["repository_page"] = repo_next
             if next_releases:
@@ -850,6 +963,9 @@ class GitHubAdapter:
             raise AdapterError("GitHub discussions cursor is invalid", status="schema-drift")
         resume_query = previous_cursor.get("query_id")
         resume_after = previous_cursor.get("after")
+        old_counts = _read_counts(
+            previous_cursor, required=resume_query is not None or resume_after is not None,
+        )
         if resume_query is not None and resume_query not in {query["id"] for query in queries}:
             raise AdapterError("GitHub discussions cursor is invalid", status="schema-drift")
         if resume_after is not None and not isinstance(resume_after, str):
@@ -857,13 +973,16 @@ class GitHubAdapter:
         effective_request = self._effective_request(request, previous, previous_cursor, now)
         results: list[SourceCandidate] = []
         missing = False
-        cursor: dict[str, str] = {}
+        cursor: dict[str, Any] = {}
         etag = last_modified = None
         start_index = 0
         if resume_query is not None:
             start_index = next(index for index, query in enumerate(queries) if query["id"] == resume_query)
         truncated = False
         fatal_code: str | None = None
+        total_entries = 0
+        node_missing = 0
+        mapping_errors = 0
         for query_index, query in enumerate(queries[start_index:], start=start_index):
             after: str | None = resume_after if query["id"] == resume_query else None
             for page_index in range(depth):
@@ -888,6 +1007,7 @@ class GitHubAdapter:
                 if not isinstance(search, Mapping) or type(search.get("nodes")) is not list:
                     raise AdapterError("discussions response schema drifted", status="schema-drift")
                 nodes = search["nodes"]
+                total_entries += len(nodes)
                 page_missing = 0
                 page_schema = 0
                 for item in nodes:
@@ -899,11 +1019,10 @@ class GitHubAdapter:
                     except _ItemSchemaDrift:
                         page_schema += 1
                 if page_schema:
+                    mapping_errors += page_schema
                     fatal_code = "github-item-schema-drift"
                     break
-                if nodes and page_missing == len(nodes):
-                    fatal_code = "github-node-id-missing"
-                    break
+                node_missing += page_missing
                 page_info = search.get("pageInfo")
                 if not isinstance(page_info, Mapping):
                     raise AdapterError("discussions response schema drifted", status="schema-drift")
@@ -921,19 +1040,31 @@ class GitHubAdapter:
             if truncated:
                 break
             resume_after = None
+        valid_mapped = len(results)
         results = self._finalize(results, effective_request, MAX_RECENT_NATIVE_IDS)
         native_ids = [item.native_id for item in results]
+        counts = _merge_counts(old_counts, {
+            "total_entries_seen": total_entries,
+            "node_missing_seen": node_missing,
+            "valid_seen": valid_mapped,
+            "mapping_errors_seen": mapping_errors,
+        })
         previous_ids = set(previous.get("recent_native_ids", ())) if previous else set()
         emitted = [item for item in results if item.native_id not in previous_ids]
         if fatal_code:
             return emitted, None, missing, "schema-drift", fatal_code
+        if not truncated and counts["total_entries_seen"] > 0 and counts["valid_seen"] == 0 and counts["node_missing_seen"] == counts["total_entries_seen"]:
+            return emitted, None, True, "schema-drift", "github-node-id-missing"
         if cursor:
             cursor["window"] = dict(effective_request["window"])
+            cursor["counts"] = counts
         update = self._checkpoint(
             "discussions", previous, now, effective_request, self._merge_recent(previous, native_ids),
             etag, last_modified, None, cursor=cursor, complete=not truncated,
         )
-        return emitted, update, missing, "ok", None
+        if truncated:
+            return emitted, update, missing, "partial", "github-endpoint-progress"
+        return emitted, update, counts["node_missing_seen"] > 0, "ok", None
 
     @staticmethod
     def _discussion_search_text(
