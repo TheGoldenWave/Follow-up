@@ -43,6 +43,20 @@ test('checkpoint intent rejects missing extra duplicate and secret-bearing sourc
   }
 });
 
+test('checkpoint intent requires canonical unique active streams and updates', () => {
+  const base = intent().sources[0];
+  const second = { ...base.updates[0], stream_id: 'second' };
+  for (const source of [
+    { ...base, active_stream_ids: ['rss', 'alpha'] },
+    { ...base, active_stream_ids: ['rss', 'rss'] },
+    { ...base, active_stream_ids: ['rss', 'second'], updates: [second, base.updates[0]] },
+    { ...base, active_stream_ids: ['rss'], updates: [base.updates[0], base.updates[0]] },
+    { ...base, active_stream_ids: ['rss'], updates: [second] },
+  ]) {
+    assert.equal(validateCheckpointIntent(intent({ sources: [source] }), { batches, runId: 'run-1' }).valid, false);
+  }
+});
+
 test('loadCheckpointIntent only opens a bounded regular file', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'checkpoint-intent-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

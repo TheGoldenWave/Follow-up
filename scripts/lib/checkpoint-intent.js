@@ -42,6 +42,17 @@ export function validateCheckpointIntent(intent, { batches, runId } = {}) {
       if (Array.isArray(active) && JSON.stringify(active) !== JSON.stringify(canonical(new Set(active)))) {
         errors.push(`/sources/${index}/active_stream_ids must be canonical`);
       }
+      if (Array.isArray(source.updates)) {
+        const updateIds = source.updates.map(update => update?.stream_id);
+        const sortableUpdates = updateIds.filter(id => typeof id === 'string');
+        if (sortableUpdates.length !== updateIds.length
+            || JSON.stringify(updateIds) !== JSON.stringify(canonical(new Set(updateIds)))) {
+          errors.push(`/sources/${index}/updates must be a canonical ordered set`);
+        }
+        if (Array.isArray(active) && updateIds.some(streamId => !active.includes(streamId))) {
+          errors.push(`/sources/${index}/updates references an inactive stream`);
+        }
+      }
       const batch = batches?.[source.source_id];
       if (!batch) errors.push(`/sources/${index}/source_id has no batch`);
       else if (batch.batch_id !== source.batch_id) errors.push(`/sources/${index}/batch_id does not match batch`);

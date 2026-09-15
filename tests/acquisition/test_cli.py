@@ -164,6 +164,26 @@ class CliTests(unittest.TestCase):
             self.assertEqual(checkpoint_out.stat().st_mode & 0o777, 0o600)
             self.assertTrue((output / "newsletter:test.json").is_file())
 
+    def test_run_sorts_checkpoint_updates_canonically(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "staging"
+            output.mkdir()
+            checkpoint_out = output / "checkpoint-intent.json"
+            run = CollectionRun(
+                {"community:test": {"source": "community:test", "batch_id": "batch-1", "source_status": {"status": "ok"}}},
+                {"community:test": (
+                    CheckpointUpdate("zeta", None, _checkpoint()),
+                    CheckpointUpdate("alpha", None, _checkpoint()),
+                )},
+                {"community:test": ("alpha", "zeta")},
+            )
+            with patch("follow_up_acquisition.collect.collect_run", return_value=run):
+                code = main(["run", "--source", "newsletter:ai-snake-oil", "--run-id", "run-order",
+                    "--output", str(output), "--checkpoint-out", str(checkpoint_out)])
+            self.assertEqual(code, 0)
+            updates = json.loads(checkpoint_out.read_text())["sources"][0]["updates"]
+            self.assertEqual([update["stream_id"] for update in updates], ["alpha", "zeta"])
+
     def test_run_with_updates_fails_closed_without_checkpoint_handshake(self):
         run = CollectionRun(
             {"newsletter:test": {"source": "newsletter:test", "batch_id": "batch-1"}},
@@ -174,6 +194,25 @@ class CliTests(unittest.TestCase):
         with patch("follow_up_acquisition.collect.collect_run", return_value=run), \
              contextlib.redirect_stdout(stdout):
             code = main(["run", "--source", "newsletter:ai-snake-oil"])
+        self.assertEqual(code, 1)
+        self.assertIn("checkpoint handshake required", stdout.getvalue())
+
+    def test_stateful_run_without_updates_still_requires_checkpoint_handshake(self):
+        run = CollectionRun(
+            {"community:test": {"source": "community:test", "batch_id": "batch-1", "source_status": {"status": "partial"}}},
+            {"community:test": ()},
+            {"community:test": ("top",)},
+        )
+        stdout = io.StringIO()
+        with patch("follow_up_acquisition.collect.collect_run", return_value=run), contextlib.redirect_stdout(stdout):
+            code = main(["run", "--source", "newsletter:ai-snake-oil"])
+        self.assertEqual(code, 1)
+        self.assertIn("checkpoint handshake required", stdout.getvalue())
+
+    def test_stateful_adapter_identity_requires_handshake_even_without_a_batch(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["run", "--source", "community:github"])
         self.assertEqual(code, 1)
         self.assertIn("checkpoint handshake required", stdout.getvalue())
 

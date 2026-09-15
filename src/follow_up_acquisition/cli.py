@@ -196,7 +196,10 @@ def _intent_from_run(run: object, run_id: str) -> dict:
             "active_stream_ids": list(run.active_stream_ids[source_id]),
             "updates": [
                 thaw_checkpoint_update(update)
-                for update in run.checkpoint_updates[source_id]
+                for update in sorted(
+                    run.checkpoint_updates[source_id],
+                    key=lambda item: item.stream_id.encode("utf-8"),
+                )
             ],
         })
     intent = {
@@ -285,6 +288,9 @@ def _validate_intent(value: object) -> dict:
             updates.append(CheckpointUpdate(
                 update["stream_id"], update["previous_checkpoint_at"], update["checkpoint"],
             ))
+        update_ids = [update.stream_id for update in updates]
+        if update_ids != sorted(set(update_ids), key=lambda item: item.encode("utf-8")):
+            raise ValueError("checkpoint updates must be a canonical ordered set")
         if any(update.stream_id not in active for update in updates):
             raise ValueError("checkpoint update references an inactive stream")
         validate_checkpoint_updates(source_id, updates)
@@ -356,6 +362,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
             return 1
     run = collect_run(targets)
     batches = run.batches
+    stateful_adapters = {"github", "hackernews", "techmeme", "arxiv", "hugging-face-papers"}
+    stateful = any(run.active_stream_ids.values()) or any(
+        source.get("adapter") in stateful_adapters for source in targets
+    )
+    if not handshake and stateful:
+        print("run: checkpoint handshake required for stateful adapters")
+        return 1
     if not batches:
         if handshake:
             output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -370,9 +383,6 @@ def _cmd_run(args: argparse.Namespace) -> int:
         print("run: no collectable sources (v0.3.0 adapters are rss and web-publication)")
         return 0
 
-    if not handshake and any(run.checkpoint_updates.values()):
-        print("run: checkpoint handshake required for stateful adapters")
-        return 1
     output_dir = Path(args.output) if args.output else _default_output_dir()
     output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     if output_dir.is_symlink():

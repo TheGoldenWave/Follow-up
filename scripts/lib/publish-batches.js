@@ -89,6 +89,7 @@ export async function publishBatchRun(batches, {
   await fsImpl.mkdir(runsDir, { recursive: true, mode: 0o700 });
   const runsInfo = await fsImpl.lstat(runsDir);
   if (!runsInfo.isDirectory() || runsInfo.isSymbolicLink()) throw new Error('runs directory is unsafe or symlinked');
+  let renamed = false;
   try {
     try { await fsImpl.lstat(destination); throw new Error('run collision: destination exists'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -110,9 +111,15 @@ export async function publishBatchRun(batches, {
     }), fsImpl);
     await fsyncDirectory(staging, fsImpl);
     await fsImpl.rename(staging, destination);
+    renamed = true;
     await fsyncDirectory(runsDir, fsImpl);
   } catch (error) {
     await fsImpl.rm(staging, { recursive: true, force: true }).catch(() => {});
+    if (renamed) {
+      const uncertain = new Error('published run durability could not be confirmed');
+      uncertain.code = 'run-durability-uncertain';
+      throw uncertain;
+    }
     throw error;
   }
   return destination;

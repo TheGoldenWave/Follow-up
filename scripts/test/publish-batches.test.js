@@ -87,6 +87,65 @@ test('publishBatchRun rejects a symlinked runs directory before writing', async 
   assert.deepEqual(await readdir(join(dir, 'outside')), []);
 });
 
+function injectedWriteFs(stage, runsDir) {
+  let batchWrites = 0;
+  return { ...realFs, open: async (path, flags, mode) => {
+    const handle = await realFs.open(path, flags, mode);
+    const name = String(path);
+    const isManifest = name.endsWith('/run.json');
+    const isBatch = name.endsWith('.json') && !isManifest;
+    const isStagingDir = name.includes('/.runs-staging-') && flags === 'r';
+    const isRunsDir = name === runsDir && flags === 'r';
+    return {
+      writeFile: async payload => {
+        if (isBatch) batchWrites += 1;
+        if (stage === 'batch-write' && isBatch && batchWrites === 1) {
+          await handle.writeFile(payload.subarray(0, 5));
+          throw new Error('injected batch write');
+        }
+        if (stage === 'mid-run-write' && isBatch && batchWrites === 2) throw new Error('injected mid run');
+        if (stage === 'manifest-write' && isManifest) throw new Error('injected manifest write');
+        return handle.writeFile(payload);
+      },
+      sync: async () => {
+        if (stage === 'batch-fsync' && isBatch) throw new Error('injected batch fsync');
+        if (stage === 'manifest-fsync' && isManifest) throw new Error('injected manifest fsync');
+        if (stage === 'staging-dir-fsync' && isStagingDir) throw new Error('injected staging fsync');
+        if (stage === 'runs-dir-fsync' && isRunsDir) throw new Error('injected runs fsync');
+        return handle.sync();
+      },
+      close: () => handle.close(),
+    };
+  } };
+}
+
+test('publishBatchRun fault matrix never exposes pre-rename partial runs', async (t) => {
+  for (const stage of ['batch-write', 'batch-fsync', 'mid-run-write', 'manifest-write', 'manifest-fsync', 'staging-dir-fsync']) {
+    const dir = await mkdtemp(join(tmpdir(), `publish-${stage}-`));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const runsDir = join(dir, 'runs');
+    const batches = {
+      'blog:a': validBatch({ source: 'blog:a', batch_id: 'a' }),
+      'blog:b': validBatch({ source: 'blog:b', batch_id: 'b' }),
+    };
+    await assert.rejects(() => publishBatchRun(batches, {
+      runsDir, runId: 'r1', fsImpl: injectedWriteFs(stage, runsDir),
+    }));
+    await assert.rejects(() => readFile(join(runsDir, 'r1', 'run.json')), { code: 'ENOENT' });
+    assert.equal((await readdir(dir)).some(name => name.startsWith('.runs-staging-')), false);
+  }
+});
+
+test('runs directory fsync uncertainty preserves complete run but is not publish-success', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'publish-runs-fsync-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runsDir = join(dir, 'runs');
+  await assert.rejects(() => publishBatchRun({ 'blog:test': validBatch() }, {
+    runsDir, runId: 'r1', fsImpl: injectedWriteFs('runs-dir-fsync', runsDir),
+  }), error => error.code === 'run-durability-uncertain');
+  assert.equal(JSON.parse(await readFile(join(runsDir, 'r1', 'run.json'), 'utf8')).run_id, 'r1');
+});
+
 test('publishLatestPointers rejects a tampered published batch hash', async (t) => {
   const dir = await mkdtemp(join(tmpdir(), 'follow-up-runs-'));
   t.after(() => rm(dir, { recursive: true, force: true }));

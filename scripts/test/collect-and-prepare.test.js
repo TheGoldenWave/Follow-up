@@ -33,6 +33,7 @@ test('secret output rolls back a cutover source without persisting leaked text',
   await saveMigrationState(join(acq, 'migration.json'), state);
   local.batch_id = 'unsafe-run';
   local.items[0].text = 'ghp_' + 'a'.repeat(36);
+  let checkpointCommits = 0;
   const code = await main({ userDir, now: '2026-09-09T12:00:00.000Z', argv: ['--request-out', join(home, 'request.json')],
     stdout: { write() {} }, stderr: { write() {} },
     invokeRun: async ({ outputDir, checkpointOut, runId }) => {
@@ -40,13 +41,14 @@ test('secret output rolls back a cutover source without persisting leaked text',
       await writeFile(join(outputDir, `${local.source}.json`), JSON.stringify(local));
       await writeEmptyIntent(checkpointOut, runId, { [local.source]: local });
     },
-    commitCheckpoints: async () => ({ checkpointStatus: 'committed', report: {} }),
+    commitCheckpoints: async () => { checkpointCommits += 1; return { checkpointStatus: 'committed', report: {} }; },
   });
   assert.equal(code, 1);
   const updated = await loadMigrationState(join(acq, 'migration.json'));
   assert.equal(updated.sources[local.source].input, 'central');
   assert.equal(updated.sources[local.source].rollback_reason, 'secret-leak');
   assert.equal(JSON.stringify(updated).includes(local.items[0].text), false);
+  assert.equal(checkpointCommits, 0);
   assert.equal((await stat(acq)).mode & 0o777, 0o700);
   await assert.rejects(readFile(join(acq, 'latest', `${local.source}.json`)), { code: 'ENOENT' });
 });
@@ -158,6 +160,44 @@ test('invalid checkpoint intent cannot publish or commit', async () => {
   assert.equal(committed, false);
 });
 
+test('run durability uncertainty cannot publish pointers or commit checkpoints', async () => {
+  let pointers = 0;
+  let commits = 0;
+  await assert.rejects(() => collectAndPrepare({
+    config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
+    invokeRun: async () => {}, loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
+    loadIntent: async () => ({ sources: [] }),
+    publishRun: async () => { const error = new Error('uncertain'); error.code = 'run-durability-uncertain'; throw error; },
+    publishPointers: async () => { pointers += 1; }, commitCheckpoints: async () => { commits += 1; },
+  }), error => error.code === 'run-durability-uncertain');
+  assert.equal(pointers, 0);
+  assert.equal(commits, 0);
+});
+
+test('real intent validation rejects noncanonical updates before publish', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'invalid-intent-order-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  let published = false;
+  const value = batch('blog:test');
+  await assert.rejects(() => collectAndPrepare({
+    config: { acquisition: { mode: 'local' } }, userDir: join(home, '.follow-builders'),
+    invokeRun: async ({ outputDir, checkpointOut, runId }) => {
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(join(outputDir, 'blog:test.json'), JSON.stringify(value));
+      const checkpoint = { successful_window_end: null, cursor: null, etag: null, last_modified: null,
+        recent_native_ids: [], checkpoint_at: '2026-09-15T08:00:00Z' };
+      await writeFile(checkpointOut, JSON.stringify({ schema_version: '1.0', run_id: runId,
+        generated_at: '2026-09-15T08:00:00Z', sources: [{ source_id: 'blog:test', batch_id: 'b1',
+          active_stream_ids: ['alpha', 'zeta'], updates: [
+            { stream_id: 'zeta', previous_checkpoint_at: null, checkpoint },
+            { stream_id: 'alpha', previous_checkpoint_at: null, checkpoint },
+          ] }] }));
+    },
+    publishRun: async () => { published = true; },
+  }), /updates.*canonical/);
+  assert.equal(published, false);
+});
+
 test('checkpoint conflict preserves published run and continues preparation', async () => {
   let prepared = false;
   const result = await collectAndPrepare({
@@ -169,6 +209,21 @@ test('checkpoint conflict preserves published run and continues preparation', as
   });
   assert.equal(result.checkpointStatus, 'partial');
   assert.equal(prepared, true);
+});
+
+test('unexpected checkpoint failure becomes partial and preparation continues', async () => {
+  let preparedStatus;
+  const result = await collectAndPrepare({
+    config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
+    invokeRun: async () => {}, loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
+    loadIntent: async () => ({ sources: [] }), publishRun: async () => {}, publishPointers: async () => {},
+    commitCheckpoints: async () => { throw new Error('/secret/path'); },
+    prepare: async ({ checkpointStatus }) => { preparedStatus = checkpointStatus; return { status: 'request-ready' }; },
+  });
+  assert.equal(result.checkpointStatus, 'partial');
+  assert.equal(preparedStatus, 'partial');
+  assert.equal(result.prepared.status, 'request-ready');
+  assert.equal(JSON.stringify(result).includes('/secret/path'), false);
 });
 
 test('unknown mode is rejected', async () => {
@@ -206,6 +261,7 @@ test('a failed collection is never prepared as a successful empty local run', as
 
 test('semantic validation failure cannot publish a latest pointer', async () => {
   let published = false;
+  let committed = false;
   await assert.rejects(collectAndPrepare({
     config: { acquisition: { mode: 'local' } },
     invokeRun: async () => {}, loadBatches: async () => ({ 'blog:a': batch('blog:a') }),
@@ -213,8 +269,10 @@ test('semantic validation failure cannot publish a latest pointer', async () => 
     validateBatches: () => { throw new Error('item source mismatch'); },
     publishRun: async () => { published = true; },
     publishPointers: async () => { published = true; },
+    commitCheckpoints: async () => { committed = true; },
   }), /item source mismatch/);
   assert.equal(published, false);
+  assert.equal(committed, false);
 });
 
 for (const mode of ['central', 'shadow', 'hybrid', 'local']) {

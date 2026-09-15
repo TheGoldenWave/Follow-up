@@ -68,11 +68,19 @@ export async function collectAndPrepare({
 
     await publishRun(batches, { runsDir, runId, randomUUID });
     await publishPointers(batches, { runsDir, latestDir, runId, randomUUID });
-    const checkpoint = await commitCheckpoints({
-      intentPath: checkpointOut,
-      stateRoot: join(acquisitionDir, 'source-state'),
-      env: { ...process.env, HOME: join(userDir, '..') },
-    });
+    let checkpoint;
+    try {
+      checkpoint = await commitCheckpoints({
+        intentPath: checkpointOut,
+        stateRoot: join(acquisitionDir, 'source-state'),
+        env: { ...process.env, HOME: join(userDir, '..') },
+      });
+    } catch {
+      checkpoint = { checkpointStatus: 'partial', report: { status: 'partial' } };
+    }
+    if (!checkpoint || !['committed', 'partial', 'uncertain'].includes(checkpoint.checkpointStatus)) {
+      checkpoint = { checkpointStatus: 'partial', report: { status: 'partial' } };
+    }
     return { mode, collected: true, runId, batchCount: Object.keys(batches).length, batches,
       checkpointStatus: checkpoint.checkpointStatus,
       checkpointReport: checkpoint.report,
