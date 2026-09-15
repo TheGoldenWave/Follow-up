@@ -184,7 +184,7 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(completed.checkpoint["cursor"], {})
         self.assertEqual(completed.checkpoint["successful_window_end"], NOW)
 
-    def test_discussion_payload_uses_registry_filters_and_request_window(self):
+    def test_discussion_payload_uses_raw_registry_text_and_request_window_only(self):
         query = {
             "id": "filtered", "query": "agent systems", "sort": "updated",
             "filters": {
@@ -196,11 +196,10 @@ class GitHubAdapterTests(unittest.TestCase):
         def handler(method, url, kwargs):
             if method == "POST":
                 search = kwargs["payload"]["variables"]["query"]
-                for fragment in (
-                    "agent systems", "user:acme", "language:Python", "topic:agents",
-                    "updated:2026-09-14T00:00:00Z..2026-09-15T08:00:00Z",
-                ):
-                    self.assertIn(fragment, search)
+                self.assertEqual(
+                    search,
+                    "agent systems updated:2026-09-14T00:00:00Z..2026-09-15T08:00:00Z",
+                )
                 return response(url, {
                     "data": {"search": {"nodes": [], "pageInfo": {"hasNextPage": False, "endCursor": None}}}
                 })
@@ -783,6 +782,178 @@ class GitHubAdapterTests(unittest.TestCase):
         update = second.checkpoint_updates[0].checkpoint
         self.assertEqual(update["cursor"], {})
         self.assertEqual(update["successful_window_end"], NOW)
+
+    def test_mixed_missing_rest_node_drops_bad_item_warns_and_completes_endpoint(self):
+        valid = fixture("entities.json")["repository"]
+        missing = {**valid, "html_url": "https://github.com/acme/missing"}
+        missing.pop("node_id")
+        result = self.make_adapter(
+            source(), lambda _m, url, _k: response(url, {"total_count": 2, "items": [valid, missing]}),
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.code, "github-node-id-missing")
+        self.assertEqual([item.native_id for item in result.candidates], ["github:repository:R_repo"])
+        self.assertEqual(result.checkpoint_updates[0].checkpoint["cursor"], {})
+        self.assertEqual(result.checkpoint_updates[0].checkpoint["successful_window_end"], NOW)
+
+    def test_release_mixed_missing_node_completes_but_all_missing_fails_without_update(self):
+        data = fixture("entities.json")
+        missing = {**data["release"], "html_url": "https://github.com/acme/agent/releases/tag/missing"}
+        missing.pop("node_id")
+
+        def collect(releases):
+            def handler(_method, url, _kwargs):
+                if urlsplit(url).path == "/search/repositories":
+                    return response(url, {"total_count": 1, "items": [data["repository"]]})
+                return response(url, releases)
+            return self.make_adapter(source(entities=["release"]), handler).collect(
+                "community:github", {"mode": "shadow"},
+            )
+
+        mixed = collect([data["release"], missing])
+        self.assertEqual((mixed.status, mixed.code), ("ok", "github-node-id-missing"))
+        self.assertEqual(mixed.checkpoint_updates[0].checkpoint["cursor"], {})
+        all_missing = collect([missing])
+        self.assertEqual((all_missing.status, all_missing.code), ("schema-drift", "github-node-id-missing"))
+        self.assertEqual(all_missing.checkpoint_updates, ())
+
+    def test_retry_with_recent_valid_and_missing_node_still_completes_without_replay(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        valid = fixture("entities.json")["repository"]
+        missing = {**valid, "html_url": "https://github.com/acme/missing"}
+        missing.pop("node_id")
+        previous = {
+            "checkpoint_at": "2026-09-14T08:00:00Z", "cursor": {
+                "window": {"start": None, "end": NOW},
+                "endpoints": {"repository": {"complete": False}},
+            }, "etag": None, "last_modified": None,
+            "recent_native_ids": ["github:repository:R_repo"],
+            "successful_window_end": None, "query_fingerprint": query_fingerprint("github", query),
+        }
+        result = self.make_adapter(
+            source(queries=[query]),
+            lambda _m, url, _k: response(url, {"total_count": 2, "items": [valid, missing]}),
+            checkpoint={"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(result.status, "no-results")
+        self.assertEqual(result.candidates, ())
+        self.assertEqual(result.checkpoint_updates[0].checkpoint["cursor"], {})
+        self.assertEqual(result.checkpoint_updates[0].checkpoint["successful_window_end"], NOW)
+
+    def test_malformed_rest_timestamp_is_schema_drift_and_mixed_keeps_valid_candidate(self):
+        valid = fixture("entities.json")["repository"]
+        malformed = {**valid, "node_id": "R_bad_date", "html_url": "https://github.com/acme/bad", "updated_at": "not-a-date"}
+        all_bad = self.make_adapter(
+            source(), lambda _m, url, _k: response(url, {"total_count": 1, "items": [malformed]}),
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual((all_bad.status, all_bad.code), ("schema-drift", "github-item-schema-drift"))
+        self.assertEqual(all_bad.checkpoint_updates, ())
+
+        mixed = self.make_adapter(
+            source(), lambda _m, url, _k: response(url, {"total_count": 2, "items": [valid, malformed]}),
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual((mixed.status, mixed.code), ("partial", "github-item-schema-drift"))
+        self.assertEqual([item.native_id for item in mixed.candidates], ["github:repository:R_repo"])
+        self.assertFalse(mixed.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"]["complete"])
+
+    def test_full_failed_rest_page_does_not_persist_next_page_when_other_endpoint_succeeds(self):
+        missing = {**fixture("entities.json")["repository"]}
+        missing.pop("node_id")
+
+        def handler(_method, url, _kwargs):
+            if urlsplit(url).path == "/search/repositories":
+                return response(url, {"total_count": 200, "items": [missing] * 100})
+            return response(url, {"total_count": 0, "items": []})
+
+        result = self.make_adapter(
+            source(entities=["repository", "commit"]), handler,
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual((result.status, result.code), ("partial", "github-node-id-missing"))
+        endpoints = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]
+        self.assertEqual(endpoints["repository"], {"complete": False})
+        self.assertEqual(endpoints["commit"], {"complete": True})
+
+    def test_full_failed_release_page_does_not_persist_next_release_page(self):
+        data = fixture("entities.json")
+        missing = {**data["release"]}
+        missing.pop("node_id")
+
+        def handler(_method, url, _kwargs):
+            path = urlsplit(url).path
+            if path == "/search/repositories":
+                return response(url, {"total_count": 1, "items": [data["repository"]]})
+            if path.endswith("/releases"):
+                return response(url, [missing] * 100)
+            return response(url, {"total_count": 0, "items": []})
+
+        result = self.make_adapter(
+            source(entities=["release", "commit"]), handler,
+        ).collect("community:github", {"mode": "shadow", "depth": 1})
+        self.assertEqual((result.status, result.code), ("partial", "github-node-id-missing"))
+        endpoints = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]
+        self.assertEqual(endpoints["release"], {"complete": False})
+        self.assertEqual(endpoints["commit"], {"complete": True})
+
+    def test_discussion_mixed_missing_id_warns_but_completes_and_requires_parent_repo(self):
+        valid = fixture("discussion.json")["data"]["search"]["nodes"][0]
+        missing = {**valid, "url": "https://github.com/acme/agent/discussions/10"}
+        missing.pop("id")
+        body = {"data": {"search": {"nodes": [valid, missing], "pageInfo": {"hasNextPage": False, "endCursor": None}}}}
+
+        def handler(method, url, _kwargs):
+            return response(url, body) if method == "POST" else response(url, {"total_count": 0, "items": []})
+
+        result = self.make_adapter(
+            source(include_discussions=True), handler, lambda _source_id: "token",
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(result.status, "ok")
+        self.assertEqual(result.code, "github-node-id-missing")
+        discussion = next(item for item in result.candidates if item.source_type == "discussion")
+        self.assertEqual(discussion.provenance["parent_repository_id"], "github:repository:R_repo")
+        self.assertIn("discussions", {update.stream_id for update in result.checkpoint_updates})
+
+        only_missing_body = {"data": {"search": {"nodes": [missing], "pageInfo": {"hasNextPage": False, "endCursor": None}}}}
+        only_missing = self.make_adapter(
+            source(include_discussions=True),
+            lambda method, url, _kwargs: response(url, only_missing_body) if method == "POST" else response(url, {"total_count": 0, "items": []}),
+            lambda _source_id: "token",
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual((only_missing.status, only_missing.code), ("partial", "github-node-id-missing"))
+        self.assertNotIn("discussions", {update.stream_id for update in only_missing.checkpoint_updates})
+
+        invalid_repo = copy.deepcopy(valid)
+        invalid_repo["repository"] = {"nameWithOwner": "acme/agent"}
+        bad_body = {"data": {"search": {"nodes": [invalid_repo], "pageInfo": {"hasNextPage": False, "endCursor": None}}}}
+        bad = self.make_adapter(
+            source(include_discussions=True),
+            lambda method, url, _kwargs: response(url, bad_body) if method == "POST" else response(url, {"total_count": 0, "items": []}),
+            lambda _source_id: "token",
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual((bad.status, bad.code), ("partial", "github-item-schema-drift"))
+        self.assertNotIn("discussions", {update.stream_id for update in bad.checkpoint_updates})
+
+    def test_discussion_invalid_date_is_item_schema_drift_and_payload_omits_repo_only_filters(self):
+        node = copy.deepcopy(fixture("discussion.json")["data"]["search"]["nodes"][0])
+        node["updatedAt"] = "yesterday-ish"
+        query = {
+            "id": "filtered", "query": "agent systems", "sort": "updated",
+            "filters": {"entities": ["repository"], "owner": "acme", "language": "Python", "topics": ["agents"], "min_stars": 50},
+        }
+
+        def handler(method, url, kwargs):
+            if method == "POST":
+                search = kwargs["payload"]["variables"]["query"]
+                self.assertTrue(search.startswith("agent systems updated:"))
+                for forbidden in ("user:", "language:", "topic:", "stars:"):
+                    self.assertNotIn(forbidden, search)
+                return response(url, {"data": {"search": {"nodes": [node], "pageInfo": {"hasNextPage": False, "endCursor": None}}}})
+            return response(url, {"total_count": 0, "items": []})
+
+        result = self.make_adapter(
+            source(queries=[query], include_discussions=True), handler, lambda _source_id: "token",
+        ).collect("community:github", {"mode": "shadow", "window": {"start": "2026-09-14T00:00:00Z", "end": NOW}})
+        self.assertEqual((result.status, result.code), ("partial", "github-item-schema-drift"))
+        self.assertNotIn("discussions", {update.stream_id for update in result.checkpoint_updates})
 
 
 if __name__ == "__main__":

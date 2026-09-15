@@ -83,6 +83,20 @@ def _count(value: Any) -> int | None:
     return value if type(value) is int and value >= 0 else None
 
 
+def _canonical_timestamp(value: Any, endpoint: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value:
+        raise _ItemSchemaDrift(endpoint)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise _ItemSchemaDrift(endpoint) from exc
+    if parsed.tzinfo is None:
+        raise _ItemSchemaDrift(endpoint)
+    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 class GitHubAdapter:
     adapter_id = "github"
     adapter_version = "0.4.0"
@@ -184,12 +198,15 @@ class GitHubAdapter:
         if inp["include_discussions"]:
             previous = streams.get("discussions")
             try:
-                found, update, missing = self._collect_discussions(
+                found, update, missing, discussion_status, discussion_code = self._collect_discussions(
                     source, queries, request, config["budget"], headers, previous, now,
                 )
                 candidates.extend(found)
-                updates.append(update)
-                outcomes.append(("discussions", "ok", True))
+                if update is not None:
+                    updates.append(update)
+                outcomes.append(("discussions", discussion_status, discussion_status == "ok"))
+                if discussion_code:
+                    stream_codes["discussions"] = discussion_code
                 if missing:
                     warnings.append("discussions")
             except (AdapterError, SourceStateError) as exc:
@@ -325,10 +342,12 @@ class GitHubAdapter:
                         )
                     )
                 results.extend(found)
-                endpoint_states[entity] = state
+                endpoint_states[entity] = (
+                    (dict(old_state) or {"complete": False}) if problem_status else state
+                )
                 changed = changed or capped or problem_status is None or bool(found)
                 cap_hit = cap_hit or capped
-                missing = missing or problem_code == "node"
+                missing = missing or problem_code in {"node", "node-warning"}
                 if entity == "repository":
                     etag = response_etag or etag
                     last_modified = response_modified or last_modified
@@ -395,36 +414,52 @@ class GitHubAdapter:
             start_page = 1
         if type(start_page) is not int or not 1 <= start_page <= 10:
             raise AdapterError("GitHub endpoint cursor is invalid", status="schema-drift")
-        response, items, next_page, capped = self._search_pages(
+        response, pages, next_page, capped = self._search_pages(
             path, self._search_text(query, entity, request), depth, headers,
             label=entity, sort=api_sort, start_page=start_page,
         )
         if response.status == 304:
             return [], {"complete": True}, False, None, None, response.etag, response.last_modified
         results: list[SourceCandidate] = []
-        problem_code: str | None = None
-        problem_status: str | None = None
-        for item in items:
-            try:
-                if entity == "repository":
-                    full_name = _text(item.get("full_name"))
-                    node_id = _text(item.get("node_id"))
-                    if not node_id:
-                        raise _NodeIdentityMissing("repository")
-                    if not full_name or _REPO_NAME_RE.fullmatch(full_name) is None:
-                        raise _ItemSchemaDrift("repository")
-                    repo_cache[full_name.lower()] = node_id
-                elif entity in {"issue", "pull-request"}:
-                    self._resolve_parent_repository(item, headers, repo_cache)
-                results.append(self._map_rest(entity, item, query, now, repo_cache))
-            except _NodeIdentityMissing:
-                problem_code, problem_status = "node", "schema-drift"
-            except _ItemSchemaDrift:
-                if problem_code != "node":
-                    problem_code, problem_status = "schema", "schema-drift"
-            except AdapterError as exc:
-                if problem_code not in {"node", "schema"}:
-                    problem_code, problem_status = "parent", exc.status
+        node_warning = False
+        fatal_node = False
+        fatal_schema = False
+        other_failure: AdapterError | None = None
+        for items in pages:
+            page_missing = 0
+            page_schema = 0
+            for item in items:
+                try:
+                    if entity == "repository":
+                        full_name = _text(item.get("full_name"))
+                        node_id = _text(item.get("node_id"))
+                        if not node_id:
+                            raise _NodeIdentityMissing("repository")
+                        if not full_name or _REPO_NAME_RE.fullmatch(full_name) is None:
+                            raise _ItemSchemaDrift("repository")
+                        repo_cache[full_name.lower()] = node_id
+                    elif entity in {"issue", "pull-request"}:
+                        self._resolve_parent_repository(item, headers, repo_cache)
+                    results.append(self._map_rest(entity, item, query, now, repo_cache))
+                except _NodeIdentityMissing:
+                    page_missing += 1
+                except _ItemSchemaDrift:
+                    page_schema += 1
+                except AdapterError as exc:
+                    other_failure = other_failure or exc
+            fatal_schema = fatal_schema or bool(page_schema)
+            fatal_node = fatal_node or bool(items and page_missing == len(items))
+            node_warning = node_warning or bool(page_missing and page_missing < len(items))
+        if fatal_schema:
+            problem_code, problem_status = "schema", "schema-drift"
+        elif other_failure is not None:
+            problem_code, problem_status = "parent", other_failure.status
+        elif fatal_node:
+            problem_code, problem_status = "node", "schema-drift"
+        elif node_warning:
+            problem_code, problem_status = "node-warning", None
+        else:
+            problem_code = problem_status = None
         if capped:
             state = {"complete": False, "capped": True}
         elif next_page is not None:
@@ -447,25 +482,31 @@ class GitHubAdapter:
             repo_page = 1
         if type(repo_page) is not int or not 1 <= repo_page <= 10:
             raise AdapterError("GitHub release repository cursor is invalid", status="schema-drift")
-        _response, repo_items, repo_next, capped = self._search_pages(
+        _response, repo_pages, repo_next, capped = self._search_pages(
             "/search/repositories", self._search_text(query, "repository", request),
             depth, headers, label="release repositories", sort=query["sort"],
             start_page=repo_page,
         )
         targets: dict[str, str] = {}
-        problem_code: str | None = None
-        problem_status: str | None = None
-        for item in repo_items:
-            full_name = _text(item.get("full_name"))
-            node_id = _text(item.get("node_id"))
-            if not node_id:
-                problem_code, problem_status = "node", "schema-drift"
-                continue
-            if not full_name or _REPO_NAME_RE.fullmatch(full_name) is None:
-                if problem_code != "node":
-                    problem_code, problem_status = "schema", "schema-drift"
-                continue
-            targets[full_name.lower()] = node_id
+        repo_warning = False
+        repo_fatal_node = False
+        repo_schema = False
+        for repo_items in repo_pages:
+            page_missing = 0
+            page_schema = 0
+            for item in repo_items:
+                full_name = _text(item.get("full_name"))
+                node_id = _text(item.get("node_id"))
+                if not node_id:
+                    page_missing += 1
+                    continue
+                if not full_name or _REPO_NAME_RE.fullmatch(full_name) is None:
+                    page_schema += 1
+                    continue
+                targets[full_name.lower()] = node_id
+            repo_schema = repo_schema or bool(page_schema)
+            repo_fatal_node = repo_fatal_node or bool(repo_items and page_missing == len(repo_items))
+            repo_warning = repo_warning or bool(page_missing and page_missing < len(repo_items))
         old_pages = old_state.get("release_pages", {})
         if not isinstance(old_pages, Mapping):
             raise AdapterError("GitHub release cursor is invalid", status="schema-drift")
@@ -478,24 +519,40 @@ class GitHubAdapter:
             targets[full_name] = node_id
         results: list[SourceCandidate] = []
         next_releases: dict[str, dict[str, Any]] = {}
+        release_warning = False
+        release_fatal_node = False
+        release_schema = False
         for full_name in sorted(targets, key=lambda value: value.encode("utf-8")):
             saved = old_pages.get(full_name, {})
             start = saved.get("page", 1) if isinstance(saved, Mapping) else 1
             if type(start) is not int or start < 1:
                 raise AdapterError("GitHub release cursor is invalid", status="schema-drift")
-            items, next_page = self._release_pages(full_name, start, depth, headers)
-            for item in items:
-                try:
-                    results.append(self._map_rest("release", item, query, now, targets, full_name))
-                except _NodeIdentityMissing:
-                    problem_code, problem_status = "node", "schema-drift"
-                except _ItemSchemaDrift:
-                    if problem_code != "node":
-                        problem_code, problem_status = "schema", "schema-drift"
+            release_pages, next_page = self._release_pages(full_name, start, depth, headers)
+            for items in release_pages:
+                page_missing = 0
+                page_schema = 0
+                for item in items:
+                    try:
+                        results.append(self._map_rest("release", item, query, now, targets, full_name))
+                    except _NodeIdentityMissing:
+                        page_missing += 1
+                    except _ItemSchemaDrift:
+                        page_schema += 1
+                release_schema = release_schema or bool(page_schema)
+                release_fatal_node = release_fatal_node or bool(items and page_missing == len(items))
+                release_warning = release_warning or bool(page_missing and page_missing < len(items))
             if next_page is not None:
                 next_releases[full_name] = {
                     "page": next_page, "repository_node_id": targets[full_name],
                 }
+        if repo_schema or release_schema:
+            problem_code, problem_status = "schema", "schema-drift"
+        elif repo_fatal_node or release_fatal_node:
+            problem_code, problem_status = "node", "schema-drift"
+        elif repo_warning or release_warning:
+            problem_code, problem_status = "node-warning", None
+        else:
+            problem_code = problem_status = None
         if capped:
             state: dict[str, Any] = {"complete": False, "capped": True}
             if next_releases:
@@ -543,8 +600,8 @@ class GitHubAdapter:
     def _search_pages(
         self, path: str, query_text: str, depth: int, headers: Mapping[str, str], *,
         label: str, sort: str, start_page: int,
-    ) -> tuple[HttpResponse, list[Mapping[str, Any]], int | None, bool]:
-        all_items: list[Mapping[str, Any]] = []
+    ) -> tuple[HttpResponse, list[list[Mapping[str, Any]]], int | None, bool]:
+        pages: list[list[Mapping[str, Any]]] = []
         first_response: HttpResponse | None = None
         next_page: int | None = start_page
         capped = False
@@ -567,7 +624,7 @@ class GitHubAdapter:
             items = response.body["items"]
             if any(not isinstance(item, Mapping) for item in items):
                 raise AdapterError(f"{label} response schema drifted", status="schema-drift")
-            all_items.extend(items)
+            pages.append(items)
             total = response.body.get("total_count")
             complete = not items or len(items) < _PAGE_SIZE
             accessible_total = min(total, 1000) if type(total) is int else None
@@ -579,12 +636,12 @@ class GitHubAdapter:
                 break
             next_page = page + 1
         assert first_response is not None
-        return first_response, all_items, next_page, capped
+        return first_response, pages, next_page, capped
 
     def _release_pages(
         self, full_name: str, start_page: int, depth: int, headers: Mapping[str, str],
-    ) -> tuple[list[Mapping[str, Any]], int | None]:
-        items: list[Mapping[str, Any]] = []
+    ) -> tuple[list[list[Mapping[str, Any]]], int | None]:
+        pages: list[list[Mapping[str, Any]]] = []
         next_page: int | None = start_page
         for page in range(start_page, start_page + depth):
             url = f"https://api.github.com/repos/{quote(full_name, safe='/')}/releases?" + urlencode({
@@ -594,12 +651,12 @@ class GitHubAdapter:
                 url, allowed_hosts=_API_HOSTS, allowed_paths=_REST_PATHS, headers=headers,
             )
             page_items = self._list_body(response, "releases")
-            items.extend(page_items)
+            pages.append(page_items)
             if len(page_items) < _PAGE_SIZE:
                 next_page = None
                 break
             next_page = page + 1
-        return items, next_page
+        return pages, next_page
 
     @staticmethod
     def _list_body(response: HttpResponse, label: str) -> list[Mapping[str, Any]]:
@@ -680,6 +737,8 @@ class GitHubAdapter:
             node_id = _text(item.get("node_id"))
             if not node_id:
                 raise _NodeIdentityMissing(entity)
+            if entity == "pull-request" and not isinstance(item.get("pull_request"), Mapping):
+                raise _ItemSchemaDrift(entity)
             native_id = f"github:{entity}:{node_id}"
             if entity == "release" and parent_name:
                 repo_node = repo_nodes.get(parent_name.lower())
@@ -716,29 +775,41 @@ class GitHubAdapter:
             commit = item.get("commit") if isinstance(item.get("commit"), Mapping) else {}
             committer = commit.get("committer") if isinstance(commit.get("committer"), Mapping) else {}
             author_meta = commit.get("author") if isinstance(commit.get("author"), Mapping) else {}
-            updated = _text(committer.get("date")) or _text(author_meta.get("date"))
-            published = _text(author_meta.get("date"))
+            committer_date = _canonical_timestamp(committer.get("date"), entity)
+            author_date = _canonical_timestamp(author_meta.get("date"), entity)
+            updated = committer_date or author_date
+            published = author_date or updated
+            confidence = "exact" if author_date else "inferred"
             title = (_text(commit.get("message")) or "").splitlines()[0] or None
             text = _text(commit.get("message"))
             author = _text((item.get("author") or {}).get("login")) if isinstance(item.get("author"), Mapping) else None
             author = author or _text(author_meta.get("name"))
         elif entity == "release":
-            updated = _text(item.get("published_at")) or _text(item.get("created_at"))
+            published_date = _canonical_timestamp(item.get("published_at"), entity)
+            created_date = _canonical_timestamp(item.get("created_at"), entity)
+            updated = published_date or created_date
             published = updated
+            confidence = "exact" if published_date else "inferred"
             title = _text(item.get("name")) or _text(item.get("tag_name"))
             text = _text(item.get("body"))
             author = _text((item.get("author") or {}).get("login")) if isinstance(item.get("author"), Mapping) else None
         elif entity == "repository":
-            updated = _text(item.get("updated_at"))
-            published = _text(item.get("created_at")) or updated
+            updated = _canonical_timestamp(item.get("updated_at"), entity)
+            created = _canonical_timestamp(item.get("created_at"), entity)
+            published = created or updated
+            confidence = "exact" if created else "inferred"
             title = _text(item.get("full_name")) or _text(item.get("name"))
             text = _text(item.get("description"))
             author = _text((item.get("owner") or {}).get("login")) if isinstance(item.get("owner"), Mapping) else None
         else:
-            updated = _text(item.get("updated_at"))
-            published = _text(item.get("created_at")) or updated
+            updated = _canonical_timestamp(item.get("updated_at"), entity)
+            created = _canonical_timestamp(item.get("created_at"), entity)
+            published = created or updated
+            confidence = "exact" if created else "inferred"
             title, text = _text(item.get("title")), _text(item.get("body"))
             author = _text((item.get("user") or {}).get("login")) if isinstance(item.get("user"), Mapping) else None
+        if updated is None:
+            raise _ItemSchemaDrift(entity)
         if updated:
             metrics["updated_at"] = updated
         provenance: dict[str, Any] = {"query_id": query["id"], "endpoint": entity}
@@ -746,7 +817,7 @@ class GitHubAdapter:
             provenance["parent_repository_id"] = parent_id
         return SourceCandidate(
             native_id=native_id, url=url, source_type=entity,
-            date_confidence="exact" if published else "unknown", fetched_at=fetched_at,
+            date_confidence=confidence if published else "unknown", fetched_at=fetched_at,
             title=title, text=text, author=author, published_at=published,
             native_metrics=metrics, provenance=provenance,
         )
@@ -754,7 +825,7 @@ class GitHubAdapter:
     def _collect_discussions(
         self, source: str, queries: list[Mapping[str, Any]], request: dict[str, Any], budget: int,
         headers: dict[str, str], previous: Mapping[str, Any] | None, now: str,
-    ) -> tuple[list[SourceCandidate], CheckpointUpdate, bool]:
+    ) -> tuple[list[SourceCandidate], CheckpointUpdate | None, bool, str, str | None]:
         depth = request.get("depth", _DEFAULT_DEPTH)
         previous_cursor = previous.get("cursor", {}) if previous else {}
         if not isinstance(previous_cursor, Mapping):
@@ -774,6 +845,7 @@ class GitHubAdapter:
         if resume_query is not None:
             start_index = next(index for index, query in enumerate(queries) if query["id"] == resume_query)
         truncated = False
+        fatal_code: str | None = None
         for query_index, query in enumerate(queries[start_index:], start=start_index):
             after: str | None = resume_after if query["id"] == resume_query else None
             for page_index in range(depth):
@@ -798,16 +870,22 @@ class GitHubAdapter:
                 if not isinstance(search, Mapping) or type(search.get("nodes")) is not list:
                     raise AdapterError("discussions response schema drifted", status="schema-drift")
                 nodes = search["nodes"]
-                mapped_count = 0
+                page_missing = 0
+                page_schema = 0
                 for item in nodes:
-                    mapped = self._map_discussion(item, query, now)
-                    if mapped is None:
+                    try:
+                        results.append(self._map_discussion(item, query, now))
+                    except _NodeIdentityMissing:
+                        page_missing += 1
                         missing = True
-                    else:
-                        results.append(mapped)
-                        mapped_count += 1
-                if nodes and mapped_count == 0:
-                    raise _NodeIdentityMissing("discussion endpoint")
+                    except _ItemSchemaDrift:
+                        page_schema += 1
+                if page_schema:
+                    fatal_code = "github-item-schema-drift"
+                    break
+                if nodes and page_missing == len(nodes):
+                    fatal_code = "github-node-id-missing"
+                    break
                 page_info = search.get("pageInfo")
                 if not isinstance(page_info, Mapping):
                     raise AdapterError("discussions response schema drifted", status="schema-drift")
@@ -820,31 +898,30 @@ class GitHubAdapter:
                 if page_index == depth - 1:
                     cursor = {"query_id": query["id"], "after": end_cursor}
                     truncated = True
+            if fatal_code:
+                break
             if truncated:
                 break
             resume_after = None
         results = self._finalize(results, effective_request, MAX_RECENT_NATIVE_IDS)
         native_ids = [item.native_id for item in results]
+        previous_ids = set(previous.get("recent_native_ids", ())) if previous else set()
+        emitted = [item for item in results if item.native_id not in previous_ids]
+        if fatal_code:
+            return emitted, None, missing, "schema-drift", fatal_code
         if cursor:
             cursor["window"] = dict(effective_request["window"])
         update = self._checkpoint(
             "discussions", previous, now, effective_request, self._merge_recent(previous, native_ids),
             etag, last_modified, None, cursor=cursor, complete=not truncated,
         )
-        return results, update, missing
+        return emitted, update, missing, "ok", None
 
     @staticmethod
     def _discussion_search_text(
         query: Mapping[str, Any], request: Mapping[str, Any],
     ) -> str:
         parts = [query["query"]]
-        filters = query.get("filters", {})
-        if filters.get("owner"):
-            parts.append(f"user:{filters['owner']}")
-        if filters.get("language"):
-            parts.append(f"language:{filters['language']}")
-        for topic in filters.get("topics", ()):
-            parts.append(f"topic:{topic}")
         window = request.get("window")
         if isinstance(window, Mapping):
             start = window.get("start") or ""
@@ -869,16 +946,26 @@ class GitHubAdapter:
 
     def _map_discussion(
         self, item: Any, query: Mapping[str, Any], fetched_at: str,
-    ) -> SourceCandidate | None:
+    ) -> SourceCandidate:
         if not isinstance(item, Mapping):
-            return None
+            raise _ItemSchemaDrift("discussion")
         node_id = _text(item.get("id"))
+        if not node_id:
+            raise _NodeIdentityMissing("discussion")
         url = self._canonical_public_url(_text(item.get("url")))
-        if not node_id or url is None:
-            return None
+        if url is None:
+            raise _ItemSchemaDrift("discussion")
         repository = item.get("repository")
         repo_id = _text(repository.get("id")) if isinstance(repository, Mapping) else None
-        updated = _text(item.get("updatedAt"))
+        if (
+            not repo_id or len(repo_id) > 512
+            or any(character.isspace() or ord(character) < 0x20 for character in repo_id)
+        ):
+            raise _ItemSchemaDrift("discussion repository")
+        created = _canonical_timestamp(item.get("createdAt"), "discussion")
+        updated = _canonical_timestamp(item.get("updatedAt"), "discussion") or created
+        if created is None or updated is None:
+            raise _ItemSchemaDrift("discussion")
         metrics: dict[str, Any] = {}
         for key in ("comments", "reactions"):
             value = item.get(key)
@@ -887,16 +974,17 @@ class GitHubAdapter:
                 metrics[key] = parsed
         if updated:
             metrics["updated_at"] = updated
-        provenance: dict[str, Any] = {"query_id": query["id"], "endpoint": "discussions"}
-        if repo_id:
-            provenance["parent_repository_id"] = f"github:repository:{repo_id}"
+        provenance: dict[str, Any] = {
+            "query_id": query["id"], "endpoint": "discussions",
+            "parent_repository_id": f"github:repository:{repo_id}",
+        }
         author = item.get("author")
         return SourceCandidate(
             native_id=f"github:discussion:{node_id}", url=url, source_type="discussion",
-            date_confidence="exact" if item.get("createdAt") else "unknown", fetched_at=fetched_at,
+            date_confidence="exact", fetched_at=fetched_at,
             title=_text(item.get("title")), text=_text(item.get("bodyText")),
             author=_text(author.get("login")) if isinstance(author, Mapping) else None,
-            published_at=_text(item.get("createdAt")), native_metrics=metrics,
+            published_at=created, native_metrics=metrics,
             provenance=provenance,
         )
 
