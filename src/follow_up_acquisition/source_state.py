@@ -29,6 +29,12 @@ _RFC3339_UTC_RE = re.compile(
 )
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _FINGERPRINT_RE = re.compile(r"^[0-9a-f]{64}$")
+_HIGH_CONFIDENCE_CREDENTIAL_VALUES = (
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,255}\b"),
+    re.compile(r"\bsk-[A-Za-z0-9]{32,255}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
+)
 
 _STATE_FIELDS = frozenset({"schema_version", "source_id", "streams", "updated_at"})
 _STREAM_FIELDS = frozenset({
@@ -127,6 +133,10 @@ def _iter_values(value: Any, path: str = "$"):
     else:
         if isinstance(value, str) and redact_text(value) != value:
             _fail(f"state embeds credential-shaped value: {path}")
+        if isinstance(value, str) and any(
+            pattern.search(value) for pattern in _HIGH_CONFIDENCE_CREDENTIAL_VALUES
+        ):
+            _fail(f"state embeds high-confidence credential value: {path}")
         if not isinstance(value, (str, int, float, bool, type(None))):
             _fail(f"{path} is not JSON-compatible")
         yield value
@@ -148,13 +158,37 @@ def _validate_archive_cursor(cursor: Any) -> None:
         cursor, frozenset({"current_processing_date", "complete_dates"}),
         "Techmeme archive cursor",
     )
-    _parse_date(cursor["current_processing_date"], "current_processing_date")
+    current = _parse_date(cursor["current_processing_date"], "current_processing_date")
     dates = cursor["complete_dates"]
     if not isinstance(dates, list):
         _fail("complete_dates must be an array")
     parsed = [_parse_date(item, "complete_dates item") for item in dates]
     if parsed != sorted(set(parsed)):
         _fail("complete_dates must be an ascending ordered set")
+    if len(parsed) > 14:
+        _fail("complete_dates must contain at most 14 dates")
+    if any(item >= current for item in parsed):
+        _fail("every complete date must precede current_processing_date")
+
+
+def _bound_archive_dates(state: dict[str, Any]) -> bool:
+    """Bound an archive cursor before strict validation; return whether changed."""
+    if not isinstance(state, dict) or not str(state.get("source_id", "")).endswith(":techmeme"):
+        return False
+    streams = state.get("streams")
+    if not isinstance(streams, dict):
+        return False
+    archive = streams.get("archive")
+    if not isinstance(archive, dict):
+        return False
+    cursor = archive.get("cursor")
+    if not isinstance(cursor, dict):
+        return False
+    complete_dates = cursor.get("complete_dates")
+    if not isinstance(complete_dates, list) or len(complete_dates) <= 14:
+        return False
+    cursor["complete_dates"] = complete_dates[-14:]
+    return True
 
 
 def _validate_checkpoint(checkpoint: Any, label: str, *, archive: bool = False) -> None:
@@ -319,6 +353,12 @@ def merge_checkpoint_updates(
                 f"stream {stream_id!r} checkpoint changed (expected {previous!r}, found {current_at!r})"
             )
         replacement = copy.deepcopy(update["checkpoint"])
+        if merged["source_id"].endswith(":techmeme") and stream_id == "archive":
+            wrapper = {
+                "source_id": merged["source_id"],
+                "streams": {"archive": replacement},
+            }
+            _bound_archive_dates(wrapper)
         _validate_checkpoint(
             replacement, f"updates[{index}].checkpoint",
             archive=merged["source_id"].endswith(":techmeme") and stream_id == "archive",
@@ -336,9 +376,6 @@ def merge_checkpoint_updates(
             new_fingerprint = replacement.get("query_fingerprint")
             if old_fingerprint is not None and old_fingerprint != new_fingerprint:
                 raise SchemaDriftError(f"query fingerprint changed for stable stream {stream_id!r}")
-        if merged["source_id"].endswith(":techmeme") and stream_id == "archive":
-            complete_dates = replacement["cursor"]["complete_dates"]
-            replacement["cursor"]["complete_dates"] = complete_dates[-14:]
         merged["streams"][stream_id] = replacement
     merged["updated_at"] = updated_at
     validate_state(merged)
@@ -349,14 +386,15 @@ def prune_state(
     state: Mapping[str, Any], active_stream_ids: Iterable[str] | None = None, *, now: str,
 ) -> dict[str, Any]:
     """Prune expired removed queries and bound Techmeme archive date history."""
-    validate_state(state)
+    pruned = copy.deepcopy(state)
+    archive_bounded = _bound_archive_dates(pruned)
+    validate_state(pruned)
     now_dt = _parse_rfc3339_utc(now, "now")
     assert now_dt is not None
     active = set(state["streams"]) if active_stream_ids is None else set(active_stream_ids)
     if any(not isinstance(item, str) or _STREAM_ID_RE.fullmatch(item) is None for item in active):
         _fail("active_stream_ids contains an invalid stream ID")
-    pruned = copy.deepcopy(state)
-    changed = False
+    changed = archive_bounded
     for stream_id in list(pruned["streams"]):
         is_query = stream_id.startswith("query.") or stream_id.startswith("search.")
         if is_query and stream_id not in active:
@@ -453,6 +491,15 @@ class SourceStateStore:
         path = self._path(source_id)
         self._reject_symlink_path()
         try:
+            root_info = self.root.lstat()
+        except FileNotFoundError:
+            root_info = None
+        if root_info is not None:
+            if not stat.S_ISDIR(root_info.st_mode):
+                raise SourceStateError("state root is not a directory", code="unsafe-state")
+            if stat.S_IMODE(root_info.st_mode) & 0o077:
+                raise SourceStateError("state root permissions exceed 0700", code="unsafe-state")
+        try:
             flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
             descriptor = os.open(path, flags)
         except FileNotFoundError:
@@ -465,6 +512,8 @@ class SourceStateStore:
             info = os.fstat(descriptor)
             if not stat.S_ISREG(info.st_mode):
                 raise SourceStateError("state target is not a regular file", code="unsafe-state")
+            if stat.S_IMODE(info.st_mode) & 0o077:
+                raise SourceStateError("state file permissions exceed 0600", code="unsafe-state")
             with os.fdopen(descriptor, "rb", closefd=False) as handle:
                 payload = handle.read(MAX_STATE_BYTES + 1)
         finally:
@@ -478,7 +527,10 @@ class SourceStateStore:
         validate_state(value, expected_source_id=source_id)
         return value
 
-    def commit(self, source_id: str, updates: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    def commit(
+        self, source_id: str, updates: Iterable[Mapping[str, Any]], *,
+        active_stream_ids: Iterable[str] | None = None, now: str | None = None,
+    ) -> dict[str, Any]:
         """Lock, CAS-merge, fsync, and atomically replace one source state."""
         self._validate_source_id(source_id)
         self._ensure_root()
@@ -493,9 +545,15 @@ class SourceStateStore:
             os.fchmod(lock_fd, 0o600)
             fcntl.flock(lock_fd, fcntl.LOCK_EX)
             current = self.load(source_id)
+            commit_at = _format_utc(self._clock())
             merged = merge_checkpoint_updates(
-                current, updates, updated_at=_format_utc(self._clock()),
+                current, updates, updated_at=commit_at,
             )
+            if active_stream_ids is not None:
+                merged = prune_state(
+                    merged, active_stream_ids=active_stream_ids,
+                    now=commit_at if now is None else now,
+                )
             validate_state(merged, expected_source_id=source_id)
             payload = _canonical_bytes(merged) + b"\n"
             if len(payload) > MAX_STATE_BYTES:

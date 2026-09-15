@@ -150,6 +150,25 @@ class ValidateStateTests(unittest.TestCase):
             with self.subTest(cursor=cursor), self.assertRaises(SourceStateError):
                 validate_state(state(streams={"top": value}))
 
+    def test_rejects_standalone_high_confidence_credential_values(self) -> None:
+        credential_values = (
+            "gh" + "p_" + "a" * 36,
+            "s" + "k-" + "A" * 32,
+            "AK" + "IA" + "A" * 16,
+            "-----BEGIN " + "PRIVATE KEY-----",
+        )
+        for cursor in credential_values:
+            value = checkpoint()
+            value["cursor"] = cursor
+            with self.subTest(cursor=cursor[:8]), self.assertRaises(SourceStateError):
+                validate_state(state(streams={"top": value}))
+
+    def test_allows_benign_hashes_and_urls(self) -> None:
+        for cursor in ("a" * 64, "https://api.github.com/search/issues?page=2"):
+            value = checkpoint()
+            value["cursor"] = cursor
+            self.assertIs(validate_state(state(streams={"top": value}))["streams"]["top"], value)
+
     def test_rejects_noncanonical_dates_and_times(self) -> None:
         for field, invalid in (
             ("checkpoint_at", "2026-09-15 08:00:00"),
@@ -169,6 +188,21 @@ class ValidateStateTests(unittest.TestCase):
         value["cursor"] = "x" * MAX_STATE_BYTES
         with self.assertRaises(SourceStateError):
             validate_state(state(streams={"top": value}))
+
+    def test_rejects_invalid_techmeme_archive_date_sets(self) -> None:
+        cases = (
+            [f"2026-09-{day:02d}" for day in range(1, 16)],
+            ["2026-09-14", "2026-09-15"],
+            ["2026-09-14", "2026-09-16"],
+        )
+        for complete_dates in cases:
+            archive = checkpoint()
+            archive["cursor"] = {
+                "current_processing_date": "2026-09-15",
+                "complete_dates": complete_dates,
+            }
+            with self.subTest(complete_dates=complete_dates), self.assertRaises(SourceStateError):
+                validate_state(state(source_id="community:techmeme", streams={"archive": archive}))
 
 
 class MergeAndPruneTests(unittest.TestCase):
@@ -222,14 +256,14 @@ class MergeAndPruneTests(unittest.TestCase):
     def test_prunes_archive_to_current_and_14_complete_dates(self) -> None:
         archive = checkpoint()
         archive["cursor"] = {
-            "current_processing_date": "2026-09-15",
+            "current_processing_date": "2026-09-16",
             "complete_dates": [f"2026-09-{day:02d}" for day in range(1, 16)],
         }
         pruned = prune_state(
             state(source_id="community:techmeme", streams={"archive": archive}),
             active_stream_ids={"archive"}, now=NOW,
         )
-        self.assertEqual(pruned["streams"]["archive"]["cursor"]["current_processing_date"], "2026-09-15")
+        self.assertEqual(pruned["streams"]["archive"]["cursor"]["current_processing_date"], "2026-09-16")
         self.assertEqual(
             pruned["streams"]["archive"]["cursor"]["complete_dates"],
             [f"2026-09-{day:02d}" for day in range(2, 16)],
@@ -238,7 +272,7 @@ class MergeAndPruneTests(unittest.TestCase):
     def test_merge_bounds_techmeme_archive_before_commit(self) -> None:
         archive = checkpoint()
         archive["cursor"] = {
-            "current_processing_date": "2026-09-15",
+            "current_processing_date": "2026-09-16",
             "complete_dates": [f"2026-09-{day:02d}" for day in range(1, 16)],
         }
         merged = merge_checkpoint_updates(
@@ -296,6 +330,42 @@ class SourceStateStoreTests(unittest.TestCase):
                 }])
             self.assertEqual(ctx.exception.code, "state-conflict")
 
+    def test_commit_atomically_persists_query_pruning(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = SourceStateStore(
+                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+            )
+            store.commit("community:github", [
+                {"stream_id": "query.expired", "previous_checkpoint_at": None,
+                 "checkpoint": checkpoint(at="2026-09-08T08:00:00Z", fingerprint="a" * 64)},
+                {"stream_id": "query.recent", "previous_checkpoint_at": None,
+                 "checkpoint": checkpoint(at="2026-09-08T08:00:01Z", fingerprint="b" * 64)},
+                {"stream_id": "top", "previous_checkpoint_at": None, "checkpoint": checkpoint()},
+            ])
+            store.commit(
+                "community:github", [], active_stream_ids={"top"}, now=NOW,
+            )
+            persisted = store.load("community:github")
+            self.assertNotIn("query.expired", persisted["streams"])
+            self.assertIn("query.recent", persisted["streams"])
+
+    def test_pruning_does_not_delete_a_concurrently_advanced_stream(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = SourceStateStore(
+                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+            )
+            old_at = "2026-09-01T00:00:00Z"
+            store.commit("community:github", [{
+                "stream_id": "query.ai", "previous_checkpoint_at": None,
+                "checkpoint": checkpoint(at=old_at, fingerprint="a" * 64),
+            }])
+            store.commit("community:github", [{
+                "stream_id": "query.ai", "previous_checkpoint_at": old_at,
+                "checkpoint": checkpoint(at=NOW, fingerprint="a" * 64),
+            }])
+            store.commit("community:github", [], active_stream_ids=set(), now=NOW)
+            self.assertIn("query.ai", store.load("community:github")["streams"])
+
     def test_corrupt_oversized_and_symlink_state_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -325,6 +395,21 @@ class SourceStateStoreTests(unittest.TestCase):
                 SourceStateStore(link).load("community:github")
             with self.assertRaises(SourceStateError):
                 SourceStateStore(real).load("../escape")
+
+    def test_load_rejects_overly_permissive_root_and_file_modes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "state"
+            root.mkdir(mode=0o700)
+            store = SourceStateStore(root)
+            path = root / "community:github.json"
+            path.write_text(json.dumps(state()), encoding="utf-8")
+            path.chmod(0o644)
+            with self.assertRaises(SourceStateError):
+                store.load("community:github")
+            path.chmod(0o600)
+            root.chmod(0o755)
+            with self.assertRaises(SourceStateError):
+                store.load("community:github")
 
 
 if __name__ == "__main__":
