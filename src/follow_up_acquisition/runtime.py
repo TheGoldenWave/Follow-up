@@ -99,6 +99,8 @@ def validate_checkpoint_updates(
     for index, update in enumerate(update_list):
         if not isinstance(update, CheckpointUpdate):
             raise SourceStateError(f"checkpoint_updates[{index}] must be a CheckpointUpdate")
+        if not isinstance(update.checkpoint, dict):
+            raise SourceStateError(f"checkpoint_updates[{index}].checkpoint must be an object")
         checkpoint = copy.deepcopy(update.checkpoint)
         detached_update = CheckpointUpdate(
             update.stream_id, update.previous_checkpoint_at, checkpoint,

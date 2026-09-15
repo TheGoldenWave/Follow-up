@@ -116,6 +116,13 @@ class CheckpointContractTests(unittest.TestCase):
                     "community:other", (CheckpointUpdate("top", None, checkpoint),),
                 )
 
+    def test_validate_checkpoint_updates_rejects_non_object_with_previous_checkpoint(self):
+        update = CheckpointUpdate(
+            "top", "2026-09-15T07:00:00Z", [],  # type: ignore[arg-type]
+        )
+        with self.assertRaises(SourceStateError):
+            validate_checkpoint_updates("community:other", (update,))
+
     def test_validate_checkpoint_updates_rejects_credentials(self):
         credentials = (
             {"api_key": "secret"},
@@ -378,6 +385,31 @@ class OrchestrationTests(unittest.TestCase):
             "retryable": False,
         })
         self.assertEqual(batches["invalid"]["items"], [])
+
+    def test_run_isolates_non_object_checkpoint_from_independent_source(self):
+        malformed = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "malformed", "ok",
+            (make_candidate("bad", "https://bad.com/item"),),
+            checkpoint_updates=(CheckpointUpdate(
+                "top", "2026-09-15T07:00:00Z", [],  # type: ignore[arg-type]
+            ),),
+        ))
+        independent = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "independent", "ok",
+            (make_candidate("good", "https://good.com/item"),),
+        ))
+        batches = self.runtime.run(
+            [(malformed, "malformed"), (independent, "independent")], FIXED_REQUEST,
+        )
+        self.assertEqual(batches["malformed"]["source_status"], {
+            "status": "schema-drift",
+            "code": "invalid-checkpoint-update",
+            "message": "adapter returned invalid checkpoint updates",
+            "retryable": False,
+        })
+        self.assertEqual(batches["malformed"]["items"], [])
+        self.assertEqual(batches["independent"]["source_status"]["status"], "ok")
+        self.assertEqual(len(batches["independent"]["items"]), 1)
 
     def test_run_filters_by_source_ids(self):
         adapter = FakeAdapter()
