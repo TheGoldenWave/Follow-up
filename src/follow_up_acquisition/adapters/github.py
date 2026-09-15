@@ -342,7 +342,19 @@ class GitHubAdapter:
         old_endpoints = previous_cursor.get("endpoints", {})
         if not isinstance(old_endpoints, Mapping):
             raise AdapterError("GitHub checkpoint cursor is invalid", status="schema-drift")
-        effective_request = self._effective_request(request, previous, previous_cursor, now)
+        resume_required = False
+        for state in old_endpoints.values():
+            if not isinstance(state, Mapping):
+                raise AdapterError("GitHub endpoint checkpoint is invalid", status="schema-drift")
+            if set(state) != {"complete"} or state.get("complete") is True:
+                resume_required = True
+        effective_request = self._effective_request(
+            request, previous, previous_cursor, now, require_frozen=resume_required,
+        )
+        frozen_window = effective_request["window"]
+        for state in old_endpoints.values():
+            if "window" in state and state["window"] != frozen_window:
+                raise AdapterError("GitHub endpoint window does not match cursor window", status="schema-drift")
         endpoint_states: dict[str, dict[str, Any]] = {}
         results: list[SourceCandidate] = []
         repo_cache: dict[str, str | None] = {}
@@ -832,16 +844,27 @@ class GitHubAdapter:
     @staticmethod
     def _effective_request(
         request: Mapping[str, Any], previous: Mapping[str, Any] | None,
-        cursor: Mapping[str, Any], now: str,
+        cursor: Mapping[str, Any], now: str, *, require_frozen: bool = False,
     ) -> Mapping[str, Any]:
-        frozen_window = cursor.get("window")
-        if frozen_window is not None:
+        if "window" in cursor:
+            frozen_window = cursor["window"]
             if not isinstance(frozen_window, Mapping) or set(frozen_window) != {"start", "end"}:
                 raise AdapterError("GitHub checkpoint window is invalid", status="schema-drift")
-            for value in frozen_window.values():
-                if value is not None:
-                    _parse_time(value, "checkpoint window")
+            start, end = frozen_window["start"], frozen_window["end"]
+            if start is not None and not isinstance(start, str):
+                raise AdapterError("GitHub checkpoint window is invalid", status="schema-drift")
+            if not isinstance(end, str) or not end:
+                raise AdapterError("GitHub checkpoint window is invalid", status="schema-drift")
+            try:
+                parsed_start = _parse_time(start, "checkpoint window") if start is not None else None
+                parsed_end = _parse_time(end, "checkpoint window")
+            except AdapterError as exc:
+                raise AdapterError("GitHub checkpoint window is invalid", status="schema-drift") from exc
+            if parsed_start is not None and parsed_start > parsed_end:
+                raise AdapterError("GitHub checkpoint window is invalid", status="schema-drift")
             return {**request, "window": dict(frozen_window)}
+        if require_frozen:
+            raise AdapterError("GitHub resume cursor requires a frozen window", status="schema-drift")
         if isinstance(request.get("window"), Mapping):
             return request
         start = previous.get("successful_window_end") if previous else None
@@ -961,16 +984,24 @@ class GitHubAdapter:
         previous_cursor = previous.get("cursor", {}) if previous else {}
         if not isinstance(previous_cursor, Mapping):
             raise AdapterError("GitHub discussions cursor is invalid", status="schema-drift")
+        if previous_cursor:
+            if set(previous_cursor) != {"query_id", "after", "window", "counts"}:
+                raise AdapterError("GitHub discussions resume cursor is invalid", status="schema-drift")
         resume_query = previous_cursor.get("query_id")
         resume_after = previous_cursor.get("after")
+        if previous_cursor and (
+            type(resume_query) is not str or not resume_query
+            or type(resume_after) is not str or not resume_after
+        ):
+            raise AdapterError("GitHub discussions resume cursor is invalid", status="schema-drift")
         old_counts = _read_counts(
             previous_cursor, required=resume_query is not None or resume_after is not None,
         )
         if resume_query is not None and resume_query not in {query["id"] for query in queries}:
             raise AdapterError("GitHub discussions cursor is invalid", status="schema-drift")
-        if resume_after is not None and not isinstance(resume_after, str):
-            raise AdapterError("GitHub discussions cursor is invalid", status="schema-drift")
-        effective_request = self._effective_request(request, previous, previous_cursor, now)
+        effective_request = self._effective_request(
+            request, previous, previous_cursor, now, require_frozen=bool(previous_cursor),
+        )
         results: list[SourceCandidate] = []
         missing = False
         cursor: dict[str, Any] = {}

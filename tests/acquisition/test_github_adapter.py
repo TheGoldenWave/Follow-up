@@ -1276,6 +1276,86 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(discussion.status, "partial")
         self.assertNotIn("POST", methods)
 
+    def test_rest_resume_requires_frozen_window_and_rejects_endpoint_window_mismatch(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        counts = {"total_entries_seen": 100, "node_missing_seen": 0, "valid_seen": 100, "mapping_errors_seen": 0}
+        base = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "query_fingerprint": query_fingerprint("github", query),
+        }
+        endpoint = {"complete": False, "page": 2, "counts": counts}
+        cursors = (
+            {"endpoints": {"repository": endpoint}},
+            {"window": None, "endpoints": {"repository": endpoint}},
+            {"window": {"start": None, "end": "bad"}, "endpoints": {"repository": endpoint}},
+            {
+                "window": {"start": None, "end": NOW},
+                "endpoints": {"repository": {**endpoint, "window": {"start": None, "end": "2026-09-14T08:00:00Z"}}},
+            },
+        )
+        for cursor in cursors:
+            with self.subTest(cursor=cursor):
+                result = self.make_adapter(
+                    source(queries=[query]), lambda *_args: self.fail("resume window must validate before HTTP"),
+                    checkpoint={"streams": {"query.agents": {**base, "cursor": cursor}}},
+                ).collect("community:github", {"mode": "shadow", "depth": 1})
+                self.assertEqual(result.status, "schema-drift")
+                self.assertEqual(result.message, "query.agents: schema-drift")
+                self.assertEqual(result.checkpoint_updates, ())
+
+    def test_release_resume_requires_frozen_window_before_http(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["release"]}}
+        counts = {"total_entries_seen": 1, "node_missing_seen": 0, "valid_seen": 1, "mapping_errors_seen": 0}
+        previous = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "query_fingerprint": query_fingerprint("github", query),
+            "cursor": {"endpoints": {"release": {
+                "complete": False, "repository_complete": True,
+                "repository_counts": counts, "release_counts": counts,
+                "release_pages": {"acme/agent": {"page": 2, "repository_node_id": "R_repo"}},
+            }}},
+        }
+        result = self.make_adapter(
+            source(queries=[query]), lambda *_args: self.fail("release frozen window must validate before HTTP"),
+            checkpoint={"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.checkpoint_updates, ())
+
+    def test_discussion_resume_marker_is_exact_pair_with_frozen_window(self):
+        counts = {"total_entries_seen": 1, "node_missing_seen": 1, "valid_seen": 0, "mapping_errors_seen": 0}
+        cursors = (
+            {"query_id": "agents", "counts": counts, "window": {"start": None, "end": NOW}},
+            {"after": "next", "counts": counts, "window": {"start": None, "end": NOW}},
+            {"query_id": "", "after": "next", "counts": counts, "window": {"start": None, "end": NOW}},
+            {"query_id": "agents", "after": "", "counts": counts, "window": {"start": None, "end": NOW}},
+            {"query_id": "agents", "after": "next", "counts": counts},
+            {"query_id": "agents", "after": "next", "counts": counts, "window": None},
+        )
+        methods = []
+
+        def handler(method, url, _kwargs):
+            methods.append(method)
+            if method == "POST":
+                self.fail("discussion resume must validate before GraphQL HTTP")
+            return response(url, {"total_count": 0, "items": []})
+
+        for cursor in cursors:
+            with self.subTest(cursor=cursor):
+                previous = {
+                    "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None,
+                    "last_modified": None, "recent_native_ids": [],
+                    "successful_window_end": None, "cursor": cursor,
+                }
+                result = self.make_adapter(
+                    source(include_discussions=True), handler, lambda _source_id: "token",
+                    checkpoint={"streams": {"discussions": previous}},
+                ).collect("community:github", {"mode": "shadow"})
+                self.assertEqual(result.status, "partial")
+        self.assertNotIn("POST", methods)
+
 
 if __name__ == "__main__":
     unittest.main()
