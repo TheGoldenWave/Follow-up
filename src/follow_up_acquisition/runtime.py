@@ -10,14 +10,19 @@ contract-validated batches.
 from __future__ import annotations
 
 import copy
+import json
+import math
 import re
 import uuid
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any, Iterable, Protocol
 
 from .contracts import SCHEMA_VERSION, SignalBatchError, validate_batch
 from .source_state import (
+    MAX_STATE_BYTES,
     STATE_SCHEMA_VERSION,
     SourceStateError,
     merge_checkpoint_updates,
@@ -28,6 +33,41 @@ _TRACKING_PARAMS = frozenset({
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "fbclid", "gclid", "mc_eid", "mc_cid",
 })
+
+# Adapter output is untrusted.  These limits keep validation iterative and
+# bounded before persistence's authoritative semantic/state-size checks run.
+MAX_CHECKPOINT_DEPTH = 64
+MAX_CHECKPOINT_NODES = 10_000
+MAX_CHECKPOINT_UPDATES = 128
+MAX_CHECKPOINT_UPDATE_BYTES = MAX_STATE_BYTES
+
+
+class FrozenMapping(Mapping[str, Any]):
+    """A recursively immutable, read-only JSON object."""
+
+    __slots__ = ("_data",)
+
+    def __init__(self, values: dict[str, Any]) -> None:
+        self._data = MappingProxyType(values)
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, FrozenMapping):
+            return self._data == other._data
+        if type(other) is dict:
+            return _thaw_json(self) == other
+        return False
+
+    def __repr__(self) -> str:
+        return f"FrozenMapping({self._data!r})"
 
 
 def utc_now_iso() -> str:
@@ -64,7 +104,95 @@ class CheckpointUpdate:
 
     stream_id: str
     previous_checkpoint_at: str | None
-    checkpoint: dict[str, Any]
+    checkpoint: Mapping[str, Any]
+
+
+def _validate_json_shape(value: Any) -> None:
+    """Reject non-JSON, cyclic, excessively deep, or excessively large trees."""
+    stack: list[tuple[str, Any, int]] = [("node", value, 0)]
+    active: set[int] = set()
+    nodes = 0
+    while stack:
+        kind, item, depth = stack.pop()
+        if kind == "exit":
+            active.remove(item)
+            continue
+        if kind in {"dict-items", "list-items"}:
+            try:
+                child = next(item)
+            except StopIteration:
+                continue
+            stack.append((kind, item, depth))
+            if kind == "dict-items":
+                key, child = child
+                if type(key) is not str:
+                    raise SourceStateError("checkpoint object keys must be strings")
+            stack.append(("node", child, depth))
+            continue
+        nodes += 1
+        if nodes > MAX_CHECKPOINT_NODES:
+            raise SourceStateError("checkpoint exceeds structural limits")
+        if depth > MAX_CHECKPOINT_DEPTH:
+            raise SourceStateError("checkpoint exceeds structural limits")
+        item_type = type(item)
+        if item_type is dict:
+            item_id = id(item)
+            if item_id in active:
+                raise SourceStateError("checkpoint must not contain cycles")
+            active.add(item_id)
+            stack.append(("exit", item_id, depth))
+            stack.append(("dict-items", iter(item.items()), depth + 1))
+        elif item_type is list:
+            item_id = id(item)
+            if item_id in active:
+                raise SourceStateError("checkpoint must not contain cycles")
+            active.add(item_id)
+            stack.append(("exit", item_id, depth))
+            stack.append(("list-items", iter(item), depth + 1))
+        elif item_type is float:
+            if not math.isfinite(item):
+                raise SourceStateError("checkpoint numbers must be finite")
+        elif item_type not in {str, int, bool, type(None)}:
+            raise SourceStateError("checkpoint contains a non-JSON value")
+
+
+def _canonical_json_copy(value: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    try:
+        encoded = json.dumps(
+            value, ensure_ascii=False, allow_nan=False, separators=(",", ":"), sort_keys=True,
+        ).encode("utf-8")
+        return json.loads(encoded), len(encoded)
+    except Exception as exc:  # JSON/string/integer encoding is still an untrusted boundary.
+        raise SourceStateError("checkpoint cannot be encoded as canonical JSON") from exc
+
+
+def _freeze_json(value: Any) -> Any:
+    if type(value) is dict:
+        return FrozenMapping({key: _freeze_json(child) for key, child in value.items()})
+    if type(value) is list:
+        return tuple(_freeze_json(child) for child in value)
+    return value
+
+
+def _thaw_json(value: Any) -> Any:
+    if isinstance(value, FrozenMapping):
+        return {key: _thaw_json(child) for key, child in value.items()}
+    if type(value) is dict:
+        return {key: _thaw_json(child) for key, child in value.items()}
+    if type(value) is tuple:
+        return [_thaw_json(child) for child in value]
+    if type(value) is list:
+        return [_thaw_json(child) for child in value]
+    return value
+
+
+def thaw_checkpoint_update(update: CheckpointUpdate) -> dict[str, Any]:
+    """Return a fresh JSON object suitable for persistence/serialization."""
+    return {
+        "stream_id": update.stream_id,
+        "previous_checkpoint_at": update.previous_checkpoint_at,
+        "checkpoint": _thaw_json(update.checkpoint),
+    }
 
 
 def _empty_source_state(source: str) -> dict[str, Any]:
@@ -90,18 +218,44 @@ def validate_checkpoint_updates(
     """
     _empty_source_state(source)
     try:
-        update_list = tuple(updates)
-    except TypeError as exc:
+        update_iterator = iter(updates)
+    except Exception as exc:
         raise SourceStateError("checkpoint updates must be iterable") from exc
 
     detached: list[CheckpointUpdate] = []
+    retained_bytes = 2  # JSON array brackets around the pending update sequence.
     validation_time = "9999-12-31T23:59:59Z"
-    for index, update in enumerate(update_list):
+    index = 0
+    while True:
+        try:
+            update = next(update_iterator)
+        except StopIteration:
+            break
+        except Exception as exc:
+            raise SourceStateError("checkpoint updates cannot be read safely") from exc
+        if index >= MAX_CHECKPOINT_UPDATES:
+            raise SourceStateError("too many checkpoint updates")
         if not isinstance(update, CheckpointUpdate):
             raise SourceStateError(f"checkpoint_updates[{index}] must be a CheckpointUpdate")
-        if not isinstance(update.checkpoint, dict):
+        if type(update.checkpoint) is not dict:
             raise SourceStateError(f"checkpoint_updates[{index}].checkpoint must be an object")
-        checkpoint = copy.deepcopy(update.checkpoint)
+        _validate_json_shape(update.checkpoint)
+        checkpoint, checkpoint_bytes = _canonical_json_copy(update.checkpoint)
+        # Valid stream IDs/timestamps are bounded ASCII.  Avoid encoding an
+        # already-invalid attacker-sized metadata string before semantic checks.
+        stream_bytes = (
+            len(update.stream_id)
+            if type(update.stream_id) is str and len(update.stream_id) <= 128 else 0
+        )
+        previous_bytes = (
+            len(update.previous_checkpoint_at)
+            if type(update.previous_checkpoint_at) is str
+            and len(update.previous_checkpoint_at) <= 64 else 0
+        )
+        envelope_overhead = stream_bytes + previous_bytes + 64
+        retained_bytes += checkpoint_bytes + envelope_overhead + (1 if detached else 0)
+        if retained_bytes > MAX_CHECKPOINT_UPDATE_BYTES:
+            raise SourceStateError("checkpoint updates exceed aggregate size limit")
         detached_update = CheckpointUpdate(
             update.stream_id, update.previous_checkpoint_at, checkpoint,
         )
@@ -132,6 +286,7 @@ def validate_checkpoint_updates(
             updated_at=validation_time,
         )
         detached.append(detached_update)
+        index += 1
 
     # A second pass makes duplicate streams and the combined payload subject to
     # the same closed, maximum-size source-state validation as persistence.
@@ -144,7 +299,11 @@ def validate_checkpoint_updates(
         } for update in detached],
         updated_at=validation_time,
     )
-    return tuple(detached)
+    return tuple(CheckpointUpdate(
+        update.stream_id,
+        update.previous_checkpoint_at,
+        _freeze_json(update.checkpoint),
+    ) for update in detached)
 
 
 @dataclass(frozen=True)
@@ -333,7 +492,7 @@ class AcquisitionRuntime:
                     "only successful source streams may advance checkpoints"
                 )
             return replace(result, checkpoint_updates=updates)
-        except SourceStateError:
+        except Exception:  # noqa: BLE001 - adapter state is an untrusted boundary
             return SourceResult(
                 adapter.adapter_id,
                 adapter.adapter_version,

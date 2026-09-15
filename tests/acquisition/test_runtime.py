@@ -5,6 +5,8 @@ from __future__ import annotations
 import dataclasses
 import json
 import unittest
+from collections.abc import Iterator, Mapping
+from unittest import mock
 
 from follow_up_acquisition.contracts import SCHEMA_VERSION
 from follow_up_acquisition.runtime import (
@@ -16,6 +18,10 @@ from follow_up_acquisition.runtime import (
     SchemaDriftError,
     SourceCandidate,
     SourceResult,
+    MAX_CHECKPOINT_DEPTH,
+    MAX_CHECKPOINT_NODES,
+    MAX_CHECKPOINT_UPDATES,
+    thaw_checkpoint_update,
     validate_checkpoint_updates,
 )
 from follow_up_acquisition.source_state import MAX_STATE_BYTES, SourceStateError
@@ -81,6 +87,98 @@ class CheckpointContractTests(unittest.TestCase):
         self.assertIsNot(validated[0].checkpoint, checkpoint)
         checkpoint["cursor"]["page"] = 99
         self.assertEqual(validated[0].checkpoint["cursor"]["page"], 2)
+        with self.assertRaises(TypeError):
+            validated[0].checkpoint["cursor"]["page"] = 3
+        with self.assertRaises(TypeError):
+            validated[0].checkpoint["recent_native_ids"][0] = "changed"
+
+    def test_thaw_checkpoint_update_returns_fresh_mutable_json(self):
+        validated = validate_checkpoint_updates("community:other", (
+            CheckpointUpdate("top", None, make_checkpoint(cursor={"pages": [1, 2]})),
+        ))[0]
+
+        first = thaw_checkpoint_update(validated)
+        second = thaw_checkpoint_update(validated)
+        self.assertEqual(first, second)
+        self.assertIsNot(first, second)
+        first["checkpoint"]["cursor"]["pages"].append(3)
+        first["checkpoint"]["recent_native_ids"][0] = "changed"
+        self.assertEqual(validated.checkpoint["cursor"]["pages"], (1, 2))
+        self.assertEqual(validated.checkpoint["recent_native_ids"], ("native-1",))
+
+    def test_validate_checkpoint_updates_rejects_cycles_and_excessive_depth(self):
+        cyclic_dict = make_checkpoint()
+        cyclic_dict["cursor"] = cyclic_dict
+        cyclic_list: list[object] = []
+        cyclic_list.append(cyclic_list)
+        too_deep: object = "leaf"
+        for _ in range(MAX_CHECKPOINT_DEPTH + 1):
+            too_deep = [too_deep]
+
+        for cursor in (cyclic_dict, cyclic_list, too_deep):
+            checkpoint = cyclic_dict if cursor is cyclic_dict else make_checkpoint(cursor=cursor)
+            with self.assertRaises(SourceStateError):
+                validate_checkpoint_updates("community:other", (
+                    CheckpointUpdate("top", None, checkpoint),
+                ))
+
+    def test_validate_checkpoint_updates_rejects_excessive_nodes_and_nonfinite_numbers(self):
+        cases = (
+            make_checkpoint(cursor=[None] * MAX_CHECKPOINT_NODES),
+            make_checkpoint(cursor=float("nan")),
+            make_checkpoint(cursor=float("inf")),
+        )
+        for checkpoint in cases:
+            with self.assertRaises(SourceStateError):
+                validate_checkpoint_updates("community:other", (
+                    CheckpointUpdate("top", None, checkpoint),
+                ))
+
+    def test_validate_checkpoint_updates_rejects_hostile_objects_without_invoking_them(self):
+        class HostileObject:
+            deepcopy_called = False
+
+            def __deepcopy__(self, memo):
+                type(self).deepcopy_called = True
+                raise RuntimeError("secret-from-deepcopy")
+
+            def __repr__(self):
+                raise RuntimeError("secret-from-repr")
+
+        class HostileMapping(Mapping):
+            iter_called = False
+
+            def __getitem__(self, key):
+                raise RuntimeError("secret-from-getitem")
+
+            def __iter__(self) -> Iterator[str]:
+                type(self).iter_called = True
+                raise RuntimeError("secret-from-iter")
+
+            def __len__(self):
+                raise RuntimeError("secret-from-len")
+
+        for cursor in (HostileObject(), HostileMapping()):
+            with self.assertRaises(SourceStateError) as ctx:
+                validate_checkpoint_updates("community:other", (
+                    CheckpointUpdate("top", None, make_checkpoint(cursor=cursor)),
+                ))
+            self.assertNotIn("secret", str(ctx.exception))
+        self.assertFalse(HostileObject.deepcopy_called)
+        self.assertFalse(HostileMapping.iter_called)
+
+    def test_validate_checkpoint_updates_stops_at_explicit_update_limit(self):
+        consumed = 0
+
+        def updates():
+            nonlocal consumed
+            for index in range(MAX_CHECKPOINT_UPDATES + 2):
+                consumed += 1
+                yield CheckpointUpdate(f"stream-{index}", None, make_checkpoint())
+
+        with self.assertRaises(SourceStateError):
+            validate_checkpoint_updates("community:other", updates())
+        self.assertEqual(consumed, MAX_CHECKPOINT_UPDATES + 1)
 
     def test_validate_checkpoint_updates_accepts_canonical_previous_timestamp(self):
         validated = validate_checkpoint_updates("community:other", (
@@ -347,6 +445,22 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(result.message, "adapter returned invalid checkpoint updates")
         self.assertFalse(result.retryable)
 
+    def test_collect_one_maps_unexpected_checkpoint_validator_exception_safely(self):
+        adapter = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "bad", "ok",
+            (make_candidate("bad", "https://bad.example/item"),),
+        ))
+        with mock.patch(
+            "follow_up_acquisition.runtime.validate_checkpoint_updates",
+            side_effect=RuntimeError("secret-validator-detail"),
+        ):
+            result = self.runtime.collect_one(adapter, "bad", FIXED_REQUEST)
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.candidates, ())
+        self.assertEqual(result.checkpoint_updates, ())
+        self.assertEqual(result.code, "invalid-checkpoint-update")
+        self.assertEqual(result.message, "adapter returned invalid checkpoint updates")
+
     def test_collect_one_rejects_updates_from_unsuccessful_source_result(self):
         adapter = FakeAdapter(result=SourceResult(
             "fake", "1.0.0", "bad", "timeout", (), retryable=True,
@@ -410,6 +524,66 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(batches["malformed"]["items"], [])
         self.assertEqual(batches["independent"]["source_status"]["status"], "ok")
         self.assertEqual(len(batches["independent"]["items"]), 1)
+
+    def test_run_isolates_hostile_and_recursive_checkpoints_without_detail_leaks(self):
+        class Hostile:
+            def __deepcopy__(self, memo):
+                raise RuntimeError("secret-deepcopy-detail")
+
+            def __repr__(self):
+                raise RuntimeError("secret-repr-detail")
+
+        class HostileMapping(Mapping):
+            def __getitem__(self, key):
+                raise RuntimeError("secret-getitem-detail")
+
+            def __iter__(self) -> Iterator[str]:
+                raise RuntimeError("secret-iter-detail")
+
+            def __len__(self):
+                raise RuntimeError("secret-len-detail")
+
+        recursive_dict = make_checkpoint()
+        recursive_dict["cursor"] = recursive_dict
+        recursive_list: list[object] = []
+        recursive_list.append(recursive_list)
+        too_deep: object = "leaf"
+        for _ in range(MAX_CHECKPOINT_DEPTH + 1):
+            too_deep = [too_deep]
+        cases = (
+            recursive_dict,
+            make_checkpoint(cursor=recursive_list),
+            make_checkpoint(cursor=too_deep),
+            make_checkpoint(cursor=Hostile()),
+            make_checkpoint(cursor=HostileMapping()),
+        )
+        for index, checkpoint in enumerate(cases):
+            malformed = FakeAdapter(result=SourceResult(
+                "fake", "1.0.0", f"malformed-{index}", "ok",
+                (make_candidate("bad", "https://bad.com/item"),),
+                checkpoint_updates=(CheckpointUpdate("top", None, checkpoint),),
+            ))
+            independent = FakeAdapter(result=SourceResult(
+                "fake", "1.0.0", f"independent-{index}", "ok",
+                (make_candidate("good", "https://good.com/item"),),
+            ))
+            batches = self.runtime.run(
+                [(malformed, f"malformed-{index}"),
+                 (independent, f"independent-{index}")],
+                FIXED_REQUEST,
+            )
+            malformed_batch = batches[f"malformed-{index}"]
+            self.assertEqual(malformed_batch["source_status"], {
+                "status": "schema-drift",
+                "code": "invalid-checkpoint-update",
+                "message": "adapter returned invalid checkpoint updates",
+                "retryable": False,
+            })
+            self.assertEqual(malformed_batch["items"], [])
+            self.assertNotIn("secret", json.dumps(malformed_batch))
+            self.assertEqual(
+                batches[f"independent-{index}"]["source_status"]["status"], "ok",
+            )
 
     def test_run_filters_by_source_ids(self):
         adapter = FakeAdapter()
