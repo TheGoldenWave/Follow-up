@@ -128,7 +128,7 @@ test('v0.2 exposes only the follow-up user invocation while retaining migration 
 test('SKILL uses one cross-platform immutable runtime root and records exact source counts', async () => {
   const skill = await readFile(new URL('../../SKILL.md', import.meta.url), 'utf8');
   const counts = {};
-  for (const { channel } of await loadSourceRegistry()) {
+  for (const { channel } of await loadSourceRegistry({ scope: 'central-live' })) {
     counts[channel] = (counts[channel] ?? 0) + 1;
   }
   assert.deepEqual(counts, {

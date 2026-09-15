@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from typing import Any
+from urllib.parse import urlparse
 
 from .contracts import is_credential_key
 
@@ -22,6 +24,7 @@ ADAPTER_IDS = frozenset({
     "x", "rss", "web-publication", "podcast", "newsletter", "arxiv",
     "github", "hackernews", "reddit", "youtube", "techmeme", "digg",
     "xiaohongshu", "wechat", "report",
+    "hugging-face-papers",
 })
 
 CHANNEL_POLICIES = frozenset({"fixed", "core-topic"})
@@ -29,6 +32,45 @@ CADENCES = frozenset({"daily", "weekly", "monthly"})
 ACQUISITION_MODES = frozenset({"central", "shadow", "hybrid", "local"})
 
 _REGISTRY_SCHEMA_VERSION = "1.0"
+
+_QUERY_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
+_INPUT_FIELDS = {
+    "x": frozenset({"handle"}),
+    "rss": frozenset({"rss_url", "url", "language"}),
+    "podcast": frozenset({"rss_url", "url"}),
+    "arxiv": frozenset({"rss_url", "url"}),
+    "report": frozenset({"url"}),
+    "web-publication": frozenset({
+        "url", "language", "discovery", "article_url_patterns",
+        "exclude_url_patterns", "parser", "fetch_url_patterns",
+        "content_selectors", "content_selector_priority",
+    }),
+    "github": frozenset({"rest_api_url", "graphql_url", "include_discussions", "queries"}),
+    "hackernews": frozenset({
+        "firebase_url", "algolia_url", "top_enabled", "new_enabled", "queries",
+    }),
+    "techmeme": frozenset({"front_url", "archive_url_template"}),
+    "reddit": frozenset({"subreddit", "rss_url", "listing_url"}),
+    "hugging-face-papers": frozenset({
+        "structured_endpoint", "page_base_url", "views", "timezone",
+    }),
+}
+_REQUIRED_INPUT_FIELDS = {
+    adapter: fields for adapter, fields in _INPUT_FIELDS.items()
+}
+_REQUIRED_INPUT_FIELDS["rss"] = frozenset({"rss_url", "url"})
+_REQUIRED_INPUT_FIELDS["web-publication"] = frozenset({
+    "url", "language", "discovery", "article_url_patterns", "exclude_url_patterns", "parser",
+})
+_GITHUB_FILTERS = frozenset({"entities", "language", "min_stars", "owner", "topics"})
+_GITHUB_ENTITIES = frozenset({"repository", "release", "commit", "issue", "pull-request"})
+_HN_FILTERS = frozenset({"tags", "min_points"})
+_HN_TAGS = frozenset({"story", "ask_hn", "show_hn", "front_page"})
+_CHANNEL_NAMESPACES = {
+    "x": "x", "podcasts": "podcast", "blogs": "blog",
+    "newsletters": "newsletter", "academic": "academic",
+    "zh-tech": "zh-tech", "reports": "report",
+}
 
 _REGISTRY_REQUIRED = (
     "id",
@@ -56,6 +98,113 @@ def _namespace_of(source_id: str) -> str:
 def _require_non_empty_string(value: Any, label: str) -> None:
     if not isinstance(value, str) or not value:
         raise ConfigError(f"{label} must be a non-empty string")
+
+
+def _require_https_url(value: Any, label: str, *, template: bool = False) -> None:
+    _require_non_empty_string(value, label)
+    parsed = urlparse(value.replace("{date}", "2000-01-01") if template else value)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+        raise ConfigError(f"{label} must be a public HTTPS URL")
+    if template and value.count("{date}") != 1:
+        raise ConfigError(f"{label} must contain exactly one {{date}} placeholder")
+
+
+def _validate_queries(value: Any, label: str, *, adapter: str) -> None:
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"{label} must be a non-empty array")
+    seen: set[str] = set()
+    allowed_filters = _GITHUB_FILTERS if adapter == "github" else _HN_FILTERS
+    allowed_sorts = {"updated", "stars"} if adapter == "github" else {"date", "points"}
+    for index, query in enumerate(value):
+        query_label = f"{label}[{index}]"
+        if not isinstance(query, dict) or set(query) != {"id", "query", "sort", "filters"}:
+            raise ConfigError(f"{query_label} must contain only id, query, sort, and filters")
+        query_id = query["id"]
+        if not isinstance(query_id, str) or _QUERY_ID_RE.fullmatch(query_id) is None:
+            raise ConfigError(f"{query_label}.id must be a stable lowercase query ID")
+        if query_id in seen:
+            raise ConfigError(f"{label} contains duplicate query id: {query_id}")
+        seen.add(query_id)
+        _require_non_empty_string(query["query"], f"{query_label}.query")
+        if query["sort"] not in allowed_sorts:
+            raise ConfigError(f"{query_label}.sort is not allowed for {adapter}")
+        filters = query["filters"]
+        if not isinstance(filters, dict) or set(filters) - allowed_filters:
+            raise ConfigError(f"{query_label}.filters has unknown filter keys")
+        for key, item in filters.items():
+            if key in {"entities", "topics", "tags"}:
+                if not isinstance(item, list) or not item or not all(isinstance(v, str) and v for v in item):
+                    raise ConfigError(f"{query_label}.filters.{key} must be a non-empty string array")
+                if len(item) != len(set(item)):
+                    raise ConfigError(f"{query_label}.filters.{key} must not contain duplicates")
+            elif key in {"language", "owner"}:
+                _require_non_empty_string(item, f"{query_label}.filters.{key}")
+            elif not isinstance(item, int) or isinstance(item, bool) or item < 0:
+                raise ConfigError(f"{query_label}.filters.{key} must be a non-negative integer")
+        if adapter == "github":
+            entities = filters.get("entities")
+            if not entities or set(entities) - _GITHUB_ENTITIES:
+                raise ConfigError(f"{query_label}.filters.entities contains an unknown entity")
+            if "min_stars" in filters and "repository" not in entities:
+                raise ConfigError(f"{query_label}.filters.min_stars requires repository entities")
+        elif "tags" in filters and set(filters["tags"]) - _HN_TAGS:
+            raise ConfigError(f"{query_label}.filters.tags contains an unknown tag")
+
+
+def _validate_input(source: dict[str, Any], index: int) -> None:
+    adapter = source["adapter"]
+    value = source["input"]
+    allowed = _INPUT_FIELDS.get(adapter)
+    if allowed is None:
+        # Reserved adapters are accepted for compatibility until registered.
+        return
+    extra = set(value) - allowed
+    if extra:
+        raise ConfigError(f"sources[{index}] has unknown input field(s): {', '.join(sorted(extra))}")
+    missing = _REQUIRED_INPUT_FIELDS[adapter] - set(value)
+    if missing:
+        raise ConfigError(f"sources[{index}].input is missing field(s): {', '.join(sorted(missing))}")
+
+    for key, item in value.items():
+        if key.endswith("_url") or key in {"url", "structured_endpoint"}:
+            _require_https_url(item, f"sources[{index}].input.{key}")
+    if adapter == "web-publication":
+        if not isinstance(value["discovery"], list):
+            raise ConfigError(f"sources[{index}].input.discovery must be an array")
+        for discovery_index, discovery in enumerate(value["discovery"]):
+            expected = ({"type", "url", "publicUrl", "detailUrl"}
+                        if isinstance(discovery, dict) and discovery.get("type") == "json"
+                        else {"type", "url"})
+            if not isinstance(discovery, dict) or set(discovery) != expected:
+                raise ConfigError(f"sources[{index}].input.discovery[{discovery_index}] is invalid")
+            if discovery["type"] not in {"rss", "sitemap", "html", "json"}:
+                raise ConfigError(f"sources[{index}].input.discovery[{discovery_index}].type is invalid")
+            _require_https_url(discovery["url"], f"sources[{index}].input.discovery[{discovery_index}].url")
+            for key in ("publicUrl", "detailUrl"):
+                if key in discovery:
+                    _require_https_url(discovery[key].replace("{path}", "entry"),
+                                       f"sources[{index}].input.discovery[{discovery_index}].{key}")
+    elif adapter == "github":
+        if not isinstance(value["include_discussions"], bool):
+            raise ConfigError(f"sources[{index}].input.include_discussions must be a boolean")
+        _validate_queries(value["queries"], f"sources[{index}].input.queries", adapter=adapter)
+    elif adapter == "hackernews":
+        if not isinstance(value["top_enabled"], bool) or not isinstance(value["new_enabled"], bool):
+            raise ConfigError(f"sources[{index}].input top/new flags must be booleans")
+        _validate_queries(value["queries"], f"sources[{index}].input.queries", adapter=adapter)
+    elif adapter == "reddit":
+        _require_non_empty_string(value["subreddit"], f"sources[{index}].input.subreddit")
+        marker = f"/r/{value['subreddit']}/"
+        if marker not in value["rss_url"] or marker not in value["listing_url"]:
+            raise ConfigError(f"sources[{index}].input subreddit must match both Reddit URLs")
+    elif adapter == "techmeme":
+        _require_https_url(value["archive_url_template"],
+                           f"sources[{index}].input.archive_url_template", template=True)
+    elif adapter == "hugging-face-papers":
+        if value["views"] != ["daily", "trending", "weekly"]:
+            raise ConfigError(f"sources[{index}].input.views must use daily, trending, weekly order")
+        if value["timezone"] != "Asia/Shanghai":
+            raise ConfigError(f"sources[{index}].input.timezone must be Asia/Shanghai")
 
 
 def _iter_credential_keys(value: Any, path: str = "$"):
@@ -123,6 +272,11 @@ def _validate_source(source: Any, index: int, seen_ids: set[str]) -> None:
         raise ConfigError(
             f"sources[{index}].channel must be null for a core-topic policy"
         )
+    namespace = _namespace_of(source_id)
+    if policy == "core-topic" and namespace != "community":
+        raise ConfigError(f"sources[{index}].id must use the community namespace for core-topic policy")
+    if policy == "fixed" and _CHANNEL_NAMESPACES.get(channel) != namespace:
+        raise ConfigError(f"sources[{index}].id namespace must match fixed channel {channel}")
 
     if source["adapter"] not in ADAPTER_IDS:
         raise ConfigError(
@@ -143,6 +297,7 @@ def _validate_source(source: Any, index: int, seen_ids: set[str]) -> None:
     # Inputs are non-secret by construction; a credential-shaped key here is a bug.
     for path, _value in _iter_credential_keys(source["input"]):
         raise ConfigError(f"sources[{index}].input embeds a credential-shaped key: {path}")
+    _validate_input(source, index)
 
     legacy = source["legacy"]
     if not isinstance(legacy, dict) or "feed" not in legacy:

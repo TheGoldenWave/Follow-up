@@ -110,6 +110,30 @@
       }
     },
     {
+      "id": "academic:hugging-face-papers",
+      "name": "Hugging Face Papers",
+      "channel": "academic",
+      "channel_policy": "fixed",
+      "adapter": "hugging-face-papers",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 15,
+      "input": {
+        "structured_endpoint": "https://huggingface.co/api/daily_papers",
+        "page_base_url": "https://huggingface.co/papers",
+        "views": [
+          "daily",
+          "trending",
+          "weekly"
+        ],
+        "timezone": "Asia/Shanghai"
+      },
+      "legacy": {
+        "feed": null
+      }
+    },
+    {
       "id": "blog:amazon-science",
       "name": "Amazon Science Blog",
       "channel": "blogs",
@@ -454,7 +478,11 @@
           "^https://research\\.ibm\\.com/blog/[^/?#]+/?$"
         ],
         "exclude_url_patterns": [],
-        "parser": null
+        "parser": null,
+        "content_selectors": [
+          "main .FTOMS"
+        ],
+        "content_selector_priority": true
       },
       "legacy": {
         "feed": "feed-blogs.json"
@@ -653,12 +681,154 @@
         "article_url_patterns": [
           "^https://qwen\\.ai/blog\\?id=[A-Za-z0-9._-]+$"
         ],
+        "fetch_url_patterns": [
+          "^https://qwen\\.ai/api/v2/article/retrieval\\?type=qwen_ai&language=en-US&path=[A-Za-z0-9._-]+$"
+        ],
         "exclude_url_patterns": [],
         "parser": "qwen-blog"
       },
       "legacy": {
         "feed": "feed-blogs.json"
       }
+    },
+    {
+      "id": "community:github",
+      "name": "GitHub",
+      "channel": null,
+      "channel_policy": "core-topic",
+      "adapter": "github",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 10,
+      "input": {
+        "rest_api_url": "https://api.github.com",
+        "graphql_url": "https://api.github.com/graphql",
+        "include_discussions": false,
+        "queries": [
+          {
+            "id": "agentic-systems",
+            "query": "agentic systems",
+            "sort": "updated",
+            "filters": {
+              "entities": ["repository", "release", "commit", "issue", "pull-request"],
+              "topics": ["ai-agents", "agentic-ai"],
+              "min_stars": 50
+            }
+          },
+          {
+            "id": "llm-infrastructure",
+            "query": "LLM infrastructure",
+            "sort": "updated",
+            "filters": {
+              "entities": ["repository", "release", "commit", "issue", "pull-request"],
+              "topics": ["llm", "inference"],
+              "min_stars": 50
+            }
+          },
+          {
+            "id": "ai-safety",
+            "query": "AI safety",
+            "sort": "updated",
+            "filters": {
+              "entities": ["repository", "release", "commit", "issue", "pull-request"],
+              "topics": ["ai-safety"],
+              "min_stars": 25
+            }
+          }
+        ]
+      },
+      "legacy": { "feed": null }
+    },
+    {
+      "id": "community:hacker-news",
+      "name": "Hacker News",
+      "channel": null,
+      "channel_policy": "core-topic",
+      "adapter": "hackernews",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 10,
+      "input": {
+        "firebase_url": "https://hacker-news.firebaseio.com/v0",
+        "algolia_url": "https://hn.algolia.com/api/v1",
+        "top_enabled": true,
+        "new_enabled": true,
+        "queries": [
+          { "id": "ai-agents", "query": "AI agents", "sort": "date", "filters": { "tags": ["story"], "min_points": 2 } },
+          { "id": "language-models", "query": "language models", "sort": "date", "filters": { "tags": ["story"], "min_points": 2 } },
+          { "id": "ai-safety", "query": "AI safety", "sort": "date", "filters": { "tags": ["story"], "min_points": 2 } }
+        ]
+      },
+      "legacy": { "feed": null }
+    },
+    {
+      "id": "community:reddit-artificial",
+      "name": "r/artificial",
+      "channel": null,
+      "channel_policy": "core-topic",
+      "adapter": "reddit",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "subreddit": "artificial",
+        "rss_url": "https://www.reddit.com/r/artificial/.rss",
+        "listing_url": "https://www.reddit.com/r/artificial/new.json"
+      },
+      "legacy": { "feed": null }
+    },
+    {
+      "id": "community:reddit-localllama",
+      "name": "r/LocalLLaMA",
+      "channel": null,
+      "channel_policy": "core-topic",
+      "adapter": "reddit",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "subreddit": "LocalLLaMA",
+        "rss_url": "https://www.reddit.com/r/LocalLLaMA/.rss",
+        "listing_url": "https://www.reddit.com/r/LocalLLaMA/new.json"
+      },
+      "legacy": { "feed": null }
+    },
+    {
+      "id": "community:reddit-machinelearning",
+      "name": "r/MachineLearning",
+      "channel": null,
+      "channel_policy": "core-topic",
+      "adapter": "reddit",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 5,
+      "input": {
+        "subreddit": "MachineLearning",
+        "rss_url": "https://www.reddit.com/r/MachineLearning/.rss",
+        "listing_url": "https://www.reddit.com/r/MachineLearning/new.json"
+      },
+      "legacy": { "feed": null }
+    },
+    {
+      "id": "community:techmeme",
+      "name": "Techmeme",
+      "channel": null,
+      "channel_policy": "core-topic",
+      "adapter": "techmeme",
+      "requires_credentials": false,
+      "default_enabled": true,
+      "cadence": "daily",
+      "budget": 10,
+      "input": {
+        "front_url": "https://www.techmeme.com/",
+        "archive_url_template": "https://www.techmeme.com/{date}"
+      },
+      "legacy": { "feed": null }
     },
     {
       "id": "newsletter:ai-snake-oil",

@@ -200,7 +200,7 @@ test('frozen legacy mapping matches the independently audited 70-source fixture'
   assert.equal(expected.length, 70);
   const fixtureIds = expected.map(({ sourceId }) => sourceId);
   assert.equal(new Set(fixtureIds).size, fixtureIds.length);
-  const registryIds = (await loadSourceRegistry()).map(({ id }) => id);
+  const registryIds = (await loadSourceRegistry({ scope: 'central-live' })).map(({ id }) => id);
   assert.deepEqual([...fixtureIds].sort(), [...registryIds].sort());
   for (const { channel, legacyKey, sourceId } of expected) {
     assert.equal(LEGACY_SOURCE_ID_MAP[channel]?.[legacyKey], sourceId, `${channel}: ${legacyKey}`);

@@ -87,7 +87,7 @@ export async function validateFeedFiles({
     }
   }
   try {
-    const registry = expectedRegistry ?? await loadSourceRegistry();
+    const registry = expectedRegistry ?? await loadSourceRegistry({ scope: 'central-live' });
     const result = validateCandidateFeed(await readJson(CANDIDATE_FEED_FILE), {
       expectedRegistry: registry,
     });

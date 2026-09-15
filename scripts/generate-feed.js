@@ -14,7 +14,6 @@
 // ============================================================================
 
 import { readFile, rename, unlink, writeFile } from "fs/promises";
-import { existsSync } from "fs";
 import { basename, join } from "path";
 import { pathToFileURL } from "url";
 import { XMLParser, XMLValidator } from "fast-xml-parser";
@@ -30,6 +29,7 @@ import {
 } from "./candidate-feed-store.js";
 import { normalizeLegacyFeeds } from "./candidate-normalization.js";
 import { createSourceStatus, sanitizeDiagnostic } from "./source-status.js";
+import { loadSourceRegistry } from "./source-registry.js";
 import {
   publishFeedTransaction,
   recoverFeedPublication,
@@ -93,35 +93,27 @@ function pruneState(state, now = Date.now()) {
 // -- Load Sources ------------------------------------------------------------
 
 async function loadSources() {
-  const sourcesPath = join(SCRIPT_DIR, "..", "config", "default-sources.json");
-  const sources = JSON.parse(await readFile(sourcesPath, "utf-8"));
-
-  // Load additional feed configs for newsletters, academic, and zh-tech
-  const newslettersPath = join(SCRIPT_DIR, "..", "config", "feed-newsletters.json");
-  const academicPath = join(SCRIPT_DIR, "..", "config", "feed-academic.json");
-  const zhTechPath = join(SCRIPT_DIR, "..", "config", "feed-zh-tech.json");
-  const blogsPath = join(SCRIPT_DIR, "..", "config", "feed-blogs.json");
-
-  if (existsSync(blogsPath)) {
-    const blogConfig = JSON.parse(await readFile(blogsPath, "utf-8"));
-    const validation = validateBlogSources(blogConfig.sources);
-    if (!validation.valid) {
-      throw new Error(`Invalid blog source configuration: ${validation.errors.join('; ')}`);
-    }
-    sources.blogs = blogConfig.sources;
+  const registry = await loadSourceRegistry({ scope: 'central-live' });
+  const blogs = registry.filter(({ channel }) => channel === 'blogs');
+  const validation = validateBlogSources(blogs);
+  if (!validation.valid) {
+    throw new Error(`Invalid blog source configuration: ${validation.errors.join('; ')}`);
   }
-
-  sources.newsletters = existsSync(newslettersPath)
-    ? JSON.parse(await readFile(newslettersPath, "utf-8")).sources
-    : [];
-  sources.academic = existsSync(academicPath)
-    ? JSON.parse(await readFile(academicPath, "utf-8"))
-    : { sources: [] };
-  sources.zhTech = existsSync(zhTechPath)
-    ? JSON.parse(await readFile(zhTechPath, "utf-8")).sources
-    : [];
-
-  return sources;
+  const academicConfig = JSON.parse(await readFile(
+    join(SCRIPT_DIR, "..", "config", "feed-academic.json"), "utf-8",
+  ));
+  return {
+    registry,
+    x_accounts: registry.filter(({ channel }) => channel === 'x'),
+    podcasts: registry.filter(({ channel }) => channel === 'podcasts'),
+    blogs,
+    newsletters: registry.filter(({ channel }) => channel === 'newsletters'),
+    academic: {
+      sources: registry.filter(({ channel }) => channel === 'academic'),
+      filters: academicConfig.filters,
+    },
+    zhTech: registry.filter(({ channel }) => channel === 'zh-tech'),
+  };
 }
 
 // -- Podcast Fetching (RSS + pod2txt) ----------------------------------------
@@ -864,6 +856,7 @@ const CHANNEL_PAYLOADS = {
 };
 
 function sourceRegistryFromSources(sources) {
+  if (Array.isArray(sources.registry)) return sources.registry;
   return [
     ...(sources.x_accounts ?? []).map((source) => ({ ...source, channel: "x" })),
     ...(sources.podcasts ?? []).map((source) => ({ ...source, channel: "podcasts" })),

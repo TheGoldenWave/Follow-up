@@ -1,185 +1,93 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
-  createSourceRegistry,
-  loadSourceRegistry,
-} from '../source-registry.js';
+import { createSourceRegistry, loadSourceRegistry } from '../source-registry.js';
 
-const expectedSourceIds = {
-  x: [
-    'x:karpathy',
-    'x:swyx',
-    'x:joshwoodward',
-    'x:bcherny',
-    'x:thsottiaux',
-    'x:petergyang',
-    'x:thenanyu',
-    'x:realmadhuguru',
-    'x:amandaaskell',
-    'x:catwu',
-    'x:trq212',
-    'x:googlelabs',
-    'x:amasad',
-    'x:rauchg',
-    'x:alexalbert',
-    'x:levie',
-    'x:ryolu',
-    'x:garrytan',
-    'x:mattturck',
-    'x:zarazhangrui',
-    'x:nikunj',
-    'x:steipete',
-    'x:danshipper',
-    'x:adityaag',
-    'x:sama',
-    'x:claudeai',
-    'x:dario-amodei',
-    'x:nathanlabenz',
-    'x:jackclarksf',
-    'x:bentossell',
-  ],
-  podcasts: [
-    'podcast:latent-space',
-    'podcast:training-data',
-    'podcast:no-priors',
-    'podcast:unsupervised-learning',
-    'podcast:mad-podcast',
-    'podcast:ai-and-i',
-    'podcast:lex-fridman',
-    'podcast:cognitive-revolution',
-    'podcast:lightcone',
-    'podcast:acquired',
-  ],
-  blogs: [
-    'blog:anthropic-engineering',
-    'blog:claude-blog',
-    'blog:anthropic-interpretability',
-    'blog:anthropic-science',
-    'blog:openai-alignment',
-    'blog:google-antigravity',
-    'blog:google-deepmind',
-    'blog:google-research',
-    'blog:microsoft-research',
-    'blog:amazon-science',
-    'blog:ibm-research',
-    'blog:perplexity-research',
-    'blog:qwen-blog',
-    'blog:kimi-blog',
-    'blog:ernie-blog',
-    'blog:minimax-blog',
-    'blog:apple-ml-research',
-  ],
-  newsletters: [
-    'newsletter:stratechery',
-    'newsletter:one-useful-thing',
-    'newsletter:algorithmic-bridge',
-    'newsletter:ai-snake-oil',
-  ],
-  academic: [
-    'academic:arxiv-cs-ai',
-    'academic:arxiv-cs-cl',
-    'academic:arxiv-cs-cv',
-    'academic:arxiv-cs-lg',
-    'academic:arxiv-cs-ro',
-    'academic:arxiv-cs-cr',
-  ],
-  'zh-tech': [
-    'zh-tech:36kr',
-    'zh-tech:sspai',
-    'zh-tech:qbitai',
-  ],
-};
+const v03SourceIds = new Set(`
+academic:arxiv-cs-ai academic:arxiv-cs-cl academic:arxiv-cs-cr academic:arxiv-cs-cv
+academic:arxiv-cs-lg academic:arxiv-cs-ro blog:amazon-science blog:anthropic-engineering
+blog:anthropic-interpretability blog:anthropic-science blog:apple-ml-research blog:claude-blog
+blog:ernie-blog blog:google-antigravity blog:google-deepmind blog:google-research blog:ibm-research
+blog:kimi-blog blog:microsoft-research blog:minimax-blog blog:openai-alignment blog:perplexity-research
+blog:qwen-blog newsletter:ai-snake-oil newsletter:algorithmic-bridge newsletter:bens-bites
+newsletter:import-ai newsletter:one-useful-thing newsletter:stratechery newsletter:the-batch
+newsletter:the-gradient newsletter:tldr-ai podcast:acquired podcast:ai-and-i podcast:cognitive-revolution
+podcast:latent-space podcast:lex-fridman podcast:lightcone podcast:mad-podcast podcast:no-priors
+podcast:training-data podcast:unsupervised-learning report:a16z-ai-canon report:cbinsights-ai
+report:firstmark-mad report:stanford-ai-index report:state-of-ai x:adityaag x:alexalbert
+x:amandaaskell x:amasad x:bcherny x:bentossell x:catwu x:claudeai x:danshipper
+x:dario-amodei x:garrytan x:googlelabs x:jackclarksf x:joshwoodward x:karpathy x:levie
+x:mattturck x:nathanlabenz x:nikunj x:petergyang x:rauchg x:realmadhuguru x:ryolu
+x:sama x:steipete x:swyx x:thenanyu x:thsottiaux x:trq212 x:zarazhangrui zh-tech:36kr
+zh-tech:aiera zh-tech:jiqizhixin zh-tech:qbitai zh-tech:sspai
+`.trim().split(/\s+/));
 
-test('all running sources have globally unique explicit namespaced IDs', async () => {
-  const registry = await loadSourceRegistry();
-  const ids = registry.map(({ id }) => id);
+const v04SourceIds = new Set([
+  'community:github', 'community:hacker-news', 'community:techmeme',
+  'community:reddit-machinelearning', 'community:reddit-localllama',
+  'community:reddit-artificial', 'academic:hugging-face-papers',
+]);
 
-  assert.ok(ids.includes('x:karpathy'));
-  assert.ok(ids.includes('podcast:latent-space'));
-  assert.ok(ids.includes('blog:anthropic-engineering'));
-  assert.equal(new Set(ids).size, ids.length);
-  assert.ok(registry.every(({ id, channel }) => {
-    const namespace = channel === 'podcasts' ? 'podcast' : channel === 'blogs'
-      ? 'blog' : channel === 'newsletters' ? 'newsletter' : channel;
-    return id.startsWith(`${namespace}:`);
-  }));
+test('registry requires an explicit supported scope', async () => {
+  await assert.rejects(loadSourceRegistry(), /scope/i);
+  await assert.rejects(loadSourceRegistry({ scope: 'default' }), /scope/i);
+  assert.throws(() => createSourceRegistry({ schema_version: '1.0', sources: [] }), /scope/i);
+});
+
+test('canonical registry has 89 sources, preserves all 82 IDs, and keeps central at 70', async () => {
+  const [all, central, local] = await Promise.all([
+    loadSourceRegistry({ scope: 'all' }),
+    loadSourceRegistry({ scope: 'central-live' }),
+    loadSourceRegistry({ scope: 'local-enabled' }),
+  ]);
+  assert.equal(all.length, 89);
+  assert.equal(central.length, 70);
+  assert.equal(local.length, all.filter(({ default_enabled: enabled }) => enabled).length);
+  assert.deepEqual(new Set(all.filter(({ id }) => !v04SourceIds.has(id)).map(({ id }) => id)), v03SourceIds);
+  assert.ok(central.every((source) => source.legacy.feed !== null));
+  assert.ok(local.every((source) => source.default_enabled));
+  assert.ok([...v04SourceIds].every((id) => all.some((source) => source.id === id)));
+});
+
+test('compatibility projection preserves central identity selectors', async () => {
+  const registry = await loadSourceRegistry({ scope: 'central-live' });
+  const x = registry.find(({ id }) => id === 'x:karpathy');
+  const podcast = registry.find(({ id }) => id === 'podcast:latent-space');
+  const blog = registry.find(({ id }) => id === 'blog:anthropic-engineering');
+  const academic = registry.find(({ id }) => id === 'academic:arxiv-cs-ai');
+  assert.equal(x.handle, x.input.handle);
+  assert.equal(podcast.rssUrl, podcast.input.rss_url);
+  assert.equal(blog.articleUrlPatterns, blog.input.article_url_patterns);
+  assert.equal(academic.rss, academic.input.rss_url);
+  assert.equal(academic.url, academic.input.url);
+});
+
+test('registry is deeply frozen and detached from caller input', () => {
+  const document = {
+    schema_version: '1.0',
+    sources: [{ id: 'x:one', name: 'One', channel: 'x', channel_policy: 'fixed', adapter: 'x',
+      requires_credentials: true, default_enabled: true, cadence: 'daily', budget: 1,
+      input: { handle: 'one' }, legacy: { feed: 'feed-x.json' } }],
+  };
+  const registry = createSourceRegistry(document, { scope: 'all' });
+  document.sources[0].name = 'Mutated';
+  document.sources[0].input.handle = 'mutated';
+  assert.equal(registry[0].name, 'One');
+  assert.equal(registry[0].handle, 'one');
   assert.ok(Object.isFrozen(registry));
-  assert.ok(registry.every(Object.isFrozen));
+  assert.ok(Object.isFrozen(registry[0]));
+  assert.ok(Object.isFrozen(registry[0].input));
+  assert.ok(Object.isFrozen(registry[0].legacy));
+  assert.throws(() => { registry[0].input.handle = 'changed'; }, TypeError);
 });
 
-test('registry rejects missing, mismatched, and duplicate source IDs', () => {
-  const base = {
-    defaultSources: {
-      x_accounts: [{ id: 'x:one', name: 'Display Name', handle: 'one' }],
-      podcasts: [],
-    },
-    blogs: { sources: [] },
-    newsletters: { sources: [] },
-    academic: { sources: [] },
-    zhTech: { sources: [] },
-  };
-
+test('createSourceRegistry rejects malformed canonical documents', () => {
   assert.throws(
-    () => createSourceRegistry({
-      ...base,
-      defaultSources: { ...base.defaultSources, x_accounts: [{ name: 'One', handle: 'one' }] },
-    }),
-    /explicit.*id/i,
+    () => createSourceRegistry({ schema_version: '1.0', sources: [{ id: 'bad' }] }, { scope: 'all' }),
+    /namespaced|source/i,
   );
   assert.throws(
-    () => createSourceRegistry({
-      ...base,
-      defaultSources: { ...base.defaultSources, x_accounts: [{ id: 'blog:one', name: 'One', handle: 'one' }] },
-    }),
-    /namespace/i,
+    () => createSourceRegistry({ schema_version: '0.9', sources: [] }, { scope: 'all' }),
+    /schema/i,
   );
-  assert.throws(
-    () => createSourceRegistry({
-      ...base,
-      defaultSources: {
-        ...base.defaultSources,
-        x_accounts: [
-          { id: 'x:one', name: 'One', handle: 'one' },
-          { id: 'x:one', name: 'Renamed Display', handle: 'other' },
-        ],
-      },
-    }),
-    /duplicate/i,
-  );
-});
-
-test('registry freezes the complete v0.2 source identity set by channel', async () => {
-  const registry = await loadSourceRegistry();
-  const actualSourceIds = Object.fromEntries(Object.keys(expectedSourceIds).map((channel) => [
-    channel,
-    registry.filter((source) => source.channel === channel).map((source) => source.id),
-  ]));
-
-  assert.deepEqual(actualSourceIds, expectedSourceIds);
-});
-
-test('changing a display name does not change or regenerate its explicit ID', () => {
-  const configs = {
-    defaultSources: {
-      x_accounts: [{ id: 'x:stable-id', name: 'Original Name', handle: 'stable' }],
-      podcasts: [],
-    },
-    blogs: { sources: [] },
-    newsletters: { sources: [] },
-    academic: { sources: [] },
-    zhTech: { sources: [] },
-  };
-
-  const original = createSourceRegistry(configs);
-  const renamed = createSourceRegistry({
-    ...configs,
-    defaultSources: {
-      ...configs.defaultSources,
-      x_accounts: [{ ...configs.defaultSources.x_accounts[0], name: 'Renamed Display' }],
-    },
-  });
-
-  assert.equal(original[0].id, 'x:stable-id');
-  assert.equal(renamed[0].id, 'x:stable-id');
 });

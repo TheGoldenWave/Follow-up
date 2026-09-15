@@ -588,7 +588,12 @@ export async function main({
       stdout.write(`${JSON.stringify(result)}\n`);
       return 0;
     }
-    const loadedRegistry = registry ?? await loadSourceRegistry({ readFileImpl: fsImpl.readFile.bind(fsImpl) });
+    const acquisitionMode = normalizeAcquisitionMode(loadedConfig?.acquisition?.mode);
+    const registryScope = acquisitionMode === 'central' ? 'central-live' : 'local-enabled';
+    const loadedRegistry = registry ?? await loadSourceRegistry({
+      scope: registryScope,
+      readFileImpl: fsImpl.readFile.bind(fsImpl),
+    });
     const events = deliveryEvents ?? await readDeliveryLedger({ ...paths, ledgerPath: paths.ledgerPath });
     const loadFeed = injectedFeedLoader ?? (paths.candidateFeedPath
       ? async () => readJsonLimited(

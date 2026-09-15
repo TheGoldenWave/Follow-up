@@ -346,13 +346,18 @@ test('runtime blog configuration contains only sources with implemented collecto
   assert.deepEqual(config, candidates);
 });
 
-test('loadSources replaces legacy default blogs with feed-blogs configuration', async () => {
-  const [sources, blogConfig] = await Promise.all([
+test('loadSources projects central sources from the canonical registry', async () => {
+  const [sources, registry] = await Promise.all([
     loadSources(),
-    readJson('config/feed-blogs.json'),
+    loadSourceRegistry({ scope: 'central-live' }),
   ]);
 
-  assert.deepEqual(sources.blogs, blogConfig.sources);
+  assert.deepEqual(sources.registry, registry);
+  assert.deepEqual(
+    sources.blogs.map(({ id }) => id),
+    registry.filter(({ channel }) => channel === 'blogs').map(({ id }) => id),
+  );
+  assert.deepEqual(validateBlogSources(sources.blogs), { valid: true, errors: [] });
   assert.equal(sources.blogs.length, 17);
   assert.ok(sources.x_accounts.length > 0);
 });
@@ -597,7 +602,7 @@ test('feed workflow transfers and publishes only the exact eight generated files
 test('checked-in candidate feed is initialized and valid for the complete source registry', async () => {
   const [candidateFeed, registry] = await Promise.all([
     readJson('feed-candidates.json'),
-    loadSourceRegistry(),
+    loadSourceRegistry({ scope: 'central-live' }),
   ]);
   const validation = validateCandidateFeed(candidateFeed, { expectedRegistry: registry });
   assert.deepEqual(validation, { valid: true, errors: [] });

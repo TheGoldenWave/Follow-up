@@ -55,7 +55,7 @@ export async function validateArtifactDirectory(directory, { expectedRegistry } 
   if (feedFilesPresent) {
     errors.push(...await validateFeedFiles({
       readJson: async (filename) => documents[filename],
-      expectedRegistry: expectedRegistry ?? await loadSourceRegistry(),
+      expectedRegistry: expectedRegistry ?? await loadSourceRegistry({ scope: 'central-live' }),
     }));
   }
   const state = documents['state-feed.json'];
