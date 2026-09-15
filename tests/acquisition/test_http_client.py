@@ -305,6 +305,78 @@ class HttpClientTests(unittest.TestCase):
                 self.assertNotIn("secret", str(caught.exception))
                 self.assertEqual(fetch.calls, [])
 
+    def test_all_methods_reject_invalid_caller_header_shapes_before_injected_transport(self) -> None:
+        class StringSubclass(str):
+            pass
+
+        invalid_headers = (
+            {1: "value"},
+            {"X-Test": 1},
+            {StringSubclass("X-Test"): "value"},
+            {"X-Test": StringSubclass("value")},
+            {"X Bad": "value"},
+            {"X\rBad": "value"},
+            {"X-\u732b": "value"},
+            {"X-Test": "tab\tvalue"},
+            {"X-Test": "line\nvalue"},
+            {"X-Test": "delete\x7fvalue"},
+            {"X-Test": "next-line\x85value"},
+            {"Authorization": "Bearer \u79d8\u5bc6"},
+        )
+        for headers in invalid_headers:
+            for method in ("GET", "POST"):
+                with self.subTest(method=method, header_type=type(next(iter(headers))).__name__):
+                    if method == "GET":
+                        fetch: RecordingFetch | RecordingRequestFetch = RecordingFetch(RawResponse())
+                        client = HttpClient(fetch=fetch, resolver=public_resolver)
+                        call = lambda: client.get(
+                            "https://api.example.test/v1/items",
+                            allowed_hosts={"api.example.test"},
+                            allowed_paths={"/v1"},
+                            headers=headers,  # type: ignore[arg-type]
+                        )
+                    else:
+                        fetch = RecordingRequestFetch(RawResponse())
+                        client = HttpClient(fetch=fetch, resolver=public_resolver)
+                        call = lambda: client.post_json(
+                            "https://api.example.test/v1/items",
+                            {},
+                            allowed_hosts={"api.example.test"},
+                            allowed_paths={"/v1"},
+                            headers=headers,  # type: ignore[arg-type]
+                        )
+                    with self.assertRaises(SchemaDriftError) as caught:
+                        call()
+                    self.assertEqual(str(caught.exception), "HTTP request header is invalid")
+                    self.assertNotIn("\u79d8\u5bc6", repr(caught.exception))
+                    self.assertEqual(fetch.calls, [])
+
+    def test_post_json_accepts_latin1_authorization_via_injected_transport(self) -> None:
+        fetch = RecordingRequestFetch(RawResponse())
+
+        self.post(fetch, {}, headers={"Authorization": "Bearer caf\u00e9"})
+
+        self.assertEqual(fetch.calls[0][1]["Authorization"], "Bearer caf\u00e9")
+
+    def test_non_latin1_authorization_never_reaches_default_transport(self) -> None:
+        resolver = Mock(return_value=[PUBLIC_ADDRESS])
+        client = HttpClient(resolver=resolver)
+
+        with patch("follow_up_acquisition.http_client._PinnedHTTPSConnection") as connection:
+            with self.assertRaises(SchemaDriftError) as caught:
+                client.post_json(
+                    "https://api.example.test/v1/items",
+                    {},
+                    allowed_hosts={"api.example.test"},
+                    allowed_paths={"/v1"},
+                    headers={"Authorization": "Bearer \u79d8\u5bc6"},
+                )
+
+        self.assertEqual(str(caught.exception), "HTTP request header is invalid")
+        self.assertNotIn("\u79d8\u5bc6", repr(caught.exception))
+        resolver.assert_not_called()
+        connection.assert_not_called()
+
     def test_post_json_only_preserves_body_for_307_and_308_redirects(self) -> None:
         for status in (307, 308):
             with self.subTest(status=status):

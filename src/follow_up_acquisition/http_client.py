@@ -47,6 +47,7 @@ _FORBIDDEN_POST_HEADERS = frozenset(
 _HEADER_TOKEN_CHARS = frozenset(
     "!#$%&'*+-.^_`|~0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
+_INVALID_HEADER_MESSAGE = "HTTP request header is invalid"
 
 
 @dataclass(frozen=True)
@@ -403,7 +404,7 @@ class HttpClient:
         if headers_are_prepared:
             request_headers = dict(headers or {})
         else:
-            request_headers = {str(key): str(value) for key, value in (headers or {}).items()}
+            request_headers = self._caller_headers(headers)
             for key in tuple(request_headers):
                 if key.lower() == "host":
                     raise SchemaDriftError("caller-supplied Host headers are not allowed")
@@ -516,26 +517,36 @@ class HttpClient:
 
     @staticmethod
     def _post_headers(headers: Mapping[str, str] | None, body_length: int) -> dict[str, str]:
+        prepared = HttpClient._caller_headers(headers)
+        for key in tuple(prepared):
+            lowered = key.lower()
+            if lowered in _FORBIDDEN_POST_HEADERS:
+                raise SchemaDriftError("HTTP request header is not allowed")
+            if lowered == "user-agent":
+                del prepared[key]
+        prepared["Content-Type"] = "application/json"
+        prepared["Content-Length"] = str(body_length)
+        prepared["User-Agent"] = USER_AGENT
+        return prepared
+
+    @staticmethod
+    def _caller_headers(headers: Mapping[str, str] | None) -> dict[str, str]:
         if headers is not None and not isinstance(headers, Mapping):
             raise SchemaDriftError("HTTP request headers have an invalid shape")
         prepared: dict[str, str] = {}
         for key, value in (headers or {}).items():
             if type(key) is not str or type(value) is not str:
-                raise SchemaDriftError("HTTP request headers have an invalid shape")
-            lowered = key.lower()
-            if (
-                not key
-                or any(character not in _HEADER_TOKEN_CHARS for character in key)
-                or any(ord(character) < 32 or ord(character) == 127 for character in value)
-                or lowered in _FORBIDDEN_POST_HEADERS
+                raise SchemaDriftError(_INVALID_HEADER_MESSAGE)
+            if not key or any(character not in _HEADER_TOKEN_CHARS for character in key):
+                raise SchemaDriftError(_INVALID_HEADER_MESSAGE)
+            if any(
+                ord(character) < 32
+                or 127 <= ord(character) <= 159
+                or ord(character) > 255
+                for character in value
             ):
-                raise SchemaDriftError("HTTP request header is not allowed")
-            if lowered == "user-agent":
-                continue
+                raise SchemaDriftError(_INVALID_HEADER_MESSAGE)
             prepared[key] = value
-        prepared["Content-Type"] = "application/json"
-        prepared["Content-Length"] = str(body_length)
-        prepared["User-Agent"] = USER_AGENT
         return prepared
 
     @staticmethod
