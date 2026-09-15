@@ -237,6 +237,29 @@ class ValidateStateTests(unittest.TestCase):
         with self.assertRaises(SourceStateError):
             validate_state(value)
 
+    def test_rejects_inconsistent_checkpoint_inactive_and_updated_times(self) -> None:
+        cases = []
+        inactive_before_checkpoint = checkpoint(
+            at="2026-09-15T08:00:00Z", fingerprint="a" * 64,
+            inactive_since="2026-09-15T07:59:59Z",
+        )
+        cases.append(state(streams={"query.ai": inactive_before_checkpoint}))
+        checkpoint_after_update = state(source_id="community:other", streams={
+            "top": checkpoint(at="2026-09-15T08:00:01Z"),
+        })
+        cases.append(checkpoint_after_update)
+        inactive_after_update = checkpoint(
+            at="2026-09-15T07:00:00Z", fingerprint="b" * 64,
+            inactive_since="2026-09-15T08:00:01Z",
+        )
+        cases.append(state(streams={"query.ai": inactive_after_update}))
+        missing_updated = state(source_id="community:other", streams={"top": checkpoint()})
+        missing_updated["updated_at"] = None
+        cases.append(missing_updated)
+        for value in cases:
+            with self.subTest(value=value), self.assertRaises(SourceStateError):
+                validate_state(value)
+
     def test_rejects_state_larger_than_256_kib(self) -> None:
         value = checkpoint()
         value["cursor"] = "x" * MAX_STATE_BYTES
@@ -278,6 +301,16 @@ class MergeAndPruneTests(unittest.TestCase):
         original = state(streams={"top": checkpoint(at="2026-09-15T06:00:00Z")})
         merged = merge_checkpoint_updates(original, [], updated_at=NOW)
         self.assertEqual(merged, original)
+
+    def test_merge_and_prune_reject_backward_operation_times(self) -> None:
+        with self.assertRaises(SourceStateError):
+            merge_checkpoint_updates(
+                state(), [], updated_at="2026-09-15T07:59:59Z",
+            )
+        with self.assertRaises(SourceStateError):
+            prune_state(
+                state(), active_stream_ids=set(), now="2026-09-15T07:59:59Z",
+            )
 
     def test_merges_complete_stream_update_without_mutating_input(self) -> None:
         original = state(streams={"top": checkpoint(at="2026-09-15T06:00:00Z")})
@@ -401,10 +434,12 @@ class MergeAndPruneTests(unittest.TestCase):
 
     def test_inactive_query_is_retained_before_7_days_and_deleted_at_boundary(self) -> None:
         before = checkpoint(
-            fingerprint="a" * 64, inactive_since="2026-09-08T08:00:01Z",
+            at="2026-09-01T08:00:00Z", fingerprint="a" * 64,
+            inactive_since="2026-09-08T08:00:01Z",
         )
         boundary = checkpoint(
-            fingerprint="b" * 64, inactive_since="2026-09-08T08:00:00Z",
+            at="2026-09-01T08:00:00Z", fingerprint="b" * 64,
+            inactive_since="2026-09-08T08:00:00Z",
         )
         pruned = prune_state(
             state(streams={"query.before": before, "query.boundary": boundary}),
@@ -415,7 +450,7 @@ class MergeAndPruneTests(unittest.TestCase):
 
     def test_reactivation_and_successful_update_clear_inactive_since(self) -> None:
         inactive = checkpoint(
-            at="2026-09-15T06:00:00Z", fingerprint="a" * 64,
+            at="2026-09-01T06:00:00Z", fingerprint="a" * 64,
             inactive_since="2026-09-10T08:00:00Z",
         )
         reactivated = prune_state(
@@ -423,7 +458,7 @@ class MergeAndPruneTests(unittest.TestCase):
         )
         self.assertNotIn("inactive_since", reactivated["streams"]["query.ai"])
         merged = merge_checkpoint_updates(state(streams={"query.ai": inactive}), [{
-            "stream_id": "query.ai", "previous_checkpoint_at": "2026-09-15T06:00:00Z",
+            "stream_id": "query.ai", "previous_checkpoint_at": "2026-09-01T06:00:00Z",
             "checkpoint": checkpoint(at=NOW, fingerprint="a" * 64),
         }], updated_at=NOW)
         self.assertNotIn("inactive_since", merged["streams"]["query.ai"])
@@ -460,14 +495,19 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_store_surfaces_post_replace_durability_uncertainty(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "state"
-            store = SourceStateStore(root)
+            store = SourceStateStore(
+                root, clock=lambda: datetime(2026, 9, 15, 7, tzinfo=timezone.utc),
+            )
             store.commit("community:other", [{
                 "stream_id": "top", "previous_checkpoint_at": None,
                 "checkpoint": checkpoint(at="2026-09-15T06:00:00Z"),
             }])
             def fail() -> None:
                 raise OSError("directory fsync failed")
-            uncertain = SourceStateStore(root, backend_hooks={"before_directory_fsync": fail})
+            uncertain = SourceStateStore(
+                root, clock=lambda: datetime(2026, 9, 15, 9, tzinfo=timezone.utc),
+                backend_hooks={"before_directory_fsync": fail},
+            )
             with self.assertRaises(SourceStateError) as ctx:
                 uncertain.commit("community:other", [{
                     "stream_id": "top", "previous_checkpoint_at": "2026-09-15T06:00:00Z",
@@ -478,7 +518,9 @@ class SourceStateStoreTests(unittest.TestCase):
 
     def test_commit_enforces_compare_and_swap_against_disk(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = SourceStateStore(Path(temp_dir))
+            store = SourceStateStore(
+                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
+            )
             store.commit("community:github", [{
                 "stream_id": "top", "previous_checkpoint_at": None,
                 "checkpoint": checkpoint(at=NOW),
@@ -493,8 +535,12 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_two_concurrent_stale_writers_allow_exactly_one_commit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            first = SourceStateStore(root)
-            second = SourceStateStore(root)
+            first = SourceStateStore(
+                root, clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
+            )
+            second = SourceStateStore(
+                root, clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
+            )
             barrier = threading.Barrier(3)
             outcomes: list[str] = []
             outcome_lock = threading.Lock()
@@ -513,6 +559,48 @@ class SourceStateStoreTests(unittest.TestCase):
             threads = [
                 threading.Thread(target=writer, args=(first, "2026-09-15T08:00:01Z")),
                 threading.Thread(target=writer, args=(second, "2026-09-15T08:00:02Z")),
+            ]
+            for thread in threads:
+                thread.start()
+            barrier.wait()
+            for thread in threads:
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
+            self.assertCountEqual(outcomes, ["committed", "conflict"])
+
+    def test_two_concurrent_writers_safely_initialize_absent_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir) / "acquisition"
+            parent.mkdir(mode=0o700)
+            root = parent / "source-state"
+            stores = (
+                SourceStateStore(
+                    root, clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
+                ),
+                SourceStateStore(
+                    root, clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
+                ),
+            )
+            barrier = threading.Barrier(3)
+            outcomes: list[str] = []
+            outcome_lock = threading.Lock()
+            def writer(store: SourceStateStore, at: str) -> None:
+                barrier.wait()
+                try:
+                    store.commit("community:other", [{
+                        "stream_id": "top", "previous_checkpoint_at": None,
+                        "checkpoint": checkpoint(at=at),
+                    }])
+                    outcome = "committed"
+                except StateConflictError:
+                    outcome = "conflict"
+                except SourceStateError as exc:
+                    outcome = exc.code
+                with outcome_lock:
+                    outcomes.append(outcome)
+            threads = [
+                threading.Thread(target=writer, args=(stores[0], "2026-09-15T08:00:01Z")),
+                threading.Thread(target=writer, args=(stores[1], "2026-09-15T08:00:02Z")),
             ]
             for thread in threads:
                 thread.start()
@@ -555,7 +643,9 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_waiting_stale_prune_cannot_delete_concurrent_success(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            setup = SourceStateStore(root)
+            setup = SourceStateStore(
+                root, clock=lambda: datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
+            )
             old_at = "2026-08-01T00:00:00Z"
             setup.commit("community:github", [{
                 "stream_id": "query.ai", "previous_checkpoint_at": None,
@@ -570,8 +660,13 @@ class SourceStateStoreTests(unittest.TestCase):
                 update_has_lock.set()
                 if not release_update.wait(timeout=5):
                     raise RuntimeError("test update release timed out")
-            updater = SourceStateStore(root, backend_hooks={"before_replace": pause_update})
-            pruner = SourceStateStore(root)
+            updater = SourceStateStore(
+                root, clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+                backend_hooks={"before_replace": pause_update},
+            )
+            pruner = SourceStateStore(
+                root, clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+            )
             failures: list[BaseException] = []
             def update() -> None:
                 try:
@@ -601,7 +696,9 @@ class SourceStateStoreTests(unittest.TestCase):
 
     def test_successful_update_is_active_even_if_active_set_is_stale(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            store = SourceStateStore(Path(temp_dir))
+            store = SourceStateStore(
+                Path(temp_dir), clock=lambda: datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
+            )
             old_at = "2026-08-01T00:00:00Z"
             store.commit("community:github", [{
                 "stream_id": "query.ai", "previous_checkpoint_at": None,
@@ -610,11 +707,14 @@ class SourceStateStoreTests(unittest.TestCase):
             store.commit(
                 "community:github", [], active_stream_ids=set(), now="2026-08-02T00:00:00Z",
             )
-            store.commit("community:github", [{
+            updater = SourceStateStore(
+                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+            )
+            updater.commit("community:github", [{
                 "stream_id": "query.ai", "previous_checkpoint_at": old_at,
                 "checkpoint": checkpoint(at=NOW, fingerprint="a" * 64),
             }], active_stream_ids=set(), now=NOW)
-            persisted = store.load("community:github")["streams"]["query.ai"]
+            persisted = updater.load("community:github")["streams"]["query.ai"]
             self.assertNotIn("inactive_since", persisted)
 
     def test_commit_accepts_state_at_exact_serialized_size_boundary(self) -> None:

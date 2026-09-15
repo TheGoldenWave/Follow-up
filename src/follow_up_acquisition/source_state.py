@@ -231,6 +231,9 @@ def validate_state(value: Any, *, expected_source_id: str | None = None) -> Any:
     streams = value["streams"]
     if not isinstance(streams, dict):
         _fail("streams must be an object")
+    updated_at = _parse_rfc3339_utc(value["updated_at"], "updated_at", nullable=True)
+    if streams and updated_at is None:
+        _fail("updated_at is required when streams are present")
     for stream_id, checkpoint in streams.items():
         if not isinstance(stream_id, str) or _STREAM_ID_RE.fullmatch(stream_id) is None:
             _fail(f"invalid stream ID: {stream_id!r}")
@@ -244,7 +247,21 @@ def validate_state(value: Any, *, expected_source_id: str | None = None) -> Any:
             _fail(f"streams.{stream_id}.inactive_since is only valid for query streams")
         if query_source and query_stream and "query_fingerprint" not in checkpoint:
             _fail(f"streams.{stream_id}.query_fingerprint is required")
-    _parse_rfc3339_utc(value["updated_at"], "updated_at", nullable=True)
+        checkpoint_at = _parse_rfc3339_utc(
+            checkpoint["checkpoint_at"], f"streams.{stream_id}.checkpoint_at",
+        )
+        assert checkpoint_at is not None and updated_at is not None
+        if checkpoint_at > updated_at:
+            _fail(f"streams.{stream_id}.checkpoint_at exceeds updated_at")
+        if "inactive_since" in checkpoint:
+            inactive_since = _parse_rfc3339_utc(
+                checkpoint["inactive_since"], f"streams.{stream_id}.inactive_since",
+            )
+            assert inactive_since is not None
+            if inactive_since < checkpoint_at or inactive_since > updated_at:
+                _fail(
+                    f"streams.{stream_id}.inactive_since must be between checkpoint_at and updated_at"
+                )
     list(_iter_values(value))
     if len(_canonical_bytes(value)) > MAX_STATE_BYTES:
         _fail("serialized state exceeds 256 KiB")
@@ -337,7 +354,13 @@ def merge_checkpoint_updates(
 ) -> dict[str, Any]:
     """CAS-merge successful stream updates into a validated state copy."""
     validate_state(state)
-    _parse_rfc3339_utc(updated_at, "updated_at")
+    next_updated_at = _parse_rfc3339_utc(updated_at, "updated_at")
+    current_updated_at = _parse_rfc3339_utc(
+        state["updated_at"], "state.updated_at", nullable=True,
+    )
+    if current_updated_at is not None and next_updated_at is not None:
+        if next_updated_at < current_updated_at:
+            _fail("updated_at must not move backwards")
     merged = copy.deepcopy(state)
     update_list = list(updates)
     if not update_list:
@@ -396,6 +419,11 @@ def prune_state(
     validate_state(pruned)
     now_dt = _parse_rfc3339_utc(now, "now")
     assert now_dt is not None
+    current_updated_at = _parse_rfc3339_utc(
+        pruned["updated_at"], "updated_at", nullable=True,
+    )
+    if current_updated_at is not None and now_dt < current_updated_at:
+        _fail("now must not move updated_at backwards")
     active = set(state["streams"]) if active_stream_ids is None else set(active_stream_ids)
     if any(not isinstance(item, str) or _STREAM_ID_RE.fullmatch(item) is None for item in active):
         _fail("active_stream_ids contains an invalid stream ID")

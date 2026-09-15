@@ -6,9 +6,12 @@ import os
 from pathlib import Path
 import tempfile
 import threading
+import sys
 import unittest
+from unittest.mock import patch
 
 from follow_up_acquisition.state_store_posix import (
+    _normalize_system_alias,
     PosixBackendError,
     PosixStateBackend,
     posix_backend_available,
@@ -16,6 +19,59 @@ from follow_up_acquisition.state_store_posix import (
 
 
 class PosixBackendTests(unittest.TestCase):
+    def test_system_alias_normalization_is_darwin_only(self) -> None:
+        self.assertEqual(
+            _normalize_system_alias("/tmp/example", system_name="Linux"),
+            "/tmp/example",
+        )
+        self.assertEqual(
+            _normalize_system_alias("/var/example", system_name="FreeBSD"),
+            "/var/example",
+        )
+        backend = PosixStateBackend("/tmp/example", system_name="Linux")
+        self.assertEqual(backend.root, Path("/tmp/example"))
+
+    def test_fsyncs_parent_after_every_nested_directory_creation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calls = 0
+            def record_parent_fsync() -> None:
+                nonlocal calls
+                calls += 1
+            parent = Path(temp_dir) / "one" / "two"
+            parent.mkdir(parents=True)
+            parent.chmod(0o700)
+            root = parent / "state"
+            PosixStateBackend(
+                root, hooks={"before_parent_directory_fsync": record_parent_fsync},
+            ).atomic_update(
+                "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+            )
+            self.assertEqual(calls, 1)
+
+    def test_parent_fsync_failure_is_uncertain_and_never_publishes_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calls = 0
+            def fail_parent_fsync() -> None:
+                nonlocal calls
+                calls += 1
+                raise OSError("parent fsync failed")
+            parent = Path(temp_dir) / "one" / "two"
+            parent.mkdir(parents=True)
+            parent.chmod(0o700)
+            root = parent / "state"
+            backend = PosixStateBackend(
+                root, hooks={"before_parent_directory_fsync": fail_parent_fsync},
+            )
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "state-durability-uncertain")
+            self.assertEqual(calls, 1)
+            self.assertFalse((root / "source.json").exists())
+            self.assertTrue((parent / ".source-state.init.lock").is_file())
+            self.assertFalse((root / ".source.lock").exists())
+
     def test_setup_rejects_immediate_parent_replacement_after_mkdir(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             base = Path(temp_dir)
@@ -71,17 +127,14 @@ class PosixBackendTests(unittest.TestCase):
 
     def test_setup_pins_nested_new_directory_before_remove_recreate_hook(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            first = Path(temp_dir) / "first"
-            root = first / "second" / "state"
-            recreated = False
-            def recreate_first() -> None:
-                nonlocal recreated
-                if recreated:
-                    return
-                first.rmdir()
-                first.mkdir(mode=0o700)
-                recreated = True
-            backend = PosixStateBackend(root, hooks={"after_directory_created": recreate_first})
+            parent = Path(temp_dir) / "first" / "second"
+            parent.mkdir(parents=True)
+            parent.chmod(0o700)
+            root = parent / "state"
+            def recreate_root() -> None:
+                root.rmdir()
+                root.mkdir(mode=0o700)
+            backend = PosixStateBackend(root, hooks={"after_directory_created": recreate_root})
             with self.assertRaises(PosixBackendError) as ctx:
                 backend.atomic_update(
                     "source.json", ".source.lock", 100, lambda _current: (b"new", None),
@@ -91,12 +144,26 @@ class PosixBackendTests(unittest.TestCase):
 
     def test_setup_allows_legitimate_nested_directory_creation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir) / "one" / "two" / "state"
+            parent = Path(temp_dir) / "one" / "two"
+            parent.mkdir(parents=True)
+            parent.chmod(0o700)
+            root = parent / "state"
             backend = PosixStateBackend(root)
             backend.atomic_update(
                 "source.json", ".source.lock", 100, lambda _current: (b"new", None),
             )
             self.assertEqual(backend.read("source.json", 100), b"new")
+
+    def test_missing_immediate_parent_fails_closed_without_creating_ancestors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            missing_parent = Path(temp_dir) / "missing"
+            backend = PosixStateBackend(missing_parent / "state")
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "state-parent-missing")
+            self.assertFalse(missing_parent.exists())
 
     def test_concurrent_different_source_entries_do_not_conflict_on_root_nlink(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -130,6 +197,10 @@ class PosixBackendTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir, self.assertRaises(PosixBackendError) as ctx:
             PosixStateBackend(Path(temp_dir), platform_name="nt").read("source.json", 100)
         self.assertEqual(ctx.exception.code, "unsupported-platform")
+
+    def test_backend_probe_requires_fcntl(self) -> None:
+        with patch.dict(sys.modules, {"fcntl": None}):
+            self.assertFalse(posix_backend_available("posix"))
 
     def test_atomic_update_round_trips_private_regular_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -188,6 +259,25 @@ class PosixBackendTests(unittest.TestCase):
                 lock.write_bytes(b"replacement")
                 lock.chmod(0o600)
             backend = PosixStateBackend(root, hooks={"after_lock_open": replace_lock})
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "unsafe-state")
+            self.assertFalse((root / "source.json").exists())
+
+    def test_revalidates_lock_identity_at_publish_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "state"
+            root.mkdir(mode=0o700)
+            lock = root / ".source.lock"
+            def replace_lock() -> None:
+                lock.unlink()
+                lock.write_bytes(b"replacement")
+                lock.chmod(0o600)
+            backend = PosixStateBackend(
+                root, hooks={"before_publish_identity_check": replace_lock},
+            )
             with self.assertRaises(PosixBackendError) as ctx:
                 backend.atomic_update(
                     "source.json", ".source.lock", 100, lambda _current: (b"new", None),

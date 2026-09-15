@@ -7,9 +7,12 @@ from dataclasses import dataclass
 import errno
 import os
 from pathlib import Path
+import platform
 import secrets
 import stat
 from typing import Any, Callable, Iterator, Mapping
+
+_INIT_LOCK_NAME = ".source-state.init.lock"
 
 
 class PosixBackendError(OSError):
@@ -36,13 +39,40 @@ class _PinnedDirectory:
     mode: int
     nlink: int
     require_private: bool
+    allow_dynamic_nlink: bool
 
 
 def posix_backend_available(platform_name: str | None = None) -> bool:
     """Return whether the secure persistent-state backend is available."""
     selected = os.name if platform_name is None else platform_name
     required = ("O_DIRECTORY", "O_NOFOLLOW", "O_EXCL")
-    return selected == "posix" and all(hasattr(os, name) for name in required)
+    if selected != "posix" or not all(hasattr(os, name) for name in required):
+        return False
+    try:
+        import fcntl  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _normalize_system_alias(absolute: str, *, system_name: str | None = None) -> str:
+    """Resolve only the verified Darwin /tmp and /var compatibility aliases."""
+    if (platform.system() if system_name is None else system_name) != "Darwin":
+        return absolute
+    for alias in ("/tmp", "/var"):
+        if absolute != alias and not absolute.startswith(alias + "/"):
+            continue
+        try:
+            info = os.lstat(alias)
+            target = os.readlink(alias)
+        except OSError:
+            return absolute
+        expected = "/private" + alias
+        resolved = os.path.abspath(os.path.join(os.path.dirname(alias), target))
+        if stat.S_ISLNK(info.st_mode) and resolved == expected:
+            return expected + absolute[len(alias):]
+        return absolute
+    return absolute
 
 
 class PosixStateBackend:
@@ -50,6 +80,7 @@ class PosixStateBackend:
 
     def __init__(
         self, root: str | os.PathLike[str], *, platform_name: str | None = None,
+        system_name: str | None = None,
         hooks: Mapping[str, Callable[[], None]] | None = None,
     ) -> None:
         if not posix_backend_available(platform_name):
@@ -58,10 +89,7 @@ class PosixStateBackend:
                 code="unsupported-platform",
             )
         absolute = os.path.abspath(os.fspath(root))
-        if absolute == "/var" or absolute.startswith("/var/"):
-            absolute = "/private" + absolute
-        elif absolute == "/tmp" or absolute.startswith("/tmp/"):
-            absolute = "/private" + absolute
+        absolute = _normalize_system_alias(absolute, system_name=system_name)
         self.root = Path(absolute)
         self._hooks = dict(hooks or {})
 
@@ -89,41 +117,26 @@ class PosixStateBackend:
         flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
         descriptors: list[int] = []
         links: list[_PinnedDirectory] = []
+        init_fd: int | None = None
+        init_locked = False
         try:
             parent_fd = os.open(self.root.anchor, flags)
             descriptors.append(parent_fd)
-            parts = self.root.parts[1:]
+            parts = self.root.parent.parts[1:]
             for index, part in enumerate(parts):
-                created = False
                 try:
                     child_fd = os.open(part, flags, dir_fd=parent_fd)
-                except FileNotFoundError:
-                    if not create:
-                        raise _RootMissing
-                    self._verify_chain(links)
-                    try:
-                        os.mkdir(part, 0o700, dir_fd=parent_fd)
-                    except FileExistsError as exc:
-                        raise PosixBackendError(
-                            "state directory appeared concurrently during setup",
-                        ) from exc
-                    try:
-                        child_fd = os.open(part, flags, dir_fd=parent_fd)
-                    except OSError as exc:
-                        raise PosixBackendError(
-                            "new state directory could not be pinned safely",
-                        ) from exc
-                    created = True
+                except FileNotFoundError as exc:
+                    raise PosixBackendError(
+                        "state parent is missing; acquisition setup is required",
+                        code="state-parent-missing",
+                    ) from exc
                 except OSError as exc:
                     raise PosixBackendError("state directory chain is unsafe") from exc
                 descriptors.append(child_fd)
                 info = os.fstat(child_fd)
                 if not stat.S_ISDIR(info.st_mode):
                     raise PosixBackendError("state directory chain contains a non-directory")
-                if created:
-                    if stat.S_IMODE(info.st_mode) & 0o077:
-                        raise PosixBackendError("new state directory permissions exceed 0700")
-                    self._accept_mkdir_parent_nlink_change(links)
                 links.append(_PinnedDirectory(
                     parent_fd=parent_fd,
                     name=part,
@@ -132,17 +145,96 @@ class PosixStateBackend:
                     mode=stat.S_IMODE(info.st_mode),
                     nlink=info.st_nlink,
                     require_private=index == len(parts) - 1,
+                    allow_dynamic_nlink=False,
                 ))
-                if created:
-                    self._hook("after_directory_created")
-                    self._verify_chain(links)
                 parent_fd = child_fd
-            root_fd = descriptors[-1]
+            if not links or stat.S_IMODE(os.fstat(parent_fd).st_mode) & 0o077:
+                raise PosixBackendError("state parent permissions exceed 0700")
+
+            init_fd = self._open_lock(parent_fd, _INIT_LOCK_NAME)
+            init_info = os.fstat(init_fd)
+            self._validate_regular(init_info, "state initialization lock")
+            init_identity = self._identity(init_info)
+            import fcntl
+            fcntl.flock(init_fd, fcntl.LOCK_EX)
+            init_locked = True
+            # A previous initializer may have created the persistent init lock
+            # or state leaf while this caller waited. Rebaseline only the
+            # immediate parent's nlink after acquiring the shared inode.
+            self._accept_controlled_root_nlink_change(links)
+            self._verify_chain(links)
+            self._verify_named_identity(
+                parent_fd, _INIT_LOCK_NAME, init_identity, "state initialization lock",
+            )
+            try:
+                os.fchmod(init_fd, 0o600)
+                os.fsync(init_fd)
+                os.fsync(parent_fd)
+            except OSError as exc:
+                raise PosixBackendError(
+                    "state initialization lock durability could not be confirmed",
+                    code="state-durability-uncertain",
+                ) from exc
+
+            leaf = self.root.name
+            created = False
+            try:
+                root_fd = os.open(leaf, flags, dir_fd=parent_fd)
+            except FileNotFoundError:
+                if not create:
+                    raise _RootMissing
+                os.mkdir(leaf, 0o700, dir_fd=parent_fd)
+                root_fd = os.open(leaf, flags, dir_fd=parent_fd)
+                created = True
+            except OSError as exc:
+                raise PosixBackendError("state root is unsafe") from exc
+            descriptors.append(root_fd)
             root_info = os.fstat(root_fd)
-            if stat.S_IMODE(root_info.st_mode) & 0o077:
-                raise PosixBackendError("state root permissions exceed 0700")
+            if not stat.S_ISDIR(root_info.st_mode) or stat.S_IMODE(root_info.st_mode) & 0o077:
+                raise PosixBackendError("state root must be a private directory")
+            if created:
+                self._accept_mkdir_parent_nlink_change(links)
+            links.append(_PinnedDirectory(
+                parent_fd=parent_fd,
+                name=leaf,
+                device=root_info.st_dev,
+                inode=root_info.st_ino,
+                mode=stat.S_IMODE(root_info.st_mode),
+                nlink=root_info.st_nlink,
+                require_private=True,
+                allow_dynamic_nlink=True,
+            ))
+            if created:
+                try:
+                    self._hook("before_parent_directory_fsync")
+                    os.fsync(parent_fd)
+                except OSError as exc:
+                    raise PosixBackendError(
+                        "new state directory durability could not be confirmed",
+                        code="state-durability-uncertain",
+                    ) from exc
+                self._hook("after_directory_created")
+            self._verify_chain(links)
+            self._verify_named_identity(
+                parent_fd, _INIT_LOCK_NAME, init_identity, "state initialization lock",
+            )
+            fcntl.flock(init_fd, fcntl.LOCK_UN)
+            init_locked = False
+            os.close(init_fd)
+            init_fd = None
             yield root_fd, links
         finally:
+            if init_fd is not None:
+                if init_locked:
+                    try:
+                        import fcntl
+                        fcntl.flock(init_fd, fcntl.LOCK_UN)
+                    except OSError:
+                        pass
+                try:
+                    os.close(init_fd)
+                except OSError:
+                    pass
             for descriptor in reversed(descriptors):
                 try:
                     os.close(descriptor)
@@ -163,8 +255,8 @@ class PosixStateBackend:
                 not stat.S_ISDIR(info.st_mode)
                 or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
                 or current_mode != trusted.mode
-                or (trusted.require_private and info.st_nlink <= 0)
-                or (not trusted.require_private and info.st_nlink != trusted.nlink)
+                or (trusted.allow_dynamic_nlink and info.st_nlink <= 0)
+                or (not trusted.allow_dynamic_nlink and info.st_nlink != trusted.nlink)
                 or (trusted.require_private and current_mode & 0o077)
             ):
                 raise PosixBackendError("state directory identity changed")
@@ -198,6 +290,7 @@ class PosixStateBackend:
                 mode=trusted.mode,
                 nlink=expected_nlink,
                 require_private=trusted.require_private,
+                allow_dynamic_nlink=trusted.allow_dynamic_nlink,
             ))
         links[:] = refreshed
 
@@ -214,7 +307,7 @@ class PosixStateBackend:
                 not stat.S_ISDIR(info.st_mode)
                 or (info.st_dev, info.st_ino) != (trusted.device, trusted.inode)
                 or current_mode != trusted.mode
-                or (not trusted.require_private and info.st_nlink != trusted.nlink)
+                or (trusted is not links[-1] and info.st_nlink != trusted.nlink)
                 or (trusted.require_private and current_mode & 0o077)
             ):
                 raise PosixBackendError("state directory identity changed")
@@ -224,8 +317,9 @@ class PosixStateBackend:
                 device=trusted.device,
                 inode=trusted.inode,
                 mode=trusted.mode,
-                nlink=trusted.nlink,
+                nlink=info.st_nlink if trusted is links[-1] else trusted.nlink,
                 require_private=trusted.require_private,
+                allow_dynamic_nlink=trusted.allow_dynamic_nlink,
             ))
         links[:] = refreshed
 
@@ -384,6 +478,7 @@ class PosixStateBackend:
                     os.close(temp_fd)
                 self._hook("before_publish_identity_check")
                 self._verify_chain(links)
+                self._verify_named_identity(root_fd, lock_name, lock_identity, "state lock")
                 self._verify_named_identity(root_fd, temp_name, temp_identity, "state temp file")
                 if current_identity is None:
                     self._verify_absent(root_fd, name, "state file")
