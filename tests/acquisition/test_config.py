@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from follow_up_acquisition.config import (
+    ADAPTER_IDS,
     CHANNEL_IDS,
     ConfigError,
     load_source_registry,
@@ -67,6 +68,63 @@ def _mutate(**overrides):
     source = copy.deepcopy(VALID_SOURCE)
     source.update(overrides)
     return source
+
+
+VALID_ADAPTER_INPUTS = {
+    "x": {"handle": "example"},
+    "rss": {"rss_url": "https://example.com/feed", "url": "https://example.com/", "language": "en"},
+    "newsletter": {"rss_url": "https://example.com/feed"},
+    "podcast": {"rss_url": "https://example.com/podcast.xml"},
+    "web-publication": {
+        "url": "https://example.com/blog", "language": "en",
+        "discovery": [{"type": "rss", "url": "https://example.com/feed"}],
+        "article_url_patterns": [r"^https://example\.com/posts/[^/]+$"],
+        "exclude_url_patterns": [], "parser": None,
+    },
+    "arxiv": {"rss_url": "https://rss.arxiv.org/rss/cs.AI", "url": "https://arxiv.org/list/cs.AI/recent"},
+    "github": {
+        "rest_api_url": "https://api.github.com", "graphql_url": "https://api.github.com/graphql",
+        "include_discussions": False,
+        "queries": [{"id": "agents", "query": "agentic systems", "sort": "updated",
+                     "filters": {"entities": ["repository"], "min_stars": 1}}],
+    },
+    "hackernews": {
+        "firebase_url": "https://hacker-news.firebaseio.com/v0",
+        "algolia_url": "https://hn.algolia.com/api/v1", "top_enabled": True, "new_enabled": True,
+        "queries": [{"id": "agents", "query": "AI agents", "sort": "date",
+                     "filters": {"tags": ["story"], "min_points": 0}}],
+    },
+    "reddit": {"subreddit": "MachineLearning",
+               "rss_url": "https://www.reddit.com/r/MachineLearning/.rss",
+               "listing_url": "https://www.reddit.com/r/MachineLearning/new.json"},
+    "techmeme": {"front_url": "https://www.techmeme.com/",
+                 "archive_url_template": "https://www.techmeme.com/{date}"},
+    "hugging-face-papers": {"structured_endpoint": "https://huggingface.co/api/daily_papers",
+                            "page_base_url": "https://huggingface.co/papers",
+                            "views": ["daily", "trending", "weekly"], "timezone": "Asia/Shanghai"},
+    "report": {"url": "https://example.com/report"},
+    "youtube": {}, "digg": {}, "xiaohongshu": {}, "wechat": {},
+}
+
+
+def _source_for_adapter(adapter, input_value=None):
+    if adapter == "x":
+        identity = {"id": "x:test", "channel": "x", "channel_policy": "fixed"}
+    elif adapter == "podcast":
+        identity = {"id": "podcast:test", "channel": "podcasts", "channel_policy": "fixed"}
+    elif adapter in {"rss", "newsletter"}:
+        identity = {"id": "newsletter:test", "channel": "newsletters", "channel_policy": "fixed"}
+    elif adapter == "web-publication":
+        identity = {"id": "blog:test", "channel": "blogs", "channel_policy": "fixed"}
+    elif adapter in {"arxiv", "hugging-face-papers"}:
+        identity = {"id": "academic:test", "channel": "academic", "channel_policy": "fixed"}
+    elif adapter == "report":
+        identity = {"id": "report:test", "channel": "reports", "channel_policy": "fixed"}
+    else:
+        identity = {"id": f"community:{adapter}", "channel": None, "channel_policy": "core-topic"}
+    return _mutate(adapter=adapter, input=copy.deepcopy(
+        VALID_ADAPTER_INPUTS[adapter] if input_value is None else input_value
+    ), legacy={"feed": None}, **identity)
 
 
 class GeneratedRegistryTests(unittest.TestCase):
@@ -222,7 +280,7 @@ class SourceRegistryValidationTests(unittest.TestCase):
             validate_source_registry(_registry([_mutate(cadence="hourly")]))
 
     def test_rejects_invalid_budget(self):
-        for budget in (0, -1, "3", True):
+        for budget in (0, -1, "3", True, 1001):
             with self.assertRaises(ConfigError):
                 validate_source_registry(_registry([_mutate(budget=budget)]))
 
@@ -298,6 +356,149 @@ class SourceRegistryValidationTests(unittest.TestCase):
                              input={**base, **changes}, legacy={"feed": None})
             with self.assertRaises(ConfigError):
                 validate_source_registry(_registry([source]))
+
+
+class AdapterInputAdversarialTests(unittest.TestCase):
+    def test_registry_schema_string_requires_exact_builtin_type(self):
+        class StringSubclass(str):
+            pass
+
+        registry = _registry([VALID_SOURCE])
+        registry["schema_version"] = StringSubclass("1.0")
+        with self.assertRaisesRegex(ConfigError, "schema_version"):
+            validate_source_registry(registry)
+
+    def test_every_allowed_adapter_has_an_explicit_valid_input_schema(self):
+        self.assertEqual(set(VALID_ADAPTER_INPUTS), set(ADAPTER_IDS))
+        for adapter in sorted(ADAPTER_IDS):
+            with self.subTest(adapter=adapter):
+                validate_source_registry(_registry([_source_for_adapter(adapter)]))
+
+    def test_every_allowed_adapter_rejects_arbitrary_input_fields(self):
+        for adapter in sorted(ADAPTER_IDS):
+            with self.subTest(adapter=adapter):
+                value = copy.deepcopy(VALID_ADAPTER_INPUTS[adapter])
+                value["unexpected"] = "must-not-pass"
+                with self.assertRaisesRegex(ConfigError, r"sources\[0\].*input"):
+                    validate_source_registry(_registry([_source_for_adapter(adapter, value)]))
+
+    def test_exact_builtin_containers_are_required_before_reflection(self):
+        class DictSubclass(dict):
+            pass
+
+        class ListSubclass(list):
+            pass
+
+        cases = [
+            _source_for_adapter("x", DictSubclass(handle="safe")),
+            _source_for_adapter("github", {
+                **VALID_ADAPTER_INPUTS["github"],
+                "queries": ListSubclass(VALID_ADAPTER_INPUTS["github"]["queries"]),
+            }),
+            _source_for_adapter("web-publication", {
+                **VALID_ADAPTER_INPUTS["web-publication"],
+                "discovery": [DictSubclass(type="rss", url="https://example.com/feed")],
+            }),
+        ]
+        for source in cases:
+            with self.subTest(adapter=source["adapter"]), self.assertRaises(ConfigError):
+                validate_source_registry(_registry([source]))
+
+    def test_strings_are_exact_nonempty_and_control_free(self):
+        class StringSubclass(str):
+            pass
+
+        cases = [
+            _source_for_adapter("x", {"handle": StringSubclass("example")}),
+            _source_for_adapter("x", {"handle": ""}),
+            _source_for_adapter("x", {"handle": "safe\x00unsafe"}),
+            _source_for_adapter("github", {
+                **VALID_ADAPTER_INPUTS["github"],
+                "queries": [{**VALID_ADAPTER_INPUTS["github"]["queries"][0], "query": "AI\x7fagents"}],
+            }),
+            _source_for_adapter("github", {
+                **VALID_ADAPTER_INPUTS["github"],
+                "queries": [{**VALID_ADAPTER_INPUTS["github"]["queries"][0],
+                             "filters": {"entities": ["repository"], "owner": "bad\x85owner"}}],
+            }),
+        ]
+        for source in cases:
+            with self.subTest(adapter=source["adapter"]), self.assertRaises(ConfigError):
+                validate_source_registry(_registry([source]))
+
+    def test_urls_require_exact_https_strings_without_echoing_values(self):
+        class StringSubclass(str):
+            pass
+
+        hostile_values = [StringSubclass("https://example.com/feed"), 7, "http://example.com/feed",
+                          "https://example.com/\x1fsecret"]
+        for value in hostile_values:
+            source = _source_for_adapter("rss", {"rss_url": value})
+            with self.subTest(value_type=type(value).__name__), self.assertRaises(ConfigError) as caught:
+                validate_source_registry(_registry([source]))
+            self.assertNotIn(str(value), str(caught.exception))
+
+    def test_boolean_and_integer_fields_reject_coercible_or_unbounded_values(self):
+        boolean_cases = [1, 0, "false", None]
+        for value in boolean_cases:
+            source = _source_for_adapter("github", {
+                **VALID_ADAPTER_INPUTS["github"], "include_discussions": value,
+            })
+            with self.subTest(value=value), self.assertRaises(ConfigError):
+                validate_source_registry(_registry([source]))
+        for value in (True, -1, 1_000_000_001):
+            query = copy.deepcopy(VALID_ADAPTER_INPUTS["hackernews"]["queries"][0])
+            query["filters"]["min_points"] = value
+            source = _source_for_adapter("hackernews", {
+                **VALID_ADAPTER_INPUTS["hackernews"], "queries": [query],
+            })
+            with self.subTest(value=value), self.assertRaises(ConfigError):
+                validate_source_registry(_registry([source]))
+
+    def test_arrays_require_exact_lists_typed_items_and_no_set_duplicates(self):
+        cases = [
+            _source_for_adapter("web-publication", {
+                **VALID_ADAPTER_INPUTS["web-publication"], "article_url_patterns": (".*",),
+            }),
+            _source_for_adapter("web-publication", {
+                **VALID_ADAPTER_INPUTS["web-publication"], "exclude_url_patterns": [1],
+            }),
+            _source_for_adapter("github", {
+                **VALID_ADAPTER_INPUTS["github"],
+                "queries": [{**VALID_ADAPTER_INPUTS["github"]["queries"][0],
+                             "filters": {"entities": ["repository", "repository"]}}],
+            }),
+            _source_for_adapter("hugging-face-papers", {
+                **VALID_ADAPTER_INPUTS["hugging-face-papers"], "views": ("daily", "trending", "weekly"),
+            }),
+        ]
+        for source in cases:
+            with self.subTest(adapter=source["adapter"]), self.assertRaises(ConfigError):
+                validate_source_registry(_registry([source]))
+
+    def test_web_publication_nested_objects_are_closed_and_regexes_compile(self):
+        cases = [
+            {**VALID_ADAPTER_INPUTS["web-publication"],
+             "discovery": [{"type": "rss", "url": "https://example.com/feed", "extra": True}]},
+            {**VALID_ADAPTER_INPUTS["web-publication"], "article_url_patterns": ["["]},
+            {**VALID_ADAPTER_INPUTS["web-publication"], "parser": 7},
+            {**VALID_ADAPTER_INPUTS["web-publication"], "content_selectors": [],
+             "content_selector_priority": True},
+            {**VALID_ADAPTER_INPUTS["web-publication"],
+             "discovery": [VALID_ADAPTER_INPUTS["web-publication"]["discovery"][0]] * 2},
+            {**VALID_ADAPTER_INPUTS["web-publication"],
+             "discovery": [{"type": "json", "url": "https://example.com/api",
+                            "publicUrl": "https://example.com/{path}",
+                            "detailUrl": "https://example.com/api"}]},
+            {**VALID_ADAPTER_INPUTS["web-publication"],
+             "discovery": [{"type": "json", "url": "https://example.com/api",
+                            "publicUrl": "https://evil.example/{path}",
+                            "detailUrl": "https://example.com/api/{path}"}],
+             "fetch_url_patterns": [r"^https://example\.com/api/[^/]+$"]},
+        ]
+        for value in cases:
+            with self.subTest(value=value), self.assertRaises(ConfigError):
+                validate_source_registry(_registry([_source_for_adapter("web-publication", value)]))
 
 
 class CredentialReferenceTests(unittest.TestCase):

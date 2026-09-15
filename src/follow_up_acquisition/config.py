@@ -34,10 +34,15 @@ ACQUISITION_MODES = frozenset({"central", "shadow", "hybrid", "local"})
 _REGISTRY_SCHEMA_VERSION = "1.0"
 
 _QUERY_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_MAX_STRING_LENGTH = 4096
+_MAX_METRIC_FILTER = 1_000_000_000
+_MAX_BUDGET = 1000
 _INPUT_FIELDS = {
-    "x": frozenset({"handle"}),
+    "x": frozenset({"handle", "url"}),
     "rss": frozenset({"rss_url", "url", "language"}),
-    "podcast": frozenset({"rss_url", "url"}),
+    "newsletter": frozenset({"rss_url", "url", "language"}),
+    "podcast": frozenset({"rss_url", "url", "language"}),
     "arxiv": frozenset({"rss_url", "url"}),
     "report": frozenset({"url"}),
     "web-publication": frozenset({
@@ -54,13 +59,17 @@ _INPUT_FIELDS = {
     "hugging-face-papers": frozenset({
         "structured_endpoint", "page_base_url", "views", "timezone",
     }),
+    "youtube": frozenset(),
+    "digg": frozenset(),
+    "xiaohongshu": frozenset(),
+    "wechat": frozenset(),
 }
-_REQUIRED_INPUT_FIELDS = {
-    adapter: fields for adapter, fields in _INPUT_FIELDS.items()
-}
-_REQUIRED_INPUT_FIELDS["rss"] = frozenset({"rss_url", "url"})
+_REQUIRED_INPUT_FIELDS = {adapter: fields for adapter, fields in _INPUT_FIELDS.items()}
+_REQUIRED_INPUT_FIELDS["x"] = frozenset({"handle"})
+for _feed_adapter in ("rss", "newsletter", "podcast"):
+    _REQUIRED_INPUT_FIELDS[_feed_adapter] = frozenset({"rss_url"})
 _REQUIRED_INPUT_FIELDS["web-publication"] = frozenset({
-    "url", "language", "discovery", "article_url_patterns", "exclude_url_patterns", "parser",
+    "url", "language", "discovery", "article_url_patterns", "exclude_url_patterns",
 })
 _GITHUB_FILTERS = frozenset({"entities", "language", "min_stars", "owner", "topics"})
 _GITHUB_ENTITIES = frozenset({"repository", "release", "commit", "issue", "pull-request"})
@@ -95,52 +104,155 @@ def _namespace_of(source_id: str) -> str:
     return source_id.split(":", 1)[0]
 
 
-def _require_non_empty_string(value: Any, label: str) -> None:
-    if not isinstance(value, str) or not value:
+def _require_string(value: Any, label: str, *, nonempty: bool = True) -> str:
+    if type(value) is not str:
+        raise ConfigError(f"{label} must be an exact string")
+    if nonempty and not value:
         raise ConfigError(f"{label} must be a non-empty string")
+    if len(value) > _MAX_STRING_LENGTH:
+        raise ConfigError(f"{label} exceeds the string length limit")
+    if _CONTROL_RE.search(value):
+        raise ConfigError(f"{label} contains a forbidden control character")
+    return value
+
+
+def _require_non_empty_string(value: Any, label: str) -> None:
+    _require_string(value, label)
+
+
+def _require_exact_dict(value: Any, label: str) -> dict[str, Any]:
+    if type(value) is not dict:
+        raise ConfigError(f"{label} must be an exact object")
+    for key in value:
+        _require_string(key, f"{label} field name")
+    return value
+
+
+def _require_exact_list(value: Any, label: str, *, nonempty: bool = False) -> list[Any]:
+    if type(value) is not list or (nonempty and not value):
+        qualifier = "non-empty exact array" if nonempty else "exact array"
+        raise ConfigError(f"{label} must be a {qualifier}")
+    return value
+
+
+def _require_closed_fields(
+    value: Any,
+    label: str,
+    *,
+    allowed: frozenset[str] | set[str],
+    required: frozenset[str] | set[str] = frozenset(),
+) -> dict[str, Any]:
+    result = _require_exact_dict(value, label)
+    actual = set(result)
+    extra = actual - set(allowed)
+    missing = set(required) - actual
+    if extra:
+        raise ConfigError(f"{label} has unknown input field(s): {', '.join(sorted(extra))}")
+    if missing:
+        raise ConfigError(f"{label} is missing field(s): {', '.join(sorted(missing))}")
+    return result
+
+
+def _require_string_list(
+    value: Any,
+    label: str,
+    *,
+    nonempty: bool = False,
+    unique: bool = True,
+) -> list[str]:
+    items = _require_exact_list(value, label, nonempty=nonempty)
+    for index, item in enumerate(items):
+        _require_string(item, f"{label}[{index}]")
+    if unique and len(items) != len(set(items)):
+        raise ConfigError(f"{label} must not contain duplicates")
+    return items
+
+
+def _require_boolean(value: Any, label: str) -> None:
+    if type(value) is not bool:
+        raise ConfigError(f"{label} must be an exact boolean")
+
+
+def _require_bounded_integer(value: Any, label: str, *, minimum: int, maximum: int) -> None:
+    if type(value) is not int or not minimum <= value <= maximum:
+        raise ConfigError(f"{label} must be an integer from {minimum} to {maximum}")
 
 
 def _require_https_url(value: Any, label: str, *, template: bool = False) -> None:
-    _require_non_empty_string(value, label)
-    parsed = urlparse(value.replace("{date}", "2000-01-01") if template else value)
+    text = _require_string(value, label)
+    if template and text.count("{date}") != 1:
+        raise ConfigError(f"{label} must contain exactly one {{date}} placeholder")
+    candidate = text.replace("{date}", "2000-01-01") if template else text
+    try:
+        parsed = urlparse(candidate)
+        hostname = parsed.hostname
+    except ValueError as exc:
+        raise ConfigError(f"{label} must be a public HTTPS URL") from exc
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
         raise ConfigError(f"{label} must be a public HTTPS URL")
-    if template and value.count("{date}") != 1:
-        raise ConfigError(f"{label} must contain exactly one {{date}} placeholder")
+    if not hostname:
+        raise ConfigError(f"{label} must be a public HTTPS URL")
+
+
+def _require_path_url_template(value: Any, label: str) -> None:
+    text = _require_string(value, label)
+    if text.count("{path}") != 1:
+        raise ConfigError(f"{label} must contain exactly one {{path}} placeholder")
+    _require_https_url(text.replace("{path}", "entry"), label)
+
+
+def _validate_regex_list(value: Any, label: str, *, nonempty: bool) -> None:
+    patterns = _require_string_list(value, label, nonempty=nonempty)
+    for index, pattern in enumerate(patterns):
+        try:
+            re.compile(pattern)
+        except re.error as exc:
+            raise ConfigError(f"{label}[{index}] must be a valid regular expression") from exc
+
+
+def _same_url_origin(left: str, right: str) -> bool:
+    left_url = urlparse(left)
+    right_url = urlparse(right)
+    return (left_url.scheme.lower(), left_url.netloc.lower()) == (
+        right_url.scheme.lower(), right_url.netloc.lower(),
+    )
 
 
 def _validate_queries(value: Any, label: str, *, adapter: str) -> None:
-    if not isinstance(value, list) or not value:
-        raise ConfigError(f"{label} must be a non-empty array")
+    queries = _require_exact_list(value, label, nonempty=True)
     seen: set[str] = set()
     allowed_filters = _GITHUB_FILTERS if adapter == "github" else _HN_FILTERS
     allowed_sorts = {"updated", "stars"} if adapter == "github" else {"date", "points"}
-    for index, query in enumerate(value):
+    for index, query in enumerate(queries):
         query_label = f"{label}[{index}]"
-        if not isinstance(query, dict) or set(query) != {"id", "query", "sort", "filters"}:
-            raise ConfigError(f"{query_label} must contain only id, query, sort, and filters")
+        query = _require_closed_fields(
+            query, query_label,
+            allowed={"id", "query", "sort", "filters"},
+            required={"id", "query", "sort", "filters"},
+        )
         query_id = query["id"]
-        if not isinstance(query_id, str) or _QUERY_ID_RE.fullmatch(query_id) is None:
+        _require_string(query_id, f"{query_label}.id")
+        if _QUERY_ID_RE.fullmatch(query_id) is None:
             raise ConfigError(f"{query_label}.id must be a stable lowercase query ID")
         if query_id in seen:
             raise ConfigError(f"{label} contains duplicate query id: {query_id}")
         seen.add(query_id)
-        _require_non_empty_string(query["query"], f"{query_label}.query")
-        if query["sort"] not in allowed_sorts:
+        _require_string(query["query"], f"{query_label}.query")
+        sort = _require_string(query["sort"], f"{query_label}.sort")
+        if sort not in allowed_sorts:
             raise ConfigError(f"{query_label}.sort is not allowed for {adapter}")
-        filters = query["filters"]
-        if not isinstance(filters, dict) or set(filters) - allowed_filters:
-            raise ConfigError(f"{query_label}.filters has unknown filter keys")
+        filters = _require_closed_fields(
+            query["filters"], f"{query_label}.filters", allowed=allowed_filters,
+        )
         for key, item in filters.items():
             if key in {"entities", "topics", "tags"}:
-                if not isinstance(item, list) or not item or not all(isinstance(v, str) and v for v in item):
-                    raise ConfigError(f"{query_label}.filters.{key} must be a non-empty string array")
-                if len(item) != len(set(item)):
-                    raise ConfigError(f"{query_label}.filters.{key} must not contain duplicates")
+                _require_string_list(item, f"{query_label}.filters.{key}", nonempty=True)
             elif key in {"language", "owner"}:
-                _require_non_empty_string(item, f"{query_label}.filters.{key}")
-            elif not isinstance(item, int) or isinstance(item, bool) or item < 0:
-                raise ConfigError(f"{query_label}.filters.{key} must be a non-negative integer")
+                _require_string(item, f"{query_label}.filters.{key}")
+            else:
+                _require_bounded_integer(
+                    item, f"{query_label}.filters.{key}", minimum=0, maximum=_MAX_METRIC_FILTER,
+                )
         if adapter == "github":
             entities = filters.get("entities")
             if not entities or set(entities) - _GITHUB_ENTITIES:
@@ -154,80 +266,115 @@ def _validate_queries(value: Any, label: str, *, adapter: str) -> None:
 def _validate_input(source: dict[str, Any], index: int) -> None:
     adapter = source["adapter"]
     value = source["input"]
-    allowed = _INPUT_FIELDS.get(adapter)
-    if allowed is None:
-        # Reserved adapters are accepted for compatibility until registered.
-        return
-    extra = set(value) - allowed
-    if extra:
-        raise ConfigError(f"sources[{index}] has unknown input field(s): {', '.join(sorted(extra))}")
-    missing = _REQUIRED_INPUT_FIELDS[adapter] - set(value)
-    if missing:
-        raise ConfigError(f"sources[{index}].input is missing field(s): {', '.join(sorted(missing))}")
+    label = f"sources[{index}].input"
+    value = _require_closed_fields(
+        value, label, allowed=_INPUT_FIELDS[adapter], required=_REQUIRED_INPUT_FIELDS[adapter],
+    )
 
     for key, item in value.items():
         if key.endswith("_url") or key in {"url", "structured_endpoint"}:
-            _require_https_url(item, f"sources[{index}].input.{key}")
+            _require_https_url(item, f"{label}.{key}")
+    if adapter == "x":
+        _require_string(value["handle"], f"{label}.handle")
+    elif adapter in {"rss", "newsletter", "podcast"}:
+        if "language" in value:
+            _require_string(value["language"], f"{label}.language")
     if adapter == "web-publication":
-        if not isinstance(value["discovery"], list):
-            raise ConfigError(f"sources[{index}].input.discovery must be an array")
-        for discovery_index, discovery in enumerate(value["discovery"]):
+        _require_string(value["language"], f"{label}.language")
+        discovery_items = _require_exact_list(value["discovery"], f"{label}.discovery", nonempty=True)
+        discovery_signatures: set[tuple[tuple[str, Any], ...]] = set()
+        for discovery_index, discovery in enumerate(discovery_items):
+            discovery_label = f"{label}.discovery[{discovery_index}]"
+            discovery = _require_exact_dict(discovery, discovery_label)
+            discovery_type = _require_string(discovery.get("type"), f"{discovery_label}.type")
             expected = ({"type", "url", "publicUrl", "detailUrl"}
-                        if isinstance(discovery, dict) and discovery.get("type") == "json"
-                        else {"type", "url"})
-            if not isinstance(discovery, dict) or set(discovery) != expected:
-                raise ConfigError(f"sources[{index}].input.discovery[{discovery_index}] is invalid")
-            if discovery["type"] not in {"rss", "sitemap", "html", "json"}:
-                raise ConfigError(f"sources[{index}].input.discovery[{discovery_index}].type is invalid")
-            _require_https_url(discovery["url"], f"sources[{index}].input.discovery[{discovery_index}].url")
-            for key in ("publicUrl", "detailUrl"):
-                if key in discovery:
-                    _require_https_url(discovery[key].replace("{path}", "entry"),
-                                       f"sources[{index}].input.discovery[{discovery_index}].{key}")
+                        if discovery_type == "json" else {"type", "url"})
+            discovery = _require_closed_fields(
+                discovery, discovery_label, allowed=expected, required=expected,
+            )
+            if discovery_type not in {"rss", "sitemap", "html", "json"}:
+                raise ConfigError(f"{discovery_label}.type is invalid")
+            _require_https_url(discovery["url"], f"{discovery_label}.url")
+            if discovery_type == "json":
+                _require_path_url_template(discovery["publicUrl"], f"{discovery_label}.publicUrl")
+                _require_path_url_template(discovery["detailUrl"], f"{discovery_label}.detailUrl")
+            signature = tuple(sorted(discovery.items()))
+            if signature in discovery_signatures:
+                raise ConfigError(f"{label}.discovery must not contain duplicates")
+            discovery_signatures.add(signature)
+        _validate_regex_list(value["article_url_patterns"], f"{label}.article_url_patterns", nonempty=True)
+        _validate_regex_list(value["exclude_url_patterns"], f"{label}.exclude_url_patterns", nonempty=False)
+        if "fetch_url_patterns" in value:
+            _validate_regex_list(value["fetch_url_patterns"], f"{label}.fetch_url_patterns", nonempty=True)
+        if any(item["type"] == "json" for item in discovery_items) and "fetch_url_patterns" not in value:
+            raise ConfigError(f"{label}.fetch_url_patterns is required for JSON discovery")
+        for discovery_index, discovery in enumerate(discovery_items):
+            if discovery["type"] != "json":
+                continue
+            discovery_label = f"{label}.discovery[{discovery_index}]"
+            public_url = discovery["publicUrl"].replace("{path}", "entry")
+            detail_url = discovery["detailUrl"].replace("{path}", "entry")
+            if not all(_same_url_origin(value["url"], item)
+                       for item in (discovery["url"], public_url, detail_url)):
+                raise ConfigError(f"{discovery_label} URLs must use the source origin")
+            if not any(re.search(pattern, public_url) for pattern in value["article_url_patterns"]):
+                raise ConfigError(f"{discovery_label}.publicUrl must match article_url_patterns")
+            if not any(re.search(pattern, detail_url) for pattern in value["fetch_url_patterns"]):
+                raise ConfigError(f"{discovery_label}.detailUrl must match fetch_url_patterns")
+        if "parser" in value and value["parser"] is not None:
+            _require_string(value["parser"], f"{label}.parser")
+        if "content_selectors" in value:
+            _require_string_list(value["content_selectors"], f"{label}.content_selectors", nonempty=True)
+        if "content_selector_priority" in value:
+            _require_boolean(value["content_selector_priority"], f"{label}.content_selector_priority")
+            if "content_selectors" not in value:
+                raise ConfigError(f"{label}.content_selectors is required with content_selector_priority")
     elif adapter == "github":
-        if not isinstance(value["include_discussions"], bool):
-            raise ConfigError(f"sources[{index}].input.include_discussions must be a boolean")
-        _validate_queries(value["queries"], f"sources[{index}].input.queries", adapter=adapter)
+        _require_boolean(value["include_discussions"], f"{label}.include_discussions")
+        _validate_queries(value["queries"], f"{label}.queries", adapter=adapter)
     elif adapter == "hackernews":
-        if not isinstance(value["top_enabled"], bool) or not isinstance(value["new_enabled"], bool):
-            raise ConfigError(f"sources[{index}].input top/new flags must be booleans")
-        _validate_queries(value["queries"], f"sources[{index}].input.queries", adapter=adapter)
+        _require_boolean(value["top_enabled"], f"{label}.top_enabled")
+        _require_boolean(value["new_enabled"], f"{label}.new_enabled")
+        _validate_queries(value["queries"], f"{label}.queries", adapter=adapter)
     elif adapter == "reddit":
-        _require_non_empty_string(value["subreddit"], f"sources[{index}].input.subreddit")
+        _require_string(value["subreddit"], f"{label}.subreddit")
         marker = f"/r/{value['subreddit']}/"
         if marker not in value["rss_url"] or marker not in value["listing_url"]:
-            raise ConfigError(f"sources[{index}].input subreddit must match both Reddit URLs")
+            raise ConfigError(f"{label}.subreddit must match both Reddit URLs")
     elif adapter == "techmeme":
         _require_https_url(value["archive_url_template"],
-                           f"sources[{index}].input.archive_url_template", template=True)
+                           f"{label}.archive_url_template", template=True)
     elif adapter == "hugging-face-papers":
+        _require_string_list(value["views"], f"{label}.views", nonempty=True)
         if value["views"] != ["daily", "trending", "weekly"]:
-            raise ConfigError(f"sources[{index}].input.views must use daily, trending, weekly order")
+            raise ConfigError(f"{label}.views must use daily, trending, weekly order")
+        _require_string(value["timezone"], f"{label}.timezone")
         if value["timezone"] != "Asia/Shanghai":
-            raise ConfigError(f"sources[{index}].input.timezone must be Asia/Shanghai")
+            raise ConfigError(f"{label}.timezone must be Asia/Shanghai")
 
 
 def _iter_credential_keys(value: Any, path: str = "$"):
-    if isinstance(value, dict):
+    if type(value) is dict:
         for key, child in value.items():
             child_path = f"{path}.{key}"
             if is_credential_key(key):
                 yield child_path, child
             yield from _iter_credential_keys(child, child_path)
-    elif isinstance(value, list):
+    elif type(value) is list:
         for index, child in enumerate(value):
             yield from _iter_credential_keys(child, f"{path}[{index}]")
 
 
 def validate_source_registry(registry: Any) -> list[dict[str, Any]]:
     """Validate a source registry object and return its source list."""
-    if not isinstance(registry, dict):
-        raise ConfigError("registry must be an object")
+    registry = _require_closed_fields(
+        registry, "registry", allowed={"schema_version", "sources"},
+        required={"schema_version", "sources"},
+    )
+    _require_string(registry["schema_version"], "registry.schema_version")
     if registry.get("schema_version") != _REGISTRY_SCHEMA_VERSION:
         raise ConfigError(f"registry.schema_version must be '{_REGISTRY_SCHEMA_VERSION}'")
-    sources = registry.get("sources")
-    if not isinstance(sources, list):
-        raise ConfigError("registry.sources must be an array")
+    sources = _require_exact_list(registry.get("sources"), "registry.sources")
 
     seen_ids: set[str] = set()
     for index, source in enumerate(sources):
@@ -236,14 +383,10 @@ def validate_source_registry(registry: Any) -> list[dict[str, Any]]:
 
 
 def _validate_source(source: Any, index: int, seen_ids: set[str]) -> None:
-    if not isinstance(source, dict):
-        raise ConfigError(f"sources[{index}] must be an object")
-    for field in _REGISTRY_REQUIRED:
-        if field not in source:
-            raise ConfigError(f"sources[{index}] is missing required field: {field}")
-    extra = set(source) - set(_REGISTRY_REQUIRED)
-    if extra:
-        raise ConfigError(f"sources[{index}] has unknown field(s): {', '.join(sorted(extra))}")
+    label = f"sources[{index}]"
+    source = _require_closed_fields(
+        source, label, allowed=set(_REGISTRY_REQUIRED), required=set(_REGISTRY_REQUIRED),
+    )
 
     source_id = source["id"]
     _require_non_empty_string(source_id, f"sources[{index}].id")
@@ -257,13 +400,14 @@ def _validate_source(source: Any, index: int, seen_ids: set[str]) -> None:
 
     _require_non_empty_string(source["name"], f"sources[{index}].name")
 
-    policy = source["channel_policy"]
+    policy = _require_string(source["channel_policy"], f"{label}.channel_policy")
     if policy not in CHANNEL_POLICIES:
         raise ConfigError(
             f"sources[{index}].channel_policy must be one of {sorted(CHANNEL_POLICIES)}"
         )
     channel = source["channel"]
     if policy == "fixed":
+        _require_string(channel, f"{label}.channel")
         if channel not in CHANNEL_IDS:
             raise ConfigError(
                 f"sources[{index}].channel must be one of {sorted(CHANNEL_IDS)} for a fixed policy"
@@ -278,30 +422,30 @@ def _validate_source(source: Any, index: int, seen_ids: set[str]) -> None:
     if policy == "fixed" and _CHANNEL_NAMESPACES.get(channel) != namespace:
         raise ConfigError(f"sources[{index}].id namespace must match fixed channel {channel}")
 
-    if source["adapter"] not in ADAPTER_IDS:
+    adapter = _require_string(source["adapter"], f"{label}.adapter")
+    if adapter not in ADAPTER_IDS:
         raise ConfigError(
             f"sources[{index}].adapter must be one of {sorted(ADAPTER_IDS)}"
         )
     for flag in ("requires_credentials", "default_enabled"):
-        if not isinstance(source[flag], bool):
-            raise ConfigError(f"sources[{index}].{flag} must be a boolean")
-    if source["cadence"] not in CADENCES:
+        _require_boolean(source[flag], f"{label}.{flag}")
+    cadence = _require_string(source["cadence"], f"{label}.cadence")
+    if cadence not in CADENCES:
         raise ConfigError(f"sources[{index}].cadence must be one of {sorted(CADENCES)}")
 
     budget = source["budget"]
-    if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
-        raise ConfigError(f"sources[{index}].budget must be a positive integer")
+    _require_bounded_integer(budget, f"{label}.budget", minimum=1, maximum=_MAX_BUDGET)
 
-    if not isinstance(source["input"], dict):
-        raise ConfigError(f"sources[{index}].input must be an object")
+    _require_exact_dict(source["input"], f"{label}.input")
     # Inputs are non-secret by construction; a credential-shaped key here is a bug.
     for path, _value in _iter_credential_keys(source["input"]):
         raise ConfigError(f"sources[{index}].input embeds a credential-shaped key: {path}")
     _validate_input(source, index)
 
     legacy = source["legacy"]
-    if not isinstance(legacy, dict) or "feed" not in legacy:
-        raise ConfigError(f"sources[{index}].legacy must be an object with a 'feed' field")
+    legacy = _require_closed_fields(
+        legacy, f"{label}.legacy", allowed={"feed"}, required={"feed"},
+    )
     if legacy["feed"] is not None:
         _require_non_empty_string(legacy["feed"], f"sources[{index}].legacy.feed")
 
