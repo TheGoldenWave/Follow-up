@@ -342,14 +342,16 @@ class GitHubAdapter:
         old_endpoints = previous_cursor.get("endpoints", {})
         if not isinstance(old_endpoints, Mapping):
             raise AdapterError("GitHub checkpoint cursor is invalid", status="schema-drift")
-        resume_required = False
+        if previous_cursor:
+            if set(previous_cursor) != {"window", "endpoints"}:
+                raise AdapterError("GitHub query resume cursor is invalid", status="schema-drift")
+            if set(old_endpoints) != set(entities):
+                raise AdapterError("GitHub query endpoint set changed", status="schema-drift")
         for state in old_endpoints.values():
             if not isinstance(state, Mapping):
                 raise AdapterError("GitHub endpoint checkpoint is invalid", status="schema-drift")
-            if state.get("complete") is not True:
-                resume_required = True
         effective_request = self._effective_request(
-            request, previous, previous_cursor, now, require_frozen=resume_required,
+            request, previous, previous_cursor, now, require_frozen=bool(previous_cursor),
         )
         frozen_window = effective_request["window"]
         for state in old_endpoints.values():
@@ -360,7 +362,9 @@ class GitHubAdapter:
         repo_cache: dict[str, str | None] = {}
         failures: list[tuple[str, str]] = []
         missing = False
-        changed = False
+        changed = bool(old_endpoints) and all(
+            state.get("complete") is True for state in old_endpoints.values()
+        )
         cap_hit = False
         incomplete_hit = False
         progress_hit = False

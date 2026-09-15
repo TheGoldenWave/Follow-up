@@ -289,7 +289,13 @@ class GitHubAdapterTests(unittest.TestCase):
             "streams": {
                 "query.alpha": {
                     "checkpoint_at": "2026-09-14T08:00:00Z",
-                    "cursor": {"page": 2}, "etag": '"old"', "last_modified": None,
+                    "cursor": {
+                        "window": {"start": "2026-09-14T00:00:00Z", "end": NOW},
+                        "endpoints": {"repository": {
+                            "complete": False, "page": 2,
+                            "counts": {"total_entries_seen": 100, "node_missing_seen": 0, "valid_seen": 100, "mapping_errors_seen": 0},
+                        }},
+                    }, "etag": '"old"', "last_modified": None,
                     "recent_native_ids": ["github:repository:R_old"],
                     "successful_window_end": "2026-09-14T08:00:00Z",
                     "query_fingerprint": query_fingerprint("github", queries[0]),
@@ -1393,6 +1399,85 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertIn(f"pushed:<={frozen['end']}", seen[0])
         self.assertNotIn("2026-09-16", seen[0])
         self.assertEqual(valid.checkpoint_updates[0].checkpoint["successful_window_end"], NOW)
+
+    def test_nonempty_complete_only_query_cursor_requires_frozen_window(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        previous = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": "2026-09-14T08:00:00Z",
+            "query_fingerprint": query_fingerprint("github", query),
+            "cursor": {"endpoints": {"repository": {"complete": True}}},
+        }
+        result = self.make_adapter(
+            source(queries=[query]), lambda *_args: self.fail("complete-only cursor must validate before skip/HTTP"),
+            checkpoint={"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.message, "query.agents: schema-drift")
+        self.assertEqual(result.checkpoint_updates, ())
+
+    def test_in_progress_endpoint_keys_must_exactly_match_enabled_entities(self):
+        query = {
+            "id": "agents", "query": "agentic systems", "sort": "updated",
+            "filters": {"entities": ["repository", "commit"]},
+        }
+        base = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "query_fingerprint": query_fingerprint("github", query),
+        }
+        frozen = {"start": None, "end": NOW}
+        endpoint_sets = (
+            {"repository": {"complete": False}},
+            {
+                "repository": {"complete": False}, "commit": {"complete": False},
+                "issue": {"complete": True},
+            },
+        )
+        for endpoints in endpoint_sets:
+            with self.subTest(endpoints=endpoints):
+                previous = {**base, "cursor": {"window": frozen, "endpoints": endpoints}}
+                result = self.make_adapter(
+                    source(queries=[query]), lambda *_args: self.fail("endpoint set must validate before HTTP"),
+                    checkpoint={"streams": {"query.agents": previous}},
+                ).collect("community:github", {"mode": "shadow"})
+                self.assertEqual(result.status, "schema-drift")
+                self.assertEqual(result.checkpoint_updates, ())
+
+    def test_all_complete_cursor_resets_then_next_run_computes_new_window(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        frozen = {"start": "2026-09-14T08:00:00Z", "end": NOW}
+        previous = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "query_fingerprint": query_fingerprint("github", query),
+            "cursor": {"window": frozen, "endpoints": {"repository": {"complete": True}}},
+        }
+        reset = self.make_adapter(
+            source(queries=[query]), lambda *_args: self.fail("complete endpoint is skipped"),
+            checkpoint={"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        reset_checkpoint = reset.checkpoint_updates[0].checkpoint
+        self.assertEqual(reset_checkpoint["cursor"], {})
+        self.assertEqual(reset_checkpoint["successful_window_end"], NOW)
+
+        next_previous = copy.deepcopy(reset_checkpoint)
+        next_previous["checkpoint_at"] = "2026-09-15T09:00:00Z"
+        seen = []
+
+        def handler(_method, url, _kwargs):
+            seen.append(parse_qs(urlsplit(url).query)["q"][0])
+            return response(url, {"total_count": 0, "items": []})
+
+        next_run = GitHubAdapter(
+            resolve_source=lambda _source_id: source(queries=[query]),
+            http_client=FakeClient(handler), clock=lambda: "2026-09-16T08:00:00Z",
+            credential_resolver=lambda _source_id: None,
+            checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": next_previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(next_run.status, "no-results")
+        self.assertIn(f"pushed:>={NOW}", seen[0])
+        self.assertIn("pushed:<=2026-09-16T08:00:00Z", seen[0])
 
 
 if __name__ == "__main__":
