@@ -488,6 +488,30 @@ class SerializationTests(unittest.TestCase):
         self.assertNotIn("checkpoint_updates", batch)
         self.assertNotIn("checkpoint_at", json.dumps(batch, sort_keys=True))
 
+    def test_build_batch_keeps_partial_status_without_serializing_checkpoint_updates(self):
+        adapter = FakeAdapter()
+        result = SourceResult(
+            "fake", "1.0.0", "community:other", "partial", (),
+            code="one-stream-failed",
+            message="one stream succeeded and one failed",
+            retryable=True,
+            checkpoint_updates=(CheckpointUpdate("top", None, make_checkpoint()),),
+        )
+
+        batch = self.runtime.build_batch(
+            adapter, "community:other", FIXED_REQUEST, result, batch_id="partial-b1",
+        )
+
+        self.assertEqual(batch["source_status"], {
+            "status": "partial",
+            "code": "one-stream-failed",
+            "message": "one stream succeeded and one failed",
+            "retryable": True,
+        })
+        self.assertEqual(batch["items"], [])
+        self.assertNotIn("checkpoint_updates", batch)
+        self.assertNotIn("checkpoint_at", json.dumps(batch, sort_keys=True))
+
 
 class ClassificationTests(unittest.TestCase):
     def test_classify_exception_maps_common_failures(self):
@@ -575,6 +599,41 @@ class OrchestrationTests(unittest.TestCase):
         result = self.runtime.collect_one(adapter, "community:other", FIXED_REQUEST)
         self.assertEqual(result.checkpoint_updates, (update,))
 
+    def test_collect_one_partial_mixed_result_preserves_successful_stream_progress(self):
+        candidate = make_candidate("1", "https://example.com/item")
+        successful_update = CheckpointUpdate("successful", None, make_checkpoint())
+        adapter = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "community:other", "partial", (candidate,),
+            code="one-stream-failed",
+            message="failed stream emitted no checkpoint update",
+            retryable=True,
+            request=FIXED_REQUEST,
+            checkpoint_updates=(successful_update,),
+        ))
+
+        result = self.runtime.collect_one(adapter, "community:other", FIXED_REQUEST)
+
+        self.assertEqual(result.status, "partial")
+        self.assertEqual(result.candidates, (candidate,))
+        self.assertEqual(result.code, "one-stream-failed")
+        self.assertEqual(result.message, "failed stream emitted no checkpoint update")
+        self.assertTrue(result.retryable)
+        self.assertEqual(result.checkpoint_updates, (successful_update,))
+
+    def test_collect_one_partial_empty_result_preserves_successful_empty_stream_progress(self):
+        successful_empty_update = CheckpointUpdate("empty", None, make_checkpoint())
+        adapter = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "community:other", "partial", (),
+            code="other-stream-failed",
+            checkpoint_updates=(successful_empty_update,),
+        ))
+
+        result = self.runtime.collect_one(adapter, "community:other", FIXED_REQUEST)
+
+        self.assertEqual(result.status, "partial")
+        self.assertEqual(result.candidates, ())
+        self.assertEqual(result.checkpoint_updates, (successful_empty_update,))
+
     def test_collect_one_invalid_checkpoint_is_safe_schema_drift(self):
         adapter = FakeAdapter(result=SourceResult(
             "fake", "1.0.0", "bad", "ok",
@@ -605,15 +664,41 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(result.code, "invalid-checkpoint-update")
         self.assertEqual(result.message, "adapter returned invalid checkpoint updates")
 
-    def test_collect_one_rejects_updates_from_unsuccessful_source_result(self):
-        adapter = FakeAdapter(result=SourceResult(
-            "fake", "1.0.0", "bad", "timeout", (), retryable=True,
-            checkpoint_updates=(CheckpointUpdate("top", None, make_checkpoint()),),
-        ))
-        result = self.runtime.collect_one(adapter, "bad", FIXED_REQUEST)
-        self.assertEqual(result.status, "schema-drift")
-        self.assertEqual(result.checkpoint_updates, ())
-        self.assertEqual(result.code, "invalid-checkpoint-update")
+    def test_collect_one_rejects_updates_from_every_failed_source_status(self):
+        failed_statuses = (
+            "rate-limited",
+            "auth-failed",
+            "unreachable",
+            "timeout",
+            "schema-drift",
+            "skipped-unconfigured",
+            "error",
+        )
+        candidate = make_candidate("bad", "https://bad.example/item")
+        update = CheckpointUpdate("top", None, make_checkpoint())
+
+        for failed_status in failed_statuses:
+            with self.subTest(status=failed_status):
+                adapter = FakeAdapter(result=SourceResult(
+                    "fake", "1.0.0", "community:other", failed_status, (candidate,),
+                    code="adapter-diagnostic",
+                    message="unsafe adapter detail",
+                    retryable=True,
+                    checkpoint_updates=(update,),
+                ))
+
+                result = self.runtime.collect_one(
+                    adapter, "community:other", FIXED_REQUEST,
+                )
+
+                self.assertEqual(result.status, "schema-drift")
+                self.assertEqual(result.candidates, ())
+                self.assertEqual(result.checkpoint_updates, ())
+                self.assertEqual(result.code, "invalid-checkpoint-update")
+                self.assertEqual(
+                    result.message, "adapter returned invalid checkpoint updates",
+                )
+                self.assertFalse(result.retryable)
 
     def test_run_isolates_independent_source_failures(self):
         good = FakeAdapter(result=SourceResult(
@@ -623,6 +708,26 @@ class OrchestrationTests(unittest.TestCase):
         batches = self.runtime.run([(good, "good"), (broken, "broken")], FIXED_REQUEST)
         self.assertEqual(batches["good"]["source_status"]["status"], "ok")
         self.assertEqual(batches["broken"]["source_status"]["status"], "unreachable")
+
+    def test_run_isolates_failed_status_checkpoint_rejection_from_independent_source(self):
+        rejected = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "rejected", "auth-failed",
+            (make_candidate("bad", "https://bad.example/item"),),
+            checkpoint_updates=(CheckpointUpdate("top", None, make_checkpoint()),),
+        ))
+        independent = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "independent", "ok",
+            (make_candidate("good", "https://good.example/item"),),
+        ))
+
+        batches = self.runtime.run(
+            [(rejected, "rejected"), (independent, "independent")], FIXED_REQUEST,
+        )
+
+        self.assertEqual(batches["rejected"]["source_status"]["status"], "schema-drift")
+        self.assertEqual(batches["rejected"]["items"], [])
+        self.assertEqual(batches["independent"]["source_status"]["status"], "ok")
+        self.assertEqual(len(batches["independent"]["items"]), 1)
 
     def test_run_isolates_invalid_checkpoint_updates_from_other_sources(self):
         good = FakeAdapter(result=SourceResult(

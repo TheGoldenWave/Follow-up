@@ -40,6 +40,7 @@ MAX_CHECKPOINT_DEPTH = 64
 MAX_CHECKPOINT_NODES = 10_000
 MAX_CHECKPOINT_UPDATES = 128
 MAX_CHECKPOINT_UPDATE_BYTES = MAX_STATE_BYTES
+_CHECKPOINT_ADVANCING_STATUSES = frozenset({"ok", "no-results", "partial"})
 
 
 class FrozenMapping(Mapping[str, Any]):
@@ -622,7 +623,7 @@ class AcquisitionRuntime:
             )
         try:
             updates = validate_checkpoint_updates(source, result.checkpoint_updates)
-            if updates and result.status not in {"ok", "no-results", "partial"}:
+            if updates and result.status not in _CHECKPOINT_ADVANCING_STATUSES:
                 raise SourceStateError(
                     "only successful source streams may advance checkpoints"
                 )
