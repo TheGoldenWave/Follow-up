@@ -389,13 +389,19 @@ class GitHubAdapterTests(unittest.TestCase):
         )
         self.assertEqual(pages, [1, 2])
         self.assertEqual(len(result.candidates), 1)
-        self.assertEqual(result.checkpoint_updates[0].checkpoint["cursor"]["repository_page"], 3)
+        self.assertEqual(
+            result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"]["page"], 3,
+        )
         self.assertIsNone(result.checkpoint_updates[0].checkpoint["successful_window_end"])
 
     def test_rest_pagination_resumes_from_checkpoint_cursor(self):
         query = {"id": "agents", "query": "agent", "sort": "updated", "filters": {"entities": ["repository"]}}
         previous = {
-            "checkpoint_at": "2026-09-14T08:00:00Z", "cursor": {"repository_page": 2},
+            "checkpoint_at": "2026-09-14T08:00:00Z",
+            "cursor": {
+                "window": {"start": None, "end": NOW},
+                "endpoints": {"repository": {"complete": False, "page": 2}},
+            },
             "etag": None, "last_modified": None, "recent_native_ids": [],
             "successful_window_end": None, "query_fingerprint": query_fingerprint("github", query),
         }
@@ -413,11 +419,14 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(result.checkpoint_updates[0].checkpoint["cursor"], {})
         self.assertEqual(result.checkpoint_updates[0].checkpoint["successful_window_end"], NOW)
 
-    def test_search_never_persists_impossible_page_beyond_github_1000_cap(self):
+    def test_search_never_requests_or_persists_page_beyond_github_1000_cap(self):
         query = {"id": "agents", "query": "agent", "sort": "updated", "filters": {"entities": ["repository"]}}
         previous = {
             "checkpoint_at": "2026-09-14T08:00:00Z",
-            "cursor": {"repository_page": 10, "window": {"start": None, "end": NOW}},
+            "cursor": {
+                "window": {"start": None, "end": NOW},
+                "endpoints": {"repository": {"complete": False, "page": 10}},
+            },
             "etag": None, "last_modified": None, "recent_native_ids": [],
             "successful_window_end": None, "query_fingerprint": query_fingerprint("github", query),
         }
@@ -435,8 +444,12 @@ class GitHubAdapterTests(unittest.TestCase):
             checkpoint={"streams": {"query.agents": previous}},
         ).collect("community:github", {"mode": "shadow", "depth": 2})
         self.assertEqual(pages, [10])
-        self.assertEqual(result.status, "schema-drift")
-        self.assertEqual(result.checkpoint_updates, ())
+        self.assertEqual(result.status, "partial")
+        self.assertEqual(result.code, "github-search-cap")
+        self.assertEqual(
+            result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"],
+            {"complete": False, "capped": True},
+        )
 
     def test_repository_304_does_not_skip_other_enabled_entities(self):
         data = fixture("entities.json")
@@ -444,6 +457,8 @@ class GitHubAdapterTests(unittest.TestCase):
         def handler(_method, url, _kwargs):
             if urlsplit(url).path == "/search/repositories":
                 return response(url, None, status=304)
+            if urlsplit(url).path == "/repos/acme/agent":
+                return response(url, data["repository"])
             return response(url, {"total_count": 1, "items": [data["issue"]]})
 
         result = self.make_adapter(source(entities=["repository", "issue"]), handler).collect(
@@ -620,6 +635,154 @@ class GitHubAdapterTests(unittest.TestCase):
         )
         with self.assertRaises(AdapterError):
             adapter.collect("community:github", {"mode": "shadow"})
+
+    def test_later_endpoint_failure_preserves_earlier_candidate_and_progress(self):
+        data = fixture("entities.json")
+
+        def handler(_method, url, _kwargs):
+            if urlsplit(url).path == "/search/repositories":
+                return response(url, {"total_count": 1, "items": [data["repository"]]})
+            raise AdapterError("unsafe detail", status="timeout", retryable=True)
+
+        result = self.make_adapter(source(entities=["repository", "commit"]), handler).collect(
+            "community:github", {"mode": "shadow"},
+        )
+        self.assertEqual(result.status, "partial")
+        self.assertEqual([item.native_id for item in result.candidates], ["github:repository:R_repo"])
+        self.assertEqual(len(result.checkpoint_updates), 1)
+        checkpoint = result.checkpoint_updates[0].checkpoint
+        self.assertTrue(checkpoint["cursor"]["endpoints"]["repository"]["complete"])
+        self.assertFalse(checkpoint["cursor"]["endpoints"]["commit"]["complete"])
+        self.assertIsNone(checkpoint["successful_window_end"])
+        self.assertEqual(
+            len(validate_checkpoint_updates("community:github", result.checkpoint_updates)), 1,
+        )
+
+    def test_search_cap_returns_candidates_partial_checkpoint_and_restarts_without_replay(self):
+        data = fixture("entities.json")["repository"]
+        pages = []
+
+        def handler(_method, url, _kwargs):
+            pages.append(int(parse_qs(urlsplit(url).query)["page"][0]))
+            return response(url, {"total_count": 1500, "items": [data] * 100})
+
+        first = self.make_adapter(source(), handler).collect(
+            "community:github", {"mode": "shadow", "depth": 10},
+        )
+        self.assertEqual(pages, list(range(1, 11)))
+        self.assertEqual(first.status, "partial")
+        self.assertEqual(first.code, "github-search-cap")
+        self.assertEqual(len(first.candidates), 1)
+        update = first.checkpoint_updates[0]
+        self.assertIsNone(update.checkpoint["successful_window_end"])
+        endpoint = update.checkpoint["cursor"]["endpoints"]["repository"]
+        self.assertEqual(endpoint, {"complete": False, "capped": True})
+
+        previous = copy.deepcopy(update.checkpoint)
+        previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
+        pages.clear()
+        second = self.make_adapter(
+            source(), handler, checkpoint={"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow", "depth": 10})
+        self.assertEqual(pages[0], 1)
+        self.assertEqual(second.candidates, ())
+        self.assertEqual(second.status, "partial")
+
+    def test_shipped_query_uses_only_endpoint_supported_qualifiers(self):
+        seen = {}
+        query = {
+            "id": "shipping", "query": "agent systems", "sort": "updated",
+            "filters": {
+                "entities": ["repository", "commit", "issue", "pull-request"],
+                "owner": "acme", "language": "Python", "topics": ["agents"],
+                "min_stars": 50,
+            },
+        }
+
+        def handler(_method, url, _kwargs):
+            path = urlsplit(url).path
+            q = parse_qs(urlsplit(url).query)["q"][0]
+            label = "pull-request" if "type:pr" in q else "issue" if "type:issue" in q else "commit" if path.endswith("commits") else "repository"
+            seen[label] = q
+            return response(url, {"total_count": 0, "items": []})
+
+        self.make_adapter(source(queries=[query]), handler).collect(
+            "community:github", {"mode": "shadow", "window": {"start": "2026-09-14T00:00:00Z", "end": NOW}},
+        )
+        for qualifier in ("language:Python", "topic:agents", "stars:>=50"):
+            self.assertIn(qualifier, seen["repository"])
+            self.assertNotIn(qualifier, seen["commit"])
+            self.assertNotIn(qualifier, seen["issue"])
+            self.assertNotIn(qualifier, seen["pull-request"])
+        self.assertIn("committer-date:>=", seen["commit"])
+        self.assertIn("type:issue", seen["issue"])
+        self.assertIn("type:pr", seen["pull-request"])
+
+    def test_issue_and_pr_parent_repo_node_is_resolved_once_from_repository_url(self):
+        data = fixture("entities.json")
+        lookups = []
+
+        def handler(_method, url, _kwargs):
+            path = urlsplit(url).path
+            q = parse_qs(urlsplit(url).query).get("q", [""])[0]
+            if path == "/search/repositories":
+                return response(url, {"total_count": 0, "items": []})
+            if path == "/repos/acme/agent":
+                lookups.append(path)
+                return response(url, data["repository"])
+            item = data["pull-request"] if "type:pr" in q else data["issue"]
+            return response(url, {"total_count": 1, "items": [item]})
+
+        result = self.make_adapter(source(entities=["issue", "pull-request"]), handler).collect(
+            "community:github", {"mode": "shadow"},
+        )
+        self.assertEqual(lookups, ["/repos/acme/agent"])
+        self.assertEqual(
+            {item.provenance["parent_repository_id"] for item in result.candidates},
+            {"github:repository:R_repo"},
+        )
+
+    def test_invalid_candidate_url_is_schema_drift_not_no_results_or_missing_node(self):
+        bad = {**fixture("entities.json")["repository"], "html_url": "https://evil.example/repo"}
+        result = self.make_adapter(
+            source(), lambda _m, url, _k: response(url, {"total_count": 1, "items": [bad]}),
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.code, "github-item-schema-drift")
+        self.assertNotEqual(result.code, "github-node-id-missing")
+
+    def test_completed_endpoint_skips_on_resume_and_recent_ids_suppress_replay(self):
+        data = fixture("entities.json")
+
+        def first_handler(_method, url, _kwargs):
+            if urlsplit(url).path == "/search/repositories":
+                return response(url, {"total_count": 1, "items": [data["repository"]]})
+            raise AdapterError("temporary", status="timeout", retryable=True)
+
+        first = self.make_adapter(source(entities=["repository", "commit"]), first_handler).collect(
+            "community:github", {"mode": "shadow"},
+        )
+        previous = copy.deepcopy(first.checkpoint_updates[0].checkpoint)
+        previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
+        paths = []
+
+        def second_handler(_method, url, _kwargs):
+            path = urlsplit(url).path
+            paths.append(path)
+            self.assertEqual(path, "/search/commits")
+            return response(url, {"total_count": 1, "items": [data["commit"]]})
+
+        second = GitHubAdapter(
+            resolve_source=lambda _source_id: source(entities=["repository", "commit"]),
+            http_client=FakeClient(second_handler), clock=lambda: "2026-09-16T08:00:00Z",
+            credential_resolver=lambda _source_id: None,
+            checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(paths, ["/search/commits"])
+        self.assertEqual([item.source_type for item in second.candidates], ["commit"])
+        update = second.checkpoint_updates[0].checkpoint
+        self.assertEqual(update["cursor"], {})
+        self.assertEqual(update["successful_window_end"], NOW)
 
 
 if __name__ == "__main__":
