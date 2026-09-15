@@ -1356,6 +1356,44 @@ class GitHubAdapterTests(unittest.TestCase):
                 self.assertEqual(result.status, "partial")
         self.assertNotIn("POST", methods)
 
+    def test_exact_false_endpoint_requires_frozen_window_but_valid_window_resumes(self):
+        query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
+        base = {
+            "checkpoint_at": "2026-09-15T07:00:00Z", "etag": None, "last_modified": None,
+            "recent_native_ids": [], "successful_window_end": None,
+            "query_fingerprint": query_fingerprint("github", query),
+        }
+        missing_window = {**base, "cursor": {"endpoints": {"repository": {"complete": False}}}}
+        invalid = self.make_adapter(
+            source(queries=[query]), lambda *_args: self.fail("false endpoint needs frozen window before HTTP"),
+            checkpoint={"streams": {"query.agents": missing_window}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(invalid.status, "schema-drift")
+        self.assertEqual(invalid.message, "query.agents: schema-drift")
+        self.assertEqual(invalid.checkpoint_updates, ())
+
+        seen = []
+        frozen = {"start": "2026-09-14T08:00:00Z", "end": NOW}
+        valid_previous = {**base, "cursor": {
+            "window": frozen, "endpoints": {"repository": {"complete": False}},
+        }}
+
+        def handler(_method, url, _kwargs):
+            seen.append(parse_qs(urlsplit(url).query)["q"][0])
+            return response(url, {"total_count": 0, "items": []})
+
+        valid = GitHubAdapter(
+            resolve_source=lambda _source_id: source(queries=[query]),
+            http_client=FakeClient(handler), clock=lambda: "2026-09-16T08:00:00Z",
+            credential_resolver=lambda _source_id: None,
+            checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": valid_previous}},
+        ).collect("community:github", {"mode": "shadow"})
+        self.assertEqual(valid.status, "no-results")
+        self.assertIn(f"pushed:>={frozen['start']}", seen[0])
+        self.assertIn(f"pushed:<={frozen['end']}", seen[0])
+        self.assertNotIn("2026-09-16", seen[0])
+        self.assertEqual(valid.checkpoint_updates[0].checkpoint["successful_window_end"], NOW)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -346,7 +346,7 @@ class GitHubAdapter:
         for state in old_endpoints.values():
             if not isinstance(state, Mapping):
                 raise AdapterError("GitHub endpoint checkpoint is invalid", status="schema-drift")
-            if set(state) != {"complete"} or state.get("complete") is True:
+            if state.get("complete") is not True:
                 resume_required = True
         effective_request = self._effective_request(
             request, previous, previous_cursor, now, require_frozen=resume_required,
