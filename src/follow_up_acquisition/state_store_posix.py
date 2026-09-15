@@ -94,7 +94,7 @@ class PosixStateBackend:
             descriptors.append(parent_fd)
             parts = self.root.parts[1:]
             for index, part in enumerate(parts):
-                created_info: os.stat_result | None = None
+                created = False
                 try:
                     child_fd = os.open(part, flags, dir_fd=parent_fd)
                 except FileNotFoundError:
@@ -107,22 +107,23 @@ class PosixStateBackend:
                         raise PosixBackendError(
                             "state directory appeared concurrently during setup",
                         ) from exc
-                    self._hook("after_directory_created")
-                    self._accept_mkdir_parent_nlink_change(links)
-                    created_info = os.stat(part, dir_fd=parent_fd, follow_symlinks=False)
-                    child_fd = os.open(part, flags, dir_fd=parent_fd)
+                    try:
+                        child_fd = os.open(part, flags, dir_fd=parent_fd)
+                    except OSError as exc:
+                        raise PosixBackendError(
+                            "new state directory could not be pinned safely",
+                        ) from exc
+                    created = True
                 except OSError as exc:
                     raise PosixBackendError("state directory chain is unsafe") from exc
+                descriptors.append(child_fd)
                 info = os.fstat(child_fd)
                 if not stat.S_ISDIR(info.st_mode):
                     raise PosixBackendError("state directory chain contains a non-directory")
-                if created_info is not None and (
-                    not stat.S_ISDIR(created_info.st_mode)
-                    or self._identity(info) != self._identity(created_info)
-                    or stat.S_IMODE(info.st_mode) != stat.S_IMODE(created_info.st_mode)
-                    or info.st_nlink != created_info.st_nlink
-                ):
-                    raise PosixBackendError("created state directory identity changed")
+                if created:
+                    if stat.S_IMODE(info.st_mode) & 0o077:
+                        raise PosixBackendError("new state directory permissions exceed 0700")
+                    self._accept_mkdir_parent_nlink_change(links)
                 links.append(_PinnedDirectory(
                     parent_fd=parent_fd,
                     name=part,
@@ -132,7 +133,9 @@ class PosixStateBackend:
                     nlink=info.st_nlink,
                     require_private=index == len(parts) - 1,
                 ))
-                descriptors.append(child_fd)
+                if created:
+                    self._hook("after_directory_created")
+                    self._verify_chain(links)
                 parent_fd = child_fd
             root_fd = descriptors[-1]
             root_info = os.fstat(root_fd)

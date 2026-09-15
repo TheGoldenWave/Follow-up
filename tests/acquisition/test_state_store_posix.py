@@ -53,6 +53,42 @@ class PosixBackendTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "unsafe-state")
             self.assertFalse((root / "source.json").exists())
 
+    def test_setup_pins_new_root_before_remove_recreate_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir) / "parent"
+            parent.mkdir(mode=0o700)
+            root = parent / "state"
+            def recreate_root() -> None:
+                root.rmdir()
+                root.mkdir(mode=0o700)
+            backend = PosixStateBackend(root, hooks={"after_directory_created": recreate_root})
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "unsafe-state")
+            self.assertFalse((root / "source.json").exists())
+
+    def test_setup_pins_nested_new_directory_before_remove_recreate_hook(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            first = Path(temp_dir) / "first"
+            root = first / "second" / "state"
+            recreated = False
+            def recreate_first() -> None:
+                nonlocal recreated
+                if recreated:
+                    return
+                first.rmdir()
+                first.mkdir(mode=0o700)
+                recreated = True
+            backend = PosixStateBackend(root, hooks={"after_directory_created": recreate_first})
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "unsafe-state")
+            self.assertFalse((root / "source.json").exists())
+
     def test_setup_allows_legitimate_nested_directory_creation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "one" / "two" / "state"
