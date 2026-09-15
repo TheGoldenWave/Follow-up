@@ -31,7 +31,7 @@ class PosixBackendTests(unittest.TestCase):
         backend = PosixStateBackend("/tmp/example", system_name="Linux")
         self.assertEqual(backend.root, Path("/tmp/example"))
 
-    def test_fsyncs_parent_after_every_nested_directory_creation(self) -> None:
+    def test_fsyncs_immediate_parent_after_leaf_creation(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             calls = 0
             def record_parent_fsync() -> None:

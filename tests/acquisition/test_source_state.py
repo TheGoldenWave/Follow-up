@@ -26,6 +26,7 @@ from follow_up_acquisition.source_state import (
 
 
 NOW = "2026-09-15T08:00:00Z"
+FIXTURES = Path(__file__).parent / "fixtures" / "source-state"
 
 
 def checkpoint(
@@ -145,6 +146,15 @@ class QueryFingerprintTests(unittest.TestCase):
 
 
 class ValidateStateTests(unittest.TestCase):
+    def test_canonical_valid_fixture_round_trips_and_validates(self) -> None:
+        raw = (FIXTURES / "valid.json").read_bytes()
+        value = json.loads(raw.decode("utf-8"))
+        self.assertIs(validate_state(value), value)
+        canonical = json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+        self.assertEqual(raw.rstrip(b"\n"), canonical)
+
     def test_accepts_exact_closed_shape_and_optional_fingerprint(self) -> None:
         value = state(streams={"query.builders": checkpoint(fingerprint="a" * 64)})
         self.assertIs(validate_state(value), value)
