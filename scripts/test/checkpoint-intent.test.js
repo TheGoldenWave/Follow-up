@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 import { loadCheckpointIntent, validateCheckpointIntent } from '../lib/checkpoint-intent.js';
 
@@ -62,7 +63,15 @@ test('loadCheckpointIntent only opens a bounded regular file', async (t) => {
   t.after(() => rm(dir, { recursive: true, force: true }));
   const path = join(dir, 'checkpoint-intent.json');
   await writeFile(path, JSON.stringify(intent()));
-  assert.equal((await loadCheckpointIntent({ path, batches, runId: 'run-1' })).run_id, 'run-1');
+  const loaded = await loadCheckpointIntent({ path, batches, runId: 'run-1' });
+  assert.equal(loaded.intent.run_id, 'run-1');
+  assert.equal(loaded.bytes.toString(), JSON.stringify(intent()));
+  assert.equal(loaded.sha256, createHash('sha256').update(loaded.bytes).digest('hex'));
+  assert.equal(Object.isFrozen(loaded.intent), true);
+  assert.equal(Object.isFrozen(loaded.intent.sources[0]), true);
+  const exposed = loaded.bytes;
+  exposed[0] = 0;
+  assert.equal(loaded.bytes.toString(), JSON.stringify(intent()));
   const link = join(dir, 'link.json');
   const { symlink } = await import('node:fs/promises');
   await symlink(path, link);

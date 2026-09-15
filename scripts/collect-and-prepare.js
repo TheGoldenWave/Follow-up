@@ -55,24 +55,37 @@ export async function collectAndPrepare({
   const runId = `${now.replace(/[:.]/g, '-')}-${randomUUID().slice(0, 8)}`;
   const outputDir = join(acquisitionDir, 'staging', runId);
   const checkpointOut = join(outputDir, 'checkpoint-intent.json');
+  let cleanupIdentity;
+  let invocationCompleted = false;
   try {
-    await invokeRun({ outputDir, checkpointOut, runId, env: { ...process.env, HOME: join(userDir, '..') } });
-    const batches = await loadBatches({ outputDir });
-    const intent = await loadIntent({ path: checkpointOut, batches, runId });
+    const invocation = await invokeRun({ outputDir, checkpointOut, runId, env: { ...process.env, HOME: join(userDir, '..') } });
+    invocationCompleted = true;
+    const expectedDirectoryIdentity = invocation?.stagingIdentity;
+    cleanupIdentity = expectedDirectoryIdentity;
+    const batches = await loadBatches({ outputDir, expectedDirectoryIdentity });
+    const loadedIntent = await loadIntent({ path: checkpointOut, batches, runId, expectedDirectoryIdentity });
+    if (!loadedIntent?.intent || !Buffer.isBuffer(loadedIntent?.bytes)
+        || !/^[0-9a-f]{64}$/.test(loadedIntent.sha256 ?? '')) {
+      throw new Error('validated checkpoint intent envelope is required');
+    }
+    const checkpointIntent = loadedIntent;
     if (validateBatches) await validateBatches(batches);
     if (Object.entries(batches).some(([id, batch]) => scanBuffer(id, Buffer.from(JSON.stringify(batch))).length)
-        || scanBuffer('checkpoint-intent.json', Buffer.from(JSON.stringify(intent))).length) {
+        || scanBuffer('checkpoint-intent.json', checkpointIntent.bytes).length) {
       if (onUnsafeBatches) await onUnsafeBatches(batches);
       throw new Error('unsafe acquisition output');
     }
 
-    await publishRun(batches, { runsDir, runId, randomUUID });
+    const published = await publishRun(batches, { runsDir, runId, randomUUID, checkpointIntent });
     await publishPointers(batches, { runsDir, latestDir, runId, randomUUID });
     let checkpoint;
     try {
       checkpoint = await commitCheckpoints({
-        intentPath: checkpointOut,
+        intentPath: published?.publishedIntentPath ?? join(runsDir, runId, 'checkpoint-intent.json'),
         stateRoot: join(acquisitionDir, 'source-state'),
+        expectedSha256: published?.intentSha256 ?? checkpointIntent.sha256,
+        expectedRunId: runId,
+        expectedSources: checkpointIntent.intent.sources.map(source => source.source_id),
         env: { ...process.env, HOME: join(userDir, '..') },
       });
     } catch {
@@ -86,7 +99,17 @@ export async function collectAndPrepare({
       checkpointReport: checkpoint.report,
       ...(prepare ? { prepared: await prepare({ mode, batches, runId, checkpointStatus: checkpoint.checkpointStatus }) } : {}) };
   } finally {
-    await rm(outputDir, { recursive: true, force: true });
+    if (cleanupIdentity) {
+      try {
+        const info = await lstat(outputDir);
+        if (info.isDirectory() && !info.isSymbolicLink()
+            && info.dev === cleanupIdentity.dev && info.ino === cleanupIdentity.ino) {
+          await rm(outputDir, { recursive: true, force: true });
+        }
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    } else if (invocationCompleted) {
+      await rm(outputDir, { recursive: true, force: true });
+    }
   }
 }
 

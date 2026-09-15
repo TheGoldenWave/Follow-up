@@ -1,9 +1,15 @@
-import { isAbsolute, join } from 'node:path';
-import { constants } from 'node:fs';
+import { dirname, isAbsolute, join } from 'node:path';
+import { constants, readFileSync } from 'node:fs';
 import { spawn as systemSpawn } from 'node:child_process';
 import * as systemFs from 'node:fs/promises';
 import { resolveBootstrapPath } from '../bootstrap-acquisition.js';
 import { redactDiagnostics } from './diagnostics.js';
+import Ajv2020 from 'ajv/dist/2020.js';
+
+const reportSchema = JSON.parse(readFileSync(
+  new URL('../../contracts/checkpoint-commit-report.schema.json', import.meta.url), 'utf8',
+));
+const validateReportSchema = new Ajv2020({ allErrors: true, strict: false }).compile(reportSchema);
 
 const MAX_PROCESS_OUTPUT = 16 * 1024;
 const MAX_BATCH_BYTES = 10 * 1024 * 1024;
@@ -26,6 +32,49 @@ function safeOutput(value) {
   return redactDiagnostics(bounded);
 }
 
+async function preparePrivateOutput(outputDir, fsImpl) {
+  const parent = dirname(outputDir);
+  await fsImpl.mkdir(parent, { recursive: true, mode: 0o700 });
+  const parentInfo = await fsImpl.lstat(parent);
+  if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink()) throw new Error('acquisition staging parent is unsafe');
+  await fsImpl.chmod(parent, 0o700);
+  await fsImpl.mkdir(outputDir, { mode: 0o700 });
+  const pathInfo = await fsImpl.lstat(outputDir);
+  if (!pathInfo.isDirectory() || pathInfo.isSymbolicLink() || (pathInfo.mode & 0o777) !== 0o700) {
+    throw new Error('acquisition output directory is unsafe');
+  }
+  const realPath = await fsImpl.realpath(outputDir);
+  const handle = await fsImpl.open(outputDir, 'r');
+  const opened = await handle.stat();
+  if (!opened.isDirectory() || opened.dev !== pathInfo.dev || opened.ino !== pathInfo.ino) {
+    await handle.close();
+    throw new Error('acquisition output directory identity mismatch');
+  }
+  return { handle, opened, realPath };
+}
+
+async function verifyPrivateOutput(outputDir, identity, fsImpl) {
+  const opened = await identity.handle.stat();
+  const pathInfo = await fsImpl.lstat(outputDir);
+  const realPath = await fsImpl.realpath(outputDir);
+  if (!opened.isDirectory() || !pathInfo.isDirectory() || pathInfo.isSymbolicLink()
+      || opened.dev !== identity.opened.dev || opened.ino !== identity.opened.ino
+      || pathInfo.dev !== identity.opened.dev || pathInfo.ino !== identity.opened.ino
+      || realPath !== identity.realPath || (pathInfo.mode & 0o777) !== 0o700) {
+    throw new Error('acquisition output directory changed during collection');
+  }
+}
+
+async function verifyDirectoryIdentity(outputDir, expected, fsImpl) {
+  if (!expected) return;
+  const info = await fsImpl.lstat(outputDir);
+  const realPath = await fsImpl.realpath(outputDir);
+  if (!info.isDirectory() || info.isSymbolicLink() || info.dev !== expected.dev
+      || info.ino !== expected.ino || realPath !== expected.realPath || (info.mode & 0o777) !== 0o700) {
+    throw new Error('acquisition staging directory identity mismatch');
+  }
+}
+
 /**
  * Invoke the Python Acquisition Runtime `run` command, which collects every
  * enabled rss/web-publication source and writes one Signal Batch per source into
@@ -40,8 +89,11 @@ export async function invokeAcquisitionRun({
   cwd,
   env = process.env,
   spawnImpl = systemSpawn,
+  fsImpl = systemFs,
+  manageOutput = true,
 } = {}) {
   pythonPath = await resolveInterpreter({ pythonPath, env });
+  const outputIdentity = manageOutput ? await preparePrivateOutput(outputDir, fsImpl) : null;
   const runtimeEnv = { ...env };
   delete runtimeEnv.PYTHONPATH;
   delete runtimeEnv.PYTHONHOME;
@@ -56,12 +108,26 @@ export async function invokeAcquisitionRun({
     let stderr = '';
     child.stdout?.on('data', (chunk) => { if (stdout.length < MAX_PROCESS_OUTPUT) stdout += chunk; });
     child.stderr?.on('data', (chunk) => { if (stderr.length < MAX_PROCESS_OUTPUT) stderr += chunk; });
-    child.on('error', reject);
-    child.on('close', (code) => {
+    child.on('error', async error => {
+      if (outputIdentity) await outputIdentity.handle.close().catch(() => {});
+      reject(error);
+    });
+    child.on('close', async (code) => {
       stdout = safeOutput(stdout);
       stderr = safeOutput(stderr);
-      if (code === 0) resolve({ code, stdout, stderr });
-      else reject(new Error(`acquisition run failed (${code}): ${stderr.trim()}`));
+      try {
+        if (outputIdentity) await verifyPrivateOutput(outputDir, outputIdentity, fsImpl);
+        if (code === 0) resolve({ code, stdout, stderr,
+          stagingIdentity: outputIdentity ? {
+            dev: outputIdentity.opened.dev, ino: outputIdentity.opened.ino,
+            realPath: outputIdentity.realPath,
+          } : null });
+        else reject(new Error(`acquisition run failed (${code}): ${stderr.trim()}`));
+      } catch {
+        reject(new Error('acquisition output directory could not be verified'));
+      } finally {
+        if (outputIdentity) await outputIdentity.handle.close().catch(() => {});
+      }
     });
   });
 }
@@ -73,10 +139,12 @@ export async function loadCollectedBatches({
   outputDir,
   fsImpl = systemFs,
   platformName = process.platform,
+  expectedDirectoryIdentity,
 } = {}) {
   if (platformName === 'win32' || !constants.O_NOFOLLOW) {
     throw new Error('local acquisition is unsupported without POSIX nofollow file access');
   }
+  await verifyDirectoryIdentity(outputDir, expectedDirectoryIdentity, fsImpl);
   const entries = await fsImpl.readdir(outputDir, { withFileTypes: true });
   const batches = {};
   for (const entry of entries) {
@@ -122,12 +190,15 @@ export async function loadCollectedBatches({
     if (Object.hasOwn(batches, batch.source)) throw new Error(`duplicate collected batch source: ${batch.source}`);
     batches[batch.source] = batch;
   }
+  await verifyDirectoryIdentity(outputDir, expectedDirectoryIdentity, fsImpl);
   return batches;
 }
 
 /** Invoke the one-shot post-publication CAS command. Exit 3 is an operational partial result. */
 export async function invokeCheckpointCommit({
-  intentPath, stateRoot, pythonPath, cwd, env = process.env, spawnImpl = systemSpawn,
+  intentPath, stateRoot, expectedSha256, expectedRunId,
+  expectedSources = [],
+  pythonPath, cwd, env = process.env, spawnImpl = systemSpawn,
 } = {}) {
   pythonPath = await resolveInterpreter({ pythonPath, env });
   const runtimeEnv = { ...env };
@@ -143,6 +214,7 @@ export async function invokeCheckpointCommit({
       child = spawnImpl(pythonPath, [
         '-I', '-m', 'follow_up_acquisition', 'commit-state',
         '--intent', intentPath, '--state-root', stateRoot,
+        '--expected-sha256', expectedSha256, '--expected-run-id', expectedRunId,
       ], { cwd, env: runtimeEnv, stdio: ['ignore', 'pipe', 'pipe'] });
     } catch {
       finish({ code: null, checkpointStatus: 'partial', report: { status: 'partial' } });
@@ -159,7 +231,16 @@ export async function invokeCheckpointCommit({
       let report;
       try { report = JSON.parse(stdout); } catch { report = null; }
       const expectedStatuses = code === 0 ? new Set(['committed']) : code === 3 ? new Set(['partial', 'uncertain']) : new Set();
-      if (report && typeof report === 'object' && expectedStatuses.has(report.status)) {
+      const ids = report?.sources?.map(source => source.source_id) ?? [];
+      const sortedExpected = [...expectedSources].sort((a, b) => Buffer.from(a).compare(Buffer.from(b)));
+      const aggregate = report?.sources?.some(source => source.status === 'uncertain') ? 'uncertain'
+        : report?.sources?.every(source => source.status === 'committed') ? 'committed' : 'partial';
+      if (report && validateReportSchema(report) && report.run_id === expectedRunId
+          && report.source_count === report.sources.length
+          && JSON.stringify(ids) === JSON.stringify(sortedExpected)
+          && new Set(ids).size === ids.length
+          && report.status === aggregate
+          && expectedStatuses.has(report.status)) {
         finish({ code, checkpointStatus: report.status, report });
       } else {
         finish({ code, checkpointStatus: 'partial', report: { status: 'partial' } });

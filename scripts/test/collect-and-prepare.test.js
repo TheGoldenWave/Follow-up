@@ -8,8 +8,17 @@ import { promisify } from 'node:util';
 import { mkdtemp, mkdir, writeFile, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { recordRun, saveMigrationState, loadMigrationState } from '../lib/migration-state.js';
+import { loadCollectedBatches } from '../lib/run-acquisition.js';
+import { loadCheckpointIntent } from '../lib/checkpoint-intent.js';
+import { publishBatchRun, publishLatestPointers } from '../lib/publish-batches.js';
+
+function intentEnvelope(intent) {
+  const bytes = Buffer.from(JSON.stringify(intent));
+  return { intent, bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
 
 async function writeEmptyIntent(checkpointOut, runId, batches) {
   await writeFile(checkpointOut, JSON.stringify({
@@ -108,7 +117,7 @@ test('local mode invokes acquisition and publishes atomically', async () => {
     userDir: '/tmp/follow-builders',
     invokeRun: async ({ outputDir, checkpointOut, runId }) => { calls.push(['run', outputDir, checkpointOut, runId]); },
     loadBatches: async ({ outputDir }) => ({ 'blog:test': batch('blog:test') }),
-    loadIntent: async () => ({ run_id: 'run', sources: [] }),
+    loadIntent: async () => intentEnvelope({ run_id: 'run', sources: [] }),
     publishRun: async (batches, opts) => { calls.push(['publish-run', opts.runsDir, opts.runId]); },
     publishPointers: async (batches, opts) => { calls.push(['publish-pointers', opts.latestDir, opts.runId]); },
     commitCheckpoints: async () => { calls.push(['commit']); return { checkpointStatus: 'committed' }; },
@@ -134,7 +143,7 @@ test('checkpoint commit happens only after run and every pointer publish', async
     config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
     invokeRun: async () => calls.push('run'),
     loadBatches: async () => { calls.push('load-batches'); return { 'blog:test': batch('blog:test') }; },
-    loadIntent: async () => { calls.push('load-intent'); return { sources: [] }; },
+    loadIntent: async () => { calls.push('load-intent'); return intentEnvelope({ sources: [] }); },
     publishRun: async () => calls.push('publish-run'),
     publishPointers: async () => calls.push('publish-pointers'),
     commitCheckpoints: async () => { calls.push('commit'); return { checkpointStatus: 'committed' }; },
@@ -166,7 +175,7 @@ test('run durability uncertainty cannot publish pointers or commit checkpoints',
   await assert.rejects(() => collectAndPrepare({
     config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
     invokeRun: async () => {}, loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
-    loadIntent: async () => ({ sources: [] }),
+    loadIntent: async () => intentEnvelope({ sources: [] }),
     publishRun: async () => { const error = new Error('uncertain'); error.code = 'run-durability-uncertain'; throw error; },
     publishPointers: async () => { pointers += 1; }, commitCheckpoints: async () => { commits += 1; },
   }), error => error.code === 'run-durability-uncertain');
@@ -198,12 +207,82 @@ test('real intent validation rejects noncanonical updates before publish', async
   assert.equal(published, false);
 });
 
+test('staging intent mutation after validation cannot change the published commit input', async (t) => {
+  const home = await mkdtemp(join(tmpdir(), 'immutable-intent-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const userDir = join(home, '.follow-builders');
+  const value = batch('blog:test');
+  let stagingIntent;
+  let committedPath;
+  const result = await collectAndPrepare({
+    config: { acquisition: { mode: 'local' } }, userDir,
+    invokeRun: async ({ outputDir, checkpointOut, runId }) => {
+      await mkdir(outputDir, { recursive: true, mode: 0o700 });
+      await writeFile(join(outputDir, 'blog:test.json'), JSON.stringify(value));
+      await writeEmptyIntent(checkpointOut, runId, { 'blog:test': value });
+      stagingIntent = checkpointOut;
+    },
+    publishPointers: async () => {
+      await writeFile(stagingIntent, JSON.stringify({ schema_version: '1.0', run_id: 'attacker', sources: [] }));
+    },
+    commitCheckpoints: async ({ intentPath, expectedSha256, expectedRunId }) => {
+      committedPath = intentPath;
+      const published = await readFile(intentPath);
+      assert.equal(JSON.parse(published).run_id, expectedRunId);
+      const { createHash } = await import('node:crypto');
+      assert.equal(createHash('sha256').update(published).digest('hex'), expectedSha256);
+      return { checkpointStatus: 'committed', report: {} };
+    },
+  });
+  assert.match(committedPath, /\/runs\/.*\/checkpoint-intent\.json$/);
+  assert.equal(result.checkpointStatus, 'committed');
+});
+
+test('python staging to immutable Node run to Python CAS uses the published intent', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'checkpoint-subprocess-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const repo = fileURLToPath(new URL('../..', import.meta.url));
+  const python = join(repo, '.venv', 'bin', 'python');
+  const acquisition = join(root, 'acquisition');
+  const outputDir = join(acquisition, 'staging', 'python-run');
+  await mkdir(outputDir, { recursive: true, mode: 0o700 });
+  await (await import('node:fs/promises')).chmod(acquisition, 0o700);
+  await (await import('node:fs/promises')).chmod(join(acquisition, 'staging'), 0o700);
+  await (await import('node:fs/promises')).chmod(outputDir, 0o700);
+  const runId = 'python-node-cas';
+  const value = batch('blog:test');
+  const checkpoint = { successful_window_end: '2026-09-15T08:00:00Z', cursor: null,
+    etag: null, last_modified: null, recent_native_ids: ['native-1'], checkpoint_at: '2026-09-15T08:00:00Z' };
+  const intentValue = { schema_version: '1.0', run_id: runId, generated_at: '2026-09-15T08:00:00Z',
+    sources: [{ source_id: 'blog:test', batch_id: 'b1', active_stream_ids: ['rss'],
+      updates: [{ stream_id: 'rss', previous_checkpoint_at: null, checkpoint }] }] };
+  const stageData = JSON.stringify({ outputDir, batch: value, intent: intentValue });
+  const stageCode = `import json,sys\nfrom pathlib import Path\nsys.path.insert(0, ${JSON.stringify(join(repo, 'src'))})\nfrom follow_up_acquisition.cli import _write_json_atomic\nd=json.loads(${JSON.stringify(stageData)})\np=Path(d['outputDir'])\n_write_json_atomic(p/'blog:test.json', d['batch'])\n_write_json_atomic(p/'checkpoint-intent.json', d['intent'])`;
+  await promisify(execFile)(python, ['-I', '-c', stageCode], { cwd: repo });
+  const batches = await loadCollectedBatches({ outputDir });
+  const loaded = await loadCheckpointIntent({ path: join(outputDir, 'checkpoint-intent.json'), batches, runId });
+  const runsDir = join(acquisition, 'runs');
+  const published = await publishBatchRun(batches, { runsDir, runId, checkpointIntent: loaded });
+  await publishLatestPointers(batches, { runsDir, latestDir: join(acquisition, 'latest'), runId });
+  await writeFile(join(outputDir, 'checkpoint-intent.json'), JSON.stringify({ run_id: 'mutated' }));
+  const commitArgs = ['commit-state', '--intent', published.publishedIntentPath,
+    '--state-root', join(acquisition, 'source-state'), '--expected-sha256', loaded.sha256,
+    '--expected-run-id', runId];
+  const commitCode = `import sys\nsys.path.insert(0, ${JSON.stringify(join(repo, 'src'))})\nfrom follow_up_acquisition.cli import main\nraise SystemExit(main(${JSON.stringify(commitArgs)}))`;
+  const { stdout } = await promisify(execFile)(python, ['-I', '-c', commitCode], { cwd: repo });
+  const report = JSON.parse(stdout);
+  assert.equal(report.status, 'committed');
+  assert.equal(report.run_id, runId);
+  const state = JSON.parse(await readFile(join(acquisition, 'source-state', 'blog:test.json'), 'utf8'));
+  assert.equal(state.streams.rss.recent_native_ids[0], 'native-1');
+});
+
 test('checkpoint conflict preserves published run and continues preparation', async () => {
   let prepared = false;
   const result = await collectAndPrepare({
     config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
     invokeRun: async () => {}, loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
-    loadIntent: async () => ({ sources: [] }), publishRun: async () => {}, publishPointers: async () => {},
+    loadIntent: async () => intentEnvelope({ sources: [] }), publishRun: async () => {}, publishPointers: async () => {},
     commitCheckpoints: async () => ({ checkpointStatus: 'partial', code: 3 }),
     prepare: async () => { prepared = true; return { status: 'request-ready' }; },
   });
@@ -216,7 +295,7 @@ test('unexpected checkpoint failure becomes partial and preparation continues', 
   const result = await collectAndPrepare({
     config: { acquisition: { mode: 'local' } }, userDir: '/tmp/follow-builders',
     invokeRun: async () => {}, loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
-    loadIntent: async () => ({ sources: [] }), publishRun: async () => {}, publishPointers: async () => {},
+    loadIntent: async () => intentEnvelope({ sources: [] }), publishRun: async () => {}, publishPointers: async () => {},
     commitCheckpoints: async () => { throw new Error('/secret/path'); },
     prepare: async ({ checkpointStatus }) => { preparedStatus = checkpointStatus; return { status: 'request-ready' }; },
   });
@@ -265,7 +344,7 @@ test('semantic validation failure cannot publish a latest pointer', async () => 
   await assert.rejects(collectAndPrepare({
     config: { acquisition: { mode: 'local' } },
     invokeRun: async () => {}, loadBatches: async () => ({ 'blog:a': batch('blog:a') }),
-    loadIntent: async () => ({ sources: [] }),
+    loadIntent: async () => intentEnvelope({ sources: [] }),
     validateBatches: () => { throw new Error('item source mismatch'); },
     publishRun: async () => { published = true; },
     publishPointers: async () => { published = true; },

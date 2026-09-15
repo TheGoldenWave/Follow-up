@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import {
-  publishBatchRun,
+  publishBatchRun as publishBatchRunRaw,
   publishLatestPointers,
   validateSignalBatch,
 } from '../lib/publish-batches.js';
@@ -27,6 +27,19 @@ function validBatch(overrides = {}) {
   };
 }
 
+function checkpointIntent(runId = 'r1', batches = { 'blog:test': validBatch() }) {
+  const intent = { schema_version: '1.0', run_id: runId, generated_at: '2026-09-15T08:00:00Z',
+    sources: Object.values(batches).map(value => ({ source_id: value.source, batch_id: value.batch_id,
+      active_stream_ids: [], updates: [] })) };
+  const bytes = Buffer.from(JSON.stringify(intent));
+  return { intent, bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+
+const publishBatchRun = (batches, options) => publishBatchRunRaw(batches, {
+  ...options,
+  checkpointIntent: options.checkpointIntent ?? checkpointIntent(options.runId, batches),
+});
+
 test('validateSignalBatch accepts a valid batch', () => {
   const result = validateSignalBatch(validBatch());
   assert.equal(result.valid, true);
@@ -43,9 +56,9 @@ test('validateSignalBatch rejects a batch missing required fields', () => {
 test('publishBatchRun atomically publishes a private manifest-valid whole run', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'follow-up-runs-'));
   try {
-    await publishBatchRun({ 'blog:test': validBatch() }, { runsDir: dir, runId: 'r1' });
+    await publishBatchRun({ 'blog:test': validBatch() }, { runsDir: dir, runId: 'r1', checkpointIntent: checkpointIntent() });
     const files = await readdir(join(dir, 'r1'));
-    assert.deepEqual(files.sort(), ['blog:test.json', 'run.json']);
+    assert.deepEqual(files.sort(), ['blog:test.json', 'checkpoint-intent.json', 'run.json']);
     assert.ok(files.every((name) => !name.includes('.tmp-')));
     const written = JSON.parse(await readFile(join(dir, 'r1', 'blog:test.json'), 'utf8'));
     assert.equal(written.source, 'blog:test');
@@ -53,6 +66,8 @@ test('publishBatchRun atomically publishes a private manifest-valid whole run', 
     const manifest = JSON.parse(await readFile(join(dir, 'r1', 'run.json'), 'utf8'));
     assert.equal(manifest.run_id, 'r1');
     assert.equal(manifest.sources['blog:test'].batch_id, 'b1');
+    assert.equal(manifest.checkpoint_intent.sha256, checkpointIntent().sha256);
+    assert.equal((await readFile(join(dir, 'r1', 'checkpoint-intent.json'))).toString(), checkpointIntent().bytes.toString());
     const digest = createHash('sha256').update(await readFile(join(dir, 'r1', 'blog:test.json'))).digest('hex');
     assert.equal(manifest.sources['blog:test'].sha256, digest);
   } finally {
@@ -72,7 +87,7 @@ test('publishBatchRun cleans unpredictable staging when final rename fails', asy
   t.after(() => rm(dir, { recursive: true, force: true }));
   const fsImpl = { ...realFs, rename: async () => { throw new Error('rename fault'); } };
   await assert.rejects(() => publishBatchRun({ 'blog:test': validBatch() }, { runsDir: join(dir, 'runs'), runId: 'r1', fsImpl }), /rename fault/);
-  assert.equal((await readdir(dir)).some(name => name.startsWith('.runs-staging-')), false);
+  assert.equal((await readdir(join(dir, 'runs'))).some(name => name.startsWith('.run-staging-')), false);
   await assert.rejects(() => readFile(join(dir, 'runs', 'r1', 'run.json')), { code: 'ENOENT' });
 });
 
@@ -93,8 +108,9 @@ function injectedWriteFs(stage, runsDir) {
     const handle = await realFs.open(path, flags, mode);
     const name = String(path);
     const isManifest = name.endsWith('/run.json');
-    const isBatch = name.endsWith('.json') && !isManifest;
-    const isStagingDir = name.includes('/.runs-staging-') && flags === 'r';
+    const isIntent = name.endsWith('/checkpoint-intent.json');
+    const isBatch = name.endsWith('.json') && !isManifest && !isIntent;
+    const isStagingDir = name.includes('/.run-staging-') && flags === 'r';
     const isRunsDir = name === runsDir && flags === 'r';
     return {
       writeFile: async payload => {
@@ -105,11 +121,13 @@ function injectedWriteFs(stage, runsDir) {
         }
         if (stage === 'mid-run-write' && isBatch && batchWrites === 2) throw new Error('injected mid run');
         if (stage === 'manifest-write' && isManifest) throw new Error('injected manifest write');
+        if (stage === 'intent-write' && isIntent) throw new Error('injected intent write');
         return handle.writeFile(payload);
       },
       sync: async () => {
         if (stage === 'batch-fsync' && isBatch) throw new Error('injected batch fsync');
         if (stage === 'manifest-fsync' && isManifest) throw new Error('injected manifest fsync');
+        if (stage === 'intent-fsync' && isIntent) throw new Error('injected intent fsync');
         if (stage === 'staging-dir-fsync' && isStagingDir) throw new Error('injected staging fsync');
         if (stage === 'runs-dir-fsync' && isRunsDir) throw new Error('injected runs fsync');
         return handle.sync();
@@ -120,7 +138,8 @@ function injectedWriteFs(stage, runsDir) {
 }
 
 test('publishBatchRun fault matrix never exposes pre-rename partial runs', async (t) => {
-  for (const stage of ['batch-write', 'batch-fsync', 'mid-run-write', 'manifest-write', 'manifest-fsync', 'staging-dir-fsync']) {
+  for (const stage of ['batch-write', 'batch-fsync', 'mid-run-write', 'intent-write', 'intent-fsync',
+    'manifest-write', 'manifest-fsync', 'staging-dir-fsync']) {
     const dir = await mkdtemp(join(tmpdir(), `publish-${stage}-`));
     t.after(() => rm(dir, { recursive: true, force: true }));
     const runsDir = join(dir, 'runs');
@@ -132,7 +151,7 @@ test('publishBatchRun fault matrix never exposes pre-rename partial runs', async
       runsDir, runId: 'r1', fsImpl: injectedWriteFs(stage, runsDir),
     }));
     await assert.rejects(() => readFile(join(runsDir, 'r1', 'run.json')), { code: 'ENOENT' });
-    assert.equal((await readdir(dir)).some(name => name.startsWith('.runs-staging-')), false);
+    assert.equal((await readdir(runsDir)).some(name => name.startsWith('.run-staging-')), false);
   }
 });
 
@@ -156,6 +175,18 @@ test('publishLatestPointers rejects a tampered published batch hash', async (t) 
   await assert.rejects(() => publishLatestPointers(batches, {
     runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1',
   }), /hash mismatch/);
+});
+
+test('publishLatestPointers rejects a tampered published checkpoint intent', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'follow-up-intent-tamper-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const batches = { 'blog:test': validBatch() };
+  await publishBatchRun(batches, { runsDir: join(dir, 'runs'), runId: 'r1' });
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(join(dir, 'runs', 'r1', 'checkpoint-intent.json'), '{}');
+  await assert.rejects(() => publishLatestPointers(batches, {
+    runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1',
+  }), /intent hash mismatch/);
 });
 
 test('publishBatchRun rejects an invalid batch before writing', async () => {

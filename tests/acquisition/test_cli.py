@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -48,6 +49,14 @@ def _intent() -> dict:
             }],
         }],
     }
+
+
+def _commit_args(intent_path: Path, state_root: Path, *, digest: str | None = None, run_id: str | None = None) -> list[str]:
+    payload = intent_path.resolve().read_bytes()
+    value = json.loads(payload)
+    return ["commit-state", "--intent", str(intent_path), "--state-root", str(state_root),
+        "--expected-sha256", digest or hashlib.sha256(payload).hexdigest(),
+        "--expected-run-id", run_id or value["run_id"]]
 
 
 class CliTests(unittest.TestCase):
@@ -126,6 +135,7 @@ class CliTests(unittest.TestCase):
             }
             registry.write_text(json.dumps({"schema_version": "1.0", "sources": [source]}))
             output = root / "staging"
+            output.mkdir(mode=0o700)
             checkpoint_out = output / "checkpoint-intent.json"
             code = main([
                 "run", "--registry", str(registry), "--run-id", "run-empty",
@@ -144,7 +154,7 @@ class CliTests(unittest.TestCase):
     def test_run_writes_batches_and_checkpoint_intent_without_committing_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "staging"
-            output.mkdir()
+            output.mkdir(mode=0o700)
             checkpoint_out = output / "checkpoint-intent.json"
             run = CollectionRun(
                 {"newsletter:test": {"source": "newsletter:test", "batch_id": "batch-1", "source_status": {"status": "ok"}}},
@@ -167,7 +177,7 @@ class CliTests(unittest.TestCase):
     def test_run_sorts_checkpoint_updates_canonically(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "staging"
-            output.mkdir()
+            output.mkdir(mode=0o700)
             checkpoint_out = output / "checkpoint-intent.json"
             run = CollectionRun(
                 {"community:test": {"source": "community:test", "batch_id": "batch-1", "source_status": {"status": "ok"}}},
@@ -229,7 +239,7 @@ class CliTests(unittest.TestCase):
     def test_run_rejects_checkpoint_intent_larger_than_one_mib(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "staging"
-            output.mkdir()
+            output.mkdir(mode=0o700)
             checkpoint_out = output / "checkpoint-intent.json"
             large = FrozenMapping({**dict(_checkpoint()), "cursor": "x" * 220_000})
             batches = {}
@@ -261,17 +271,14 @@ class CliTests(unittest.TestCase):
                 def __init__(self, root):
                     self.root = root
 
-                def commit(self, source, updates, *, active_stream_ids, now):
+                def commit(self, source, updates, *, active_stream_ids, now=None):
                     calls.append((source, updates, tuple(active_stream_ids), now))
                     return {"source_id": source}
 
             stdout = io.StringIO()
             with patch("follow_up_acquisition.source_state.SourceStateStore", Store), \
                  contextlib.redirect_stdout(stdout):
-                code = main([
-                    "commit-state", "--intent", str(intent_path),
-                    "--state-root", str(parent / "source-state"),
-                ])
+                code = main(_commit_args(intent_path, parent / "source-state"))
             self.assertEqual(code, 0)
             self.assertEqual(len(calls), 1)
             self.assertEqual(calls[0][0], "newsletter:test")
@@ -287,12 +294,9 @@ class CliTests(unittest.TestCase):
             parent.mkdir(mode=0o700)
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                code = main([
-                    "commit-state", "--intent", str(link),
-                    "--state-root", str(parent / "source-state"),
-                ])
+                code = main(_commit_args(link, parent / "source-state"))
             self.assertEqual(code, 1)
-            self.assertEqual(json.loads(stdout.getvalue())["status"], "invalid-intent")
+            self.assertEqual(json.loads(stdout.getvalue())["status"], "partial")
 
     def test_commit_state_rejects_secret_bearing_intent_metadata(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -304,9 +308,9 @@ class CliTests(unittest.TestCase):
             parent.mkdir(mode=0o700)
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
-                code = main(["commit-state", "--intent", str(intent_path), "--state-root", str(parent / "source-state")])
+                code = main(_commit_args(intent_path, parent / "source-state"))
             self.assertEqual(code, 1)
-            self.assertEqual(json.loads(stdout.getvalue())["status"], "invalid-intent")
+            self.assertEqual(json.loads(stdout.getvalue())["status"], "partial")
 
     def test_commit_state_reports_conflict_without_retry(self):
         from follow_up_acquisition.source_state import StateConflictError
@@ -325,7 +329,7 @@ class CliTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch("follow_up_acquisition.source_state.SourceStateStore", Store), contextlib.redirect_stdout(stdout):
-                code = main(["commit-state", "--intent", str(intent_path), "--state-root", str(parent / "source-state")])
+                code = main(_commit_args(intent_path, parent / "source-state"))
             self.assertEqual(code, 3)
             self.assertEqual(len(attempts), 1)
             self.assertEqual(json.loads(stdout.getvalue())["sources"][0]["status"], "conflict")
@@ -350,12 +354,12 @@ class CliTests(unittest.TestCase):
 
             stdout = io.StringIO()
             with patch("follow_up_acquisition.source_state.SourceStateStore", Store), contextlib.redirect_stdout(stdout):
-                code = main(["commit-state", "--intent", str(intent_path), "--state-root", str(parent / "source-state")])
+                code = main(_commit_args(intent_path, parent / "source-state"))
             self.assertEqual(code, 3)
             self.assertEqual(calls, {"commit": 1, "load": 1})
             report = json.loads(stdout.getvalue())
             self.assertEqual(report["status"], "uncertain")
-            self.assertEqual(report["sources"][0]["status"], "durability-confirmed")
+            self.assertEqual(report["sources"][0]["status"], "uncertain")
 
     def test_commit_state_reports_store_setup_failure_as_safe_json(self):
         from follow_up_acquisition.source_state import SourceStateError
@@ -367,9 +371,30 @@ class CliTests(unittest.TestCase):
             stdout = io.StringIO()
             with patch("follow_up_acquisition.source_state.SourceStateStore", side_effect=SourceStateError("/secret/path")), \
                  contextlib.redirect_stdout(stdout):
-                code = main(["commit-state", "--intent", str(intent_path), "--state-root", str(parent / "source-state")])
+                code = main(_commit_args(intent_path, parent / "source-state"))
             self.assertEqual(code, 1)
-            self.assertEqual(json.loads(stdout.getvalue()), {"status": "state-unavailable", "committed": 0, "failed": 1})
+            report = json.loads(stdout.getvalue())
+            self.assertEqual(report["status"], "partial")
+            self.assertEqual(report["sources"][0]["status"], "error")
+
+    def test_commit_state_rejects_digest_or_run_mismatch_before_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parent = Path(tmp) / "acquisition"
+            parent.mkdir(mode=0o700)
+            intent_path = Path(tmp) / "intent.json"
+            intent_path.write_text(json.dumps(_intent()))
+            for args in (
+                _commit_args(intent_path, parent / "source-state", digest="0" * 64),
+                _commit_args(intent_path, parent / "source-state", run_id="wrong-run"),
+            ):
+                stdout = io.StringIO()
+                with patch("follow_up_acquisition.source_state.SourceStateStore") as store, contextlib.redirect_stdout(stdout):
+                    code = main(args)
+                self.assertEqual(code, 1)
+                store.assert_not_called()
+                report = json.loads(stdout.getvalue())
+                self.assertEqual(set(report), {"schema_version", "run_id", "status", "source_count", "sources"})
+                self.assertEqual(report["status"], "partial")
 
     def test_no_command_prints_help_to_stderr_and_exits_two(self):
         stderr = io.StringIO()

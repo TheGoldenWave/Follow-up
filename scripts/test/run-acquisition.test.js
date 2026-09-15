@@ -24,6 +24,7 @@ function fakeChild(code) {
 test('invokeAcquisitionRun resolves on exit 0 and captures stdout', async () => {
   const args = [];
   const result = await invokeAcquisitionRun({
+    manageOutput: false,
     outputDir: '/tmp/acq',
     checkpointOut: '/tmp/acq/checkpoint-intent.json',
     runId: 'run-1',
@@ -41,14 +42,14 @@ test('invokeAcquisitionRun resolves on exit 0 and captures stdout', async () => 
 
 test('invokeAcquisitionRun rejects on a non-zero exit', async () => {
   await assert.rejects(
-    () => invokeAcquisitionRun({ outputDir: '/tmp/acq', pythonPath: 'python3.12', spawnImpl: () => fakeChild(1) }),
+    () => invokeAcquisitionRun({ outputDir: '/tmp/acq', pythonPath: 'python3.12', manageOutput: false, spawnImpl: () => fakeChild(1) }),
     /acquisition run failed \(1\)/,
   );
 });
 
 test('invokeAcquisitionRun bounds and redacts unsafe stderr', async () => {
   await assert.rejects(
-    () => invokeAcquisitionRun({ outputDir: '/tmp/acq', pythonPath: 'python3.12',
+    () => invokeAcquisitionRun({ outputDir: '/tmp/acq', pythonPath: 'python3.12', manageOutput: false,
       spawnImpl: () => {
         const child = fakeChild(1);
         const original = child.stderr.on;
@@ -68,7 +69,7 @@ test('collection uses the bootstrapped interpreter and never installs', async ()
       schemaVersion: '1.0', interpreter: '/isolated/bin/python', packageVersion: '0.3.0',
     }));
     const calls = [];
-    await invokeAcquisitionRun({ outputDir: '/tmp/acq', env: { HOME: home, PYTHONPATH: '/untrusted', PYTHONHOME: '/broken' },
+    await invokeAcquisitionRun({ outputDir: '/tmp/acq', manageOutput: false, env: { HOME: home, PYTHONPATH: '/untrusted', PYTHONHOME: '/broken' },
       spawnImpl: (cmd, args, options) => { calls.push([cmd, args, options]); return fakeChild(0); },
     });
     assert.equal(calls.length, 1);
@@ -81,9 +82,43 @@ test('collection uses the bootstrapped interpreter and never installs', async ()
 });
 
 test('unbootstrapped collection fails with setup guidance before spawning', async () => {
-  await assert.rejects(invokeAcquisitionRun({ outputDir: '/tmp/acq', env: { HOME: '/missing-runtime' },
+  await assert.rejects(invokeAcquisitionRun({ outputDir: '/tmp/acq', manageOutput: false, env: { HOME: '/missing-runtime' },
     spawnImpl: () => { assert.fail('must not spawn'); },
   }), /bootstrap-acquisition/);
+});
+
+test('invokeAcquisitionRun exclusively creates and verifies a private output directory', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'node-owned-staging-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const outputDir = join(root, 'staging', 'run-1');
+  await invokeAcquisitionRun({ outputDir, checkpointOut: join(outputDir, 'checkpoint-intent.json'),
+    runId: 'run-1', pythonPath: '/python', spawnImpl: () => fakeChild(0) });
+  assert.equal((await (await import('node:fs/promises')).stat(outputDir)).mode & 0o777, 0o700);
+  await assert.rejects(() => invokeAcquisitionRun({ outputDir, runId: 'run-1', pythonPath: '/python',
+    spawnImpl: () => fakeChild(0) }), /exist|staging|output/i);
+});
+
+test('invokeAcquisitionRun rejects a symlinked staging parent and output replacement', async (t) => {
+  const fs = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'node-staging-safety-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'outside'));
+  await fs.symlink(join(root, 'outside'), join(root, 'staging'));
+  await assert.rejects(() => invokeAcquisitionRun({ outputDir: join(root, 'staging', 'run'),
+    runId: 'run', pythonPath: '/python', spawnImpl: () => fakeChild(0) }), /unsafe/);
+
+  await fs.unlink(join(root, 'staging'));
+  const outputDir = join(root, 'staging', 'replace');
+  await assert.rejects(() => invokeAcquisitionRun({ outputDir, runId: 'replace', pythonPath: '/python', spawnImpl: () => {
+    const listeners = {};
+    const child = { stdout: { on() {} }, stderr: { on() {} }, on: (event, callback) => { listeners[event] = callback; } };
+    queueMicrotask(async () => {
+      await fs.rename(outputDir, `${outputDir}.old`);
+      await fs.mkdir(outputDir, { mode: 0o700 });
+      listeners.close(0);
+    });
+    return child;
+  } }), /could not be verified/);
 });
 
 test('loadCollectedBatches ignores intent and rejects duplicate batch sources', async () => {
@@ -169,16 +204,17 @@ test('loadCollectedBatches rejects a symlink swap at the nofollow open boundary'
   assert.equal(opens, 1);
 });
 
-test('invokeCheckpointCommit uses isolated interpreter and never retries', async () => {
+test('invokeCheckpointCommit binds the published intent digest and run ID', async () => {
   const calls = [];
   const result = await invokeCheckpointCommit({
     intentPath: '/tmp/staging/checkpoint-intent.json', stateRoot: '/tmp/acquisition/source-state',
+    expectedSha256: 'a'.repeat(64), expectedRunId: 'run-1',
     pythonPath: '/isolated/bin/python',
     spawnImpl: (cmd, args) => { calls.push([cmd, args]); return fakeChild(3); },
   });
   assert.equal(result.checkpointStatus, 'partial');
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][1], ['-I', '-m', 'follow_up_acquisition', 'commit-state', '--intent', '/tmp/staging/checkpoint-intent.json', '--state-root', '/tmp/acquisition/source-state']);
+  assert.deepEqual(calls[0][1], ['-I', '-m', 'follow_up_acquisition', 'commit-state', '--intent', '/tmp/staging/checkpoint-intent.json', '--state-root', '/tmp/acquisition/source-state', '--expected-sha256', 'a'.repeat(64), '--expected-run-id', 'run-1']);
 });
 
 test('invokeCheckpointCommit converts exit one, spawn error, and malformed output to partial once', async () => {
@@ -204,17 +240,38 @@ test('invokeCheckpointCommit converts exit one, spawn error, and malformed outpu
 });
 
 test('invokeCheckpointCommit preserves a validated durability uncertainty result', async () => {
-  const result = await invokeCheckpointCommit({ intentPath: '/i', stateRoot: '/s', pythonPath: '/p', spawnImpl: () => {
+  const result = await invokeCheckpointCommit({ intentPath: '/i', stateRoot: '/s', expectedSha256: 'a'.repeat(64),
+    expectedRunId: 'run-1', expectedSources: ['blog:test'], pythonPath: '/p', spawnImpl: () => {
     const listeners = {};
     const child = {
       stdout: { on: (event, callback) => { listeners[`out:${event}`] = callback; } },
       stderr: { on() {} }, on: (event, callback) => { listeners[event] = callback; },
     };
     queueMicrotask(() => {
-      listeners['out:data'](JSON.stringify({ status: 'uncertain', committed: 0, failed: 1, sources: [] }));
+      listeners['out:data'](JSON.stringify({ schema_version: '1.0', run_id: 'run-1', status: 'uncertain',
+        source_count: 1, sources: [{ source_id: 'blog:test', status: 'uncertain' }] }));
       listeners.close(3);
     });
     return child;
   } });
   assert.equal(result.checkpointStatus, 'uncertain');
+});
+
+test('invokeCheckpointCommit rejects a structurally valid report with the wrong run or source set', async () => {
+  for (const report of [
+    { schema_version: '1.0', run_id: 'other', status: 'committed', source_count: 1,
+      sources: [{ source_id: 'blog:test', status: 'committed' }] },
+    { schema_version: '1.0', run_id: 'run-1', status: 'committed', source_count: 1,
+      sources: [{ source_id: 'blog:other', status: 'committed' }] },
+  ]) {
+    const result = await invokeCheckpointCommit({ intentPath: '/i', stateRoot: '/s', expectedSha256: 'a'.repeat(64),
+      expectedRunId: 'run-1', expectedSources: ['blog:test'], pythonPath: '/p', spawnImpl: () => {
+        const listeners = {};
+        const child = { stdout: { on: (event, callback) => { listeners[`out:${event}`] = callback; } },
+          stderr: { on() {} }, on: (event, callback) => { listeners[event] = callback; } };
+        queueMicrotask(() => { listeners['out:data'](JSON.stringify(report)); listeners.close(0); });
+        return child;
+      } });
+    assert.equal(result.checkpointStatus, 'partial');
+  }
 });

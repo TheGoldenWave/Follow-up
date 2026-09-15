@@ -1,5 +1,7 @@
 import { readFileSync, constants } from 'node:fs';
 import * as systemFs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { dirname } from 'node:path';
 
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
@@ -21,6 +23,14 @@ function hasCredentialKey(value) {
     return Object.entries(value).some(([key, child]) => CREDENTIAL_KEY.test(key) || hasCredentialKey(child));
   }
   return false;
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
 }
 
 export function validateCheckpointIntent(intent, { batches, runId } = {}) {
@@ -75,7 +85,19 @@ export function validateCheckpointIntent(intent, { batches, runId } = {}) {
   return { valid: errors.length === 0, errors };
 }
 
-export async function loadCheckpointIntent({ path, batches, runId, fsImpl = systemFs } = {}) {
+async function verifyDirectory(path, expected, fsImpl) {
+  if (!expected) return;
+  const directory = dirname(path);
+  const info = await fsImpl.lstat(directory);
+  const realPath = await fsImpl.realpath(directory);
+  if (!info.isDirectory() || info.isSymbolicLink() || info.dev !== expected.dev
+      || info.ino !== expected.ino || realPath !== expected.realPath || (info.mode & 0o777) !== 0o700) {
+    throw new Error('checkpoint staging directory identity mismatch');
+  }
+}
+
+export async function loadCheckpointIntent({ path, batches, runId, expectedDirectoryIdentity, fsImpl = systemFs } = {}) {
+  await verifyDirectory(path, expectedDirectoryIdentity, fsImpl);
   const info = await fsImpl.lstat(path);
   if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_INTENT_BYTES) {
     throw new Error('checkpoint intent is not a bounded regular file');
@@ -84,9 +106,17 @@ export async function loadCheckpointIntent({ path, batches, runId, fsImpl = syst
   let payload;
   try {
     const opened = await handle.stat();
-    if (!opened.isFile() || opened.size > MAX_INTENT_BYTES) throw new Error('checkpoint intent is unsafe');
+    if (!opened.isFile() || opened.nlink !== 1 || opened.size > MAX_INTENT_BYTES) throw new Error('checkpoint intent is unsafe');
     const buffer = Buffer.alloc(MAX_INTENT_BYTES + 1);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    let bytesRead = 0;
+    while (bytesRead < buffer.length) {
+      const chunk = await handle.read(buffer, bytesRead, Math.min(64 * 1024, buffer.length - bytesRead), bytesRead);
+      if (!chunk.bytesRead) break;
+      bytesRead += chunk.bytesRead;
+    }
+    const after = await handle.stat();
+    if (after.dev !== opened.dev || after.ino !== opened.ino || after.nlink !== 1
+        || after.size !== opened.size || bytesRead !== opened.size) throw new Error('checkpoint intent changed while reading');
     if (bytesRead > MAX_INTENT_BYTES) throw new Error('checkpoint intent exceeds 1 MiB');
     payload = buffer.subarray(0, bytesRead);
   } finally {
@@ -97,5 +127,15 @@ export async function loadCheckpointIntent({ path, batches, runId, fsImpl = syst
   catch { throw new Error('checkpoint intent is invalid JSON'); }
   const result = validateCheckpointIntent(intent, { batches, runId });
   if (!result.valid) throw new Error(`checkpoint intent is invalid: ${result.errors.join('; ')}`);
-  return intent;
+  await verifyDirectory(path, expectedDirectoryIdentity, fsImpl);
+  const exactBytes = Buffer.from(payload);
+  const envelope = {
+    intent: deepFreeze(intent),
+    sha256: createHash('sha256').update(exactBytes).digest('hex'),
+  };
+  Object.defineProperty(envelope, 'bytes', {
+    enumerable: true,
+    get: () => Buffer.from(exactBytes),
+  });
+  return Object.freeze(envelope);
 }

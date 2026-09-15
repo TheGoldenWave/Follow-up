@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -82,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     commit = sub.add_parser("commit-state", help="commit a previously published checkpoint intent")
     commit.add_argument("--intent", required=True, help="absolute checkpoint intent path")
     commit.add_argument("--state-root", required=True, help="absolute source-state leaf path")
+    commit.add_argument("--expected-sha256", required=True, help="published intent SHA-256")
+    commit.add_argument("--expected-run-id", required=True, help="published run ID")
 
     return parser
 
@@ -255,6 +258,10 @@ def _validate_intent(value: object) -> dict:
         raise ValueError("unsupported intent schema")
     if not isinstance(intent["run_id"], str) or _RUN_ID_RE.fullmatch(intent["run_id"]) is None:
         raise ValueError("unsafe run_id")
+    if not isinstance(intent["generated_at"], str) or re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", intent["generated_at"],
+    ) is None:
+        raise ValueError("generated_at must use exact UTC seconds")
     _validate_timestamp(intent["generated_at"], "generated_at")
     if not isinstance(intent["sources"], list):
         raise ValueError("sources must be an array")
@@ -302,25 +309,38 @@ def _validate_intent(value: object) -> dict:
     return intent
 
 
-def _read_intent(path: Path) -> dict:
+def _read_intent(path: Path) -> tuple[dict, bytes, str]:
     if not path.is_absolute() or path.is_symlink():
         raise ValueError("intent path must be absolute and not a symlink")
-    info = path.stat()
-    if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_CHECKPOINT_INTENT_BYTES:
-        raise ValueError("intent must be a bounded regular file")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
-        opened = os.fstat(descriptor)
-        if not stat.S_ISREG(opened.st_mode) or opened.st_size > MAX_CHECKPOINT_INTENT_BYTES:
+        before = os.fstat(descriptor)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_size > MAX_CHECKPOINT_INTENT_BYTES):
             raise ValueError("intent must be a bounded regular file")
-        payload = os.read(descriptor, MAX_CHECKPOINT_INTENT_BYTES + 1)
+        chunks = []
+        size = 0
+        while size <= MAX_CHECKPOINT_INTENT_BYTES:
+            chunk = os.read(descriptor, min(64 * 1024, MAX_CHECKPOINT_INTENT_BYTES + 1 - size))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            size += len(chunk)
+        after = os.fstat(descriptor)
+        if ((after.st_dev, after.st_ino, after.st_nlink, after.st_size)
+                != (before.st_dev, before.st_ino, before.st_nlink, before.st_size)
+                or size != before.st_size):
+            raise ValueError("intent changed while being read")
+        payload = b"".join(chunks)
     finally:
         os.close(descriptor)
     if len(payload) > MAX_CHECKPOINT_INTENT_BYTES:
         raise ValueError("intent exceeds size limit")
+    digest = hashlib.sha256(payload).hexdigest()
     try:
-        return _validate_intent(json.loads(payload.decode("utf-8")))
+        intent = _validate_intent(json.loads(payload.decode("utf-8")))
+        return intent, payload, digest
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ValueError("intent is not valid JSON") from exc
 
@@ -371,8 +391,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 1
     if not batches:
         if handshake:
-            output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
-            if output_dir.is_symlink():
+            try:
+                output_info = output_dir.lstat()
+            except OSError:
+                print("run: private output directory must be precreated by the publisher")
+                return 1
+            if (output_dir.is_symlink() or not stat.S_ISDIR(output_info.st_mode)
+                    or stat.S_IMODE(output_info.st_mode) != 0o700):
                 print("run: unsafe output directory")
                 return 1
             try:
@@ -384,7 +409,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     output_dir = Path(args.output) if args.output else _default_output_dir()
-    output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if handshake:
+        try:
+            output_info = output_dir.lstat()
+        except OSError:
+            print("run: private output directory must be precreated by the publisher")
+            return 1
+        if (output_dir.is_symlink() or not stat.S_ISDIR(output_info.st_mode)
+                or stat.S_IMODE(output_info.st_mode) != 0o700):
+            print("run: unsafe output directory")
+            return 1
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     if output_dir.is_symlink():
         print("run: unsafe output directory")
         return 1
@@ -409,6 +445,15 @@ def _cmd_run(args: argparse.Namespace) -> int:
 def _cmd_commit_state(args: argparse.Namespace) -> int:
     from .source_state import SourceStateError, SourceStateStore, StateConflictError
 
+    expected_run_id = args.expected_run_id
+    report_run_id = expected_run_id if _RUN_ID_RE.fullmatch(expected_run_id or "") else "invalid-run"
+
+    def emit(status: str, sources: list[dict[str, str]]) -> None:
+        print(json.dumps({
+            "schema_version": "1.0", "run_id": report_run_id, "status": status,
+            "source_count": len(sources), "sources": sources,
+        }, sort_keys=True))
+
     try:
         intent_path = Path(args.intent)
         state_root = Path(args.state_root)
@@ -417,15 +462,24 @@ def _cmd_commit_state(args: argparse.Namespace) -> int:
         parent = state_root.parent
         if not parent.is_dir() or parent.is_symlink() or stat.S_IMODE(parent.stat().st_mode) != 0o700:
             raise ValueError("state root parent setup required")
-        intent = _read_intent(intent_path)
+        intent, _payload, digest = _read_intent(intent_path)
+        if not re.fullmatch(r"[0-9a-f]{64}", args.expected_sha256 or ""):
+            raise ValueError("invalid expected digest")
+        if report_run_id != expected_run_id:
+            raise ValueError("invalid expected run ID")
+        if digest != args.expected_sha256 or intent["run_id"] != expected_run_id:
+            raise ValueError("published intent binding mismatch")
     except (ValueError, OSError):
-        print(json.dumps({"status": "invalid-intent", "committed": 0, "failed": 0}))
+        emit("partial", [])
         return 1
 
     try:
         store = SourceStateStore(state_root)
     except SourceStateError:
-        print(json.dumps({"status": "state-unavailable", "committed": 0, "failed": 1}))
+        emit("partial", [
+            {"source_id": source["source_id"], "status": "error"}
+            for source in intent["sources"]
+        ])
         return 1
     results = []
     failed = 0
@@ -434,7 +488,7 @@ def _cmd_commit_state(args: argparse.Namespace) -> int:
         try:
             store.commit(
                 source["source_id"], source["updates"],
-                active_stream_ids=source["active_stream_ids"], now=intent["generated_at"],
+                active_stream_ids=source["active_stream_ids"],
             )
             results.append({"source_id": source["source_id"], "status": "committed"})
         except StateConflictError:
@@ -442,7 +496,7 @@ def _cmd_commit_state(args: argparse.Namespace) -> int:
             results.append({"source_id": source["source_id"], "status": "conflict"})
         except SourceStateError as exc:
             failed += 1
-            status_value = "failed"
+            status_value = "error"
             if exc.code == "state-durability-uncertain":
                 durability_uncertain = True
                 try:
@@ -451,17 +505,12 @@ def _cmd_commit_state(args: argparse.Namespace) -> int:
                         persisted["streams"].get(update["stream_id"]) == update["checkpoint"]
                         for update in source["updates"]
                     )
-                    status_value = "durability-confirmed" if confirmed else "durability-uncertain"
+                    status_value = "uncertain"
                 except SourceStateError:
-                    status_value = "durability-uncertain"
+                    status_value = "uncertain"
             results.append({"source_id": source["source_id"], "status": status_value})
     status_value = "committed" if not failed else "uncertain" if durability_uncertain else "partial"
-    print(json.dumps({
-        "status": status_value,
-        "committed": len(results) - failed,
-        "failed": failed,
-        "sources": results,
-    }, sort_keys=True))
+    emit(status_value, results)
     return 0 if not failed else 3
 
 

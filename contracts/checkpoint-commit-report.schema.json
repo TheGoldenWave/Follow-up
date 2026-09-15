@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/checkpoint-commit-report.schema.json",
+  "title": "Follow-up Checkpoint Commit Report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "status", "source_count", "sources"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "run_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+    "status": { "enum": ["committed", "partial", "uncertain"] },
+    "source_count": { "type": "integer", "minimum": 0 },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_id", "status"],
+        "properties": {
+          "source_id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$" },
+          "status": { "enum": ["committed", "conflict", "uncertain", "error"] }
+        }
+      }
+    }
+  }
+}

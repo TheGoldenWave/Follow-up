@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { constants, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createHash, randomUUID as systemRandomUUID } from 'node:crypto';
 import * as systemFs from 'node:fs/promises';
@@ -8,9 +8,13 @@ import addFormats from 'ajv-formats';
 
 import { writeJsonAtomic } from '../prepare-digest.js';
 import { scanBuffer } from '../release/scan-secrets.js';
+import { validateCheckpointIntent } from './checkpoint-intent.js';
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/;
 const SAFE_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const MAX_MANIFEST_BYTES = 1024 * 1024;
+const MAX_INTENT_BYTES = 1024 * 1024;
+const MAX_BATCH_BYTES = 10 * 1024 * 1024;
 
 const schema = JSON.parse(readFileSync(
   new URL('../../contracts/signal-batch.schema.json', import.meta.url),
@@ -62,6 +66,27 @@ async function fsyncDirectory(path, fsImpl) {
   try { await handle.sync(); } finally { await handle.close(); }
 }
 
+async function readBoundedRegular(path, limit, fsImpl) {
+  const handle = await fsImpl.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const before = await handle.stat();
+    if (!before.isFile() || before.nlink !== 1 || before.size > limit) throw new Error('published run file is unsafe');
+    const buffer = Buffer.alloc(limit + 1);
+    let total = 0;
+    while (total < buffer.length) {
+      const chunk = await handle.read(buffer, total, Math.min(64 * 1024, buffer.length - total), total);
+      if (!chunk.bytesRead) break;
+      total += chunk.bytesRead;
+    }
+    const after = await handle.stat();
+    if (after.dev !== before.dev || after.ino !== before.ino || after.nlink !== 1
+        || after.size !== before.size || total !== before.size || total > limit) {
+      throw new Error('published run file changed while reading');
+    }
+    return buffer.subarray(0, total);
+  } finally { await handle.close(); }
+}
+
 /**
  * Atomically publish one run of Signal Batches under `runs/<run_id>/<source>.json`.
  * A crash or invalid batch leaves no partial run file behind.
@@ -69,6 +94,7 @@ async function fsyncDirectory(path, fsImpl) {
 export async function publishBatchRun(batches, {
   runsDir,
   runId,
+  checkpointIntent,
   fsImpl = systemFs,
   randomUUID = systemRandomUUID,
 } = {}) {
@@ -82,8 +108,22 @@ export async function publishBatchRun(batches, {
     assertValidBatch(sourceId, batch);
     encoded.set(sourceId, encode(batch));
   }
+  let serializedIntent;
+  try { serializedIntent = JSON.parse(checkpointIntent?.bytes?.toString('utf8')); } catch { serializedIntent = null; }
+  const intentValidation = validateCheckpointIntent(serializedIntent, { batches, runId });
+  if (!checkpointIntent || !Buffer.isBuffer(checkpointIntent.bytes)
+      || checkpointIntent.intent?.run_id !== runId
+      || JSON.stringify(serializedIntent) !== JSON.stringify(checkpointIntent.intent)
+      || hash(checkpointIntent.bytes) !== checkpointIntent.sha256
+      || !intentValidation.valid) {
+    throw new Error('validated checkpoint intent is required');
+  }
+  const intentSources = checkpointIntent.intent.sources?.map(source => source.source_id) ?? [];
+  if (JSON.stringify(intentSources) !== JSON.stringify(entries.map(([sourceId]) => sourceId))) {
+    throw new Error('checkpoint intent source set does not match batches');
+  }
   const parent = dirname(runsDir);
-  const staging = join(parent, `.runs-staging-${randomUUID()}`);
+  const staging = join(runsDir, `.run-staging-${randomUUID()}`);
   const destination = join(runsDir, runId);
   await fsImpl.mkdir(parent, { recursive: true, mode: 0o700 });
   await fsImpl.mkdir(runsDir, { recursive: true, mode: 0o700 });
@@ -106,8 +146,11 @@ export async function publishBatchRun(batches, {
         batch_id: batch.batch_id,
       };
     }
+    await durableWrite(join(staging, 'checkpoint-intent.json'), checkpointIntent.bytes, fsImpl);
     await durableWrite(join(staging, 'run.json'), encode({
-      schema_version: '1.0', run_id: runId, sources,
+      schema_version: '1.0', run_id: runId,
+      checkpoint_intent: { file: 'checkpoint-intent.json', sha256: checkpointIntent.sha256 },
+      sources,
     }), fsImpl);
     await fsyncDirectory(staging, fsImpl);
     await fsImpl.rename(staging, destination);
@@ -122,16 +165,30 @@ export async function publishBatchRun(batches, {
     }
     throw error;
   }
-  return destination;
+  return {
+    runDir: destination,
+    publishedIntentPath: join(destination, 'checkpoint-intent.json'),
+    intentSha256: checkpointIntent.sha256,
+  };
 }
 
 async function validatePublishedRun(batches, { runsDir, runId, fsImpl }) {
+  if (!SAFE_RUN_ID.test(runId) || Object.keys(batches).some(sourceId => !SAFE_ID.test(sourceId))) {
+    throw new Error('published run identifiers are unsafe');
+  }
   const directory = join(runsDir, runId);
-  const manifest = JSON.parse(await fsImpl.readFile(join(directory, 'run.json'), 'utf8'));
+  const manifest = JSON.parse((await readBoundedRegular(join(directory, 'run.json'), MAX_MANIFEST_BYTES, fsImpl)).toString('utf8'));
   if (manifest.schema_version !== '1.0' || manifest.run_id !== runId
-      || JSON.stringify(Object.keys(manifest).sort()) !== JSON.stringify(['run_id', 'schema_version', 'sources'])) {
+      || JSON.stringify(Object.keys(manifest).sort()) !== JSON.stringify(['checkpoint_intent', 'run_id', 'schema_version', 'sources'])) {
     throw new Error('published run manifest is invalid');
   }
+  if (manifest.checkpoint_intent?.file !== 'checkpoint-intent.json'
+      || !/^[0-9a-f]{64}$/.test(manifest.checkpoint_intent?.sha256 ?? '')
+      || JSON.stringify(Object.keys(manifest.checkpoint_intent).sort()) !== JSON.stringify(['file', 'sha256'])) {
+    throw new Error('published checkpoint intent manifest entry is invalid');
+  }
+  const intentPayload = await readBoundedRegular(join(directory, 'checkpoint-intent.json'), MAX_INTENT_BYTES, fsImpl);
+  if (hash(intentPayload) !== manifest.checkpoint_intent.sha256) throw new Error('published checkpoint intent hash mismatch');
   const expected = Object.keys(batches).sort();
   if (JSON.stringify(Object.keys(manifest.sources).sort()) !== JSON.stringify(expected)) {
     throw new Error('published run manifest source set is invalid');
@@ -143,7 +200,7 @@ async function validatePublishedRun(batches, { runsDir, runId, fsImpl }) {
       || JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify(['batch_id', 'filename', 'sha256', 'status'])) {
       throw new Error('published run manifest entry is invalid');
     }
-    const payload = await fsImpl.readFile(join(directory, entry.filename));
+    const payload = await readBoundedRegular(join(directory, entry.filename), MAX_BATCH_BYTES, fsImpl);
     if (hash(payload) !== entry.sha256) throw new Error('published run hash mismatch');
   }
 }
