@@ -1,0 +1,61 @@
+{
+  "repository": {
+    "node_id": "R_repo",
+    "full_name": "acme/agent",
+    "html_url": "https://github.com/acme/agent",
+    "name": "agent",
+    "description": "Agent framework",
+    "owner": {"login": "acme"},
+    "updated_at": "2026-09-15T07:00:00Z",
+    "stargazers_count": 120,
+    "forks_count": 12,
+    "watchers_count": 40
+  },
+  "release": {
+    "node_id": "RE_release",
+    "html_url": "https://github.com/acme/agent/releases/tag/v1.0.0",
+    "name": "v1.0.0",
+    "body": "First stable release",
+    "author": {"login": "octocat"},
+    "published_at": "2026-09-15T06:00:00Z",
+    "created_at": "2026-09-15T05:00:00Z"
+  },
+  "commit": {
+    "sha": "ABCDEF1234",
+    "html_url": "https://github.com/acme/agent/commit/abcdef1234",
+    "repository": {"node_id": "R_repo", "full_name": "acme/agent"},
+    "commit": {
+      "message": "Improve agent loop",
+      "author": {"name": "Ada", "date": "2026-09-15T05:00:00Z"},
+      "committer": {"date": "2026-09-15T05:30:00Z"}
+    },
+    "author": {"login": "ada"}
+  },
+  "issue": {
+    "node_id": "I_issue",
+    "html_url": "https://github.com/acme/agent/issues/7",
+    "title": "Agent loops forever",
+    "body": "Reproduction",
+    "user": {"login": "grace"},
+    "created_at": "2026-09-15T04:00:00Z",
+    "updated_at": "2026-09-15T04:30:00Z",
+    "comments": 3,
+    "reactions": {"total_count": 4},
+    "state": "open",
+    "repository_url": "https://api.github.com/repos/acme/agent"
+  },
+  "pull-request": {
+    "node_id": "PR_pull",
+    "html_url": "https://github.com/acme/agent/pull/8",
+    "title": "Bound the agent loop",
+    "body": "Patch",
+    "user": {"login": "linus"},
+    "created_at": "2026-09-15T03:00:00Z",
+    "updated_at": "2026-09-15T03:30:00Z",
+    "comments": 2,
+    "reactions": {"total_count": 1},
+    "state": "closed",
+    "repository_url": "https://api.github.com/repos/acme/agent",
+    "pull_request": {"url": "https://api.github.com/repos/acme/agent/pulls/8"}
+  }
+}

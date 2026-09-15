@@ -1,0 +1,21 @@
+{
+  "data": {
+    "search": {
+      "pageInfo": {"hasNextPage": false, "endCursor": "cursor-1"},
+      "nodes": [
+        {
+          "id": "D_discussion",
+          "url": "https://github.com/acme/agent/discussions/9",
+          "title": "How should agents stop?",
+          "bodyText": "Termination strategies",
+          "createdAt": "2026-09-15T02:00:00Z",
+          "updatedAt": "2026-09-15T02:30:00Z",
+          "author": {"login": "margaret"},
+          "comments": {"totalCount": 5},
+          "reactions": {"totalCount": 6},
+          "repository": {"id": "R_repo", "nameWithOwner": "acme/agent"}
+        }
+      ]
+    }
+  }
+}
