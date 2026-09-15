@@ -143,6 +143,36 @@ test('invokeAcquisitionRun removes only owned staging on real spawn error and ch
   await assert.rejects(fs.stat(failedOutput), { code: 'ENOENT' });
 });
 
+test('invokeAcquisitionRun cleans owned staging when injected spawn throws synchronously', async (t) => {
+  const fs = await import('node:fs/promises');
+  const root = await mkdtemp(join(tmpdir(), 'sync-spawn-failure-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const outputDir = join(root, 'staging', 'owned');
+  await assert.rejects(() => invokeAcquisitionRun({ outputDir, runId: 'owned', pythonPath: '/python',
+    spawnImpl: () => { throw new Error('/secret/synchronous'); } }), error => {
+    assert.equal(error.message.includes('/secret'), false);
+    return true;
+  });
+  await assert.rejects(fs.stat(outputDir), { code: 'ENOENT' });
+});
+
+test('synchronous spawn throw preserves a replacement and displaced owned directory', async (t) => {
+  const fs = await import('node:fs/promises');
+  const syncFs = await import('node:fs');
+  const root = await mkdtemp(join(tmpdir(), 'sync-spawn-replacement-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const outputDir = join(root, 'staging', 'owned');
+  await assert.rejects(() => invokeAcquisitionRun({ outputDir, runId: 'owned', pythonPath: '/python',
+    spawnImpl: () => {
+      syncFs.renameSync(outputDir, `${outputDir}.displaced`);
+      syncFs.mkdirSync(outputDir, { mode: 0o700 });
+      syncFs.writeFileSync(join(outputDir, 'outside.txt'), 'preserve');
+      throw new Error('boom');
+    } }), /could not start/);
+  assert.equal(await fs.readFile(join(outputDir, 'outside.txt'), 'utf8'), 'preserve');
+  assert.equal((await fs.stat(`${outputDir}.displaced`)).isDirectory(), true);
+});
+
 test('loadCollectedBatches ignores intent and rejects duplicate batch sources', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'follow-up-acq-'));
   try {

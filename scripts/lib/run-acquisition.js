@@ -122,12 +122,18 @@ export async function invokeAcquisitionRun({
       await removeOwnedOutput(outputDir, outputIdentity, fsImpl);
       reject(error);
     };
-    const child = spawnImpl(
-      pythonPath,
-      ['-I', '-m', 'follow_up_acquisition', 'run', '--run-id', runId,
-        '--output', outputDir, '--checkpoint-out', checkpointOut],
-      { cwd, env: runtimeEnv, stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+    let child;
+    try {
+      child = spawnImpl(
+        pythonPath,
+        ['-I', '-m', 'follow_up_acquisition', 'run', '--run-id', runId,
+          '--output', outputDir, '--checkpoint-out', checkpointOut],
+        { cwd, env: runtimeEnv, stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+    } catch {
+      void fail(new Error('acquisition process could not start'));
+      return;
+    }
     let stdout = '';
     let stderr = '';
     child.stdout?.on('data', (chunk) => { if (stdout.length < MAX_PROCESS_OUTPUT) stdout += chunk; });
