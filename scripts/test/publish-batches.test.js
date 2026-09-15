@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import * as realFs from 'node:fs/promises';
 import { join } from 'node:path';
@@ -169,11 +169,11 @@ test('publishLatestPointers rejects a tampered published batch hash', async (t) 
   const dir = await mkdtemp(join(tmpdir(), 'follow-up-runs-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const batches = { 'blog:test': validBatch() };
-  await publishBatchRun(batches, { runsDir: join(dir, 'runs'), runId: 'r1' });
+  const published = await publishBatchRun(batches, { runsDir: join(dir, 'runs'), runId: 'r1' });
   const { writeFile } = await import('node:fs/promises');
   await writeFile(join(dir, 'runs', 'r1', 'blog:test.json'), '{}');
   await assert.rejects(() => publishLatestPointers(batches, {
-    runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1',
+    runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1', receipt: published.receipt,
   }), /hash mismatch/);
 });
 
@@ -181,11 +181,11 @@ test('publishLatestPointers rejects a tampered published checkpoint intent', asy
   const dir = await mkdtemp(join(tmpdir(), 'follow-up-intent-tamper-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   const batches = { 'blog:test': validBatch() };
-  await publishBatchRun(batches, { runsDir: join(dir, 'runs'), runId: 'r1' });
+  const published = await publishBatchRun(batches, { runsDir: join(dir, 'runs'), runId: 'r1' });
   const { writeFile } = await import('node:fs/promises');
   await writeFile(join(dir, 'runs', 'r1', 'checkpoint-intent.json'), '{}');
   await assert.rejects(() => publishLatestPointers(batches, {
-    runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1',
+    runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1', receipt: published.receipt,
   }), /intent hash mismatch/);
 });
 
@@ -221,19 +221,69 @@ test('publishBatchRun rejects a source/filename mismatch', async () => {
 test('publishLatestPointers writes a pointer per source', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'follow-up-latest-'));
   try {
-    await publishBatchRun(
+    const published = await publishBatchRun(
       { 'blog:test': validBatch() },
       { runsDir: join(dir, 'runs'), runId: 'r1' },
     );
     await publishLatestPointers(
       { 'blog:test': validBatch() },
-      { runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1' },
+      { runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1', receipt: published.receipt },
     );
     const pointer = JSON.parse(await readFile(join(dir, 'latest', 'blog:test.json'), 'utf8'));
     assert.equal(pointer.run_id, 'r1');
     assert.equal(pointer.batch_id, 'b1');
+    assert.equal(pointer.batch_sha256, published.receipt.sources['blog:test'].sha256);
+    assert.equal(pointer.run_manifest_sha256, published.receipt.runManifestSha256);
+    assert.equal(pointer.intent_sha256, published.receipt.intentSha256);
     assert.ok(pointer.path.includes('runs/r1/blog:test.json'));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('publication receipt is branded, deeply frozen, and binds exact manifest evidence', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'receipt-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const published = await publishBatchRun({ 'blog:test': validBatch() }, { runsDir: join(dir, 'runs'), runId: 'r1' });
+  assert.equal(Object.isFrozen(published.receipt), true);
+  assert.equal(Object.isFrozen(published.receipt.sources), true);
+  assert.match(published.receipt.runManifestSha256, /^[0-9a-f]{64}$/);
+  await assert.rejects(() => publishLatestPointers({ 'blog:test': validBatch() }, {
+    runsDir: join(dir, 'runs'), latestDir: join(dir, 'latest'), runId: 'r1', receipt: structuredClone(published.receipt),
+  }), /receipt/);
+});
+
+test('coordinated batch and manifest rewrite cannot defeat prepublication receipt', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'receipt-batch-rewrite-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runsDir = join(dir, 'runs');
+  const batches = { 'blog:test': validBatch() };
+  const published = await publishBatchRun(batches, { runsDir, runId: 'r1' });
+  const changed = Buffer.from(`${JSON.stringify(validBatch({ source_status: { status: 'partial', code: null, message: null, retryable: false } }))}\n`);
+  await writeFile(join(runsDir, 'r1', 'blog:test.json'), changed);
+  const manifestPath = join(runsDir, 'r1', 'run.json');
+  const manifest = JSON.parse(await readFile(manifestPath));
+  manifest.sources['blog:test'].sha256 = createHash('sha256').update(changed).digest('hex');
+  manifest.sources['blog:test'].status = 'partial';
+  await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+  await assert.rejects(() => publishLatestPointers(batches, {
+    runsDir, latestDir: join(dir, 'latest'), runId: 'r1', receipt: published.receipt,
+  }), /manifest|receipt/);
+});
+
+test('coordinated intent and manifest rewrite cannot defeat prepublication receipt', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'receipt-intent-rewrite-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const runsDir = join(dir, 'runs');
+  const batches = { 'blog:test': validBatch() };
+  const published = await publishBatchRun(batches, { runsDir, runId: 'r1' });
+  const changed = Buffer.from(JSON.stringify({ schema_version: '1.0', run_id: 'r1', generated_at: '2026-09-15T08:00:00Z', sources: [] }));
+  await writeFile(join(runsDir, 'r1', 'checkpoint-intent.json'), changed);
+  const manifestPath = join(runsDir, 'r1', 'run.json');
+  const manifest = JSON.parse(await readFile(manifestPath));
+  manifest.checkpoint_intent.sha256 = createHash('sha256').update(changed).digest('hex');
+  await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+  await assert.rejects(() => publishLatestPointers(batches, {
+    runsDir, latestDir: join(dir, 'latest'), runId: 'r1', receipt: published.receipt,
+  }), /manifest|intent|receipt/);
 });

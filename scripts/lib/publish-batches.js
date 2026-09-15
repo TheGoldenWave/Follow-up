@@ -15,6 +15,14 @@ const SAFE_RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_INTENT_BYTES = 1024 * 1024;
 const MAX_BATCH_BYTES = 10 * 1024 * 1024;
+const publicationReceipts = new WeakSet();
+
+function freezeReceipt(value) {
+  for (const child of Object.values(value)) {
+    if (child && typeof child === 'object') freezeReceipt(child);
+  }
+  return Object.freeze(value);
+}
 
 const schema = JSON.parse(readFileSync(
   new URL('../../contracts/signal-batch.schema.json', import.meta.url),
@@ -130,11 +138,12 @@ export async function publishBatchRun(batches, {
   const runsInfo = await fsImpl.lstat(runsDir);
   if (!runsInfo.isDirectory() || runsInfo.isSymbolicLink()) throw new Error('runs directory is unsafe or symlinked');
   let renamed = false;
+  const sources = {};
+  let manifestPayload;
   try {
     try { await fsImpl.lstat(destination); throw new Error('run collision: destination exists'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
     await fsImpl.mkdir(staging, { mode: 0o700 });
-    const sources = {};
     for (const [sourceId, batch] of entries) {
       const payload = encoded.get(sourceId);
       const filename = `${sourceId}.json`;
@@ -147,11 +156,12 @@ export async function publishBatchRun(batches, {
       };
     }
     await durableWrite(join(staging, 'checkpoint-intent.json'), checkpointIntent.bytes, fsImpl);
-    await durableWrite(join(staging, 'run.json'), encode({
+    manifestPayload = encode({
       schema_version: '1.0', run_id: runId,
       checkpoint_intent: { file: 'checkpoint-intent.json', sha256: checkpointIntent.sha256 },
       sources,
-    }), fsImpl);
+    });
+    await durableWrite(join(staging, 'run.json'), manifestPayload, fsImpl);
     await fsyncDirectory(staging, fsImpl);
     await fsImpl.rename(staging, destination);
     renamed = true;
@@ -165,19 +175,37 @@ export async function publishBatchRun(batches, {
     }
     throw error;
   }
+  const receipt = freezeReceipt({
+    runId,
+    intentSha256: checkpointIntent.sha256,
+    runManifestSha256: hash(manifestPayload),
+    sources: Object.fromEntries(Object.entries(sources).map(([sourceId, entry]) => [sourceId, {
+      sha256: entry.sha256, batchId: entry.batch_id, status: entry.status,
+    }])),
+  });
+  publicationReceipts.add(receipt);
   return {
     runDir: destination,
     publishedIntentPath: join(destination, 'checkpoint-intent.json'),
     intentSha256: checkpointIntent.sha256,
+    receipt,
   };
 }
 
-async function validatePublishedRun(batches, { runsDir, runId, fsImpl }) {
+async function validatePublishedRun(batches, { runsDir, runId, receipt, fsImpl }) {
   if (!SAFE_RUN_ID.test(runId) || Object.keys(batches).some(sourceId => !SAFE_ID.test(sourceId))) {
     throw new Error('published run identifiers are unsafe');
   }
+  const expectedSources = Object.keys(batches).sort();
+  if (!receipt || !publicationReceipts.has(receipt) || !Object.isFrozen(receipt)
+      || receipt.runId !== runId
+      || JSON.stringify(Object.keys(receipt.sources).sort()) !== JSON.stringify(expectedSources)) {
+    throw new Error('valid publication receipt is required');
+  }
   const directory = join(runsDir, runId);
-  const manifest = JSON.parse((await readBoundedRegular(join(directory, 'run.json'), MAX_MANIFEST_BYTES, fsImpl)).toString('utf8'));
+  const manifestPayload = await readBoundedRegular(join(directory, 'run.json'), MAX_MANIFEST_BYTES, fsImpl);
+  if (hash(manifestPayload) !== receipt.runManifestSha256) throw new Error('published run manifest does not match receipt');
+  const manifest = JSON.parse(manifestPayload.toString('utf8'));
   if (manifest.schema_version !== '1.0' || manifest.run_id !== runId
       || JSON.stringify(Object.keys(manifest).sort()) !== JSON.stringify(['checkpoint_intent', 'run_id', 'schema_version', 'sources'])) {
     throw new Error('published run manifest is invalid');
@@ -188,20 +216,22 @@ async function validatePublishedRun(batches, { runsDir, runId, fsImpl }) {
     throw new Error('published checkpoint intent manifest entry is invalid');
   }
   const intentPayload = await readBoundedRegular(join(directory, 'checkpoint-intent.json'), MAX_INTENT_BYTES, fsImpl);
-  if (hash(intentPayload) !== manifest.checkpoint_intent.sha256) throw new Error('published checkpoint intent hash mismatch');
-  const expected = Object.keys(batches).sort();
-  if (JSON.stringify(Object.keys(manifest.sources).sort()) !== JSON.stringify(expected)) {
+  if (manifest.checkpoint_intent.sha256 !== receipt.intentSha256
+      || hash(intentPayload) !== receipt.intentSha256) throw new Error('published checkpoint intent hash mismatch');
+  if (JSON.stringify(Object.keys(manifest.sources).sort()) !== JSON.stringify(expectedSources)) {
     throw new Error('published run manifest source set is invalid');
   }
-  for (const sourceId of expected) {
+  for (const sourceId of expectedSources) {
     const entry = manifest.sources[sourceId];
+    const evidence = receipt.sources[sourceId];
     if (!entry || entry.filename !== `${sourceId}.json` || entry.batch_id !== batches[sourceId].batch_id
       || entry.status !== batches[sourceId].source_status.status
+      || entry.sha256 !== evidence.sha256 || entry.batch_id !== evidence.batchId || entry.status !== evidence.status
       || JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify(['batch_id', 'filename', 'sha256', 'status'])) {
       throw new Error('published run manifest entry is invalid');
     }
     const payload = await readBoundedRegular(join(directory, entry.filename), MAX_BATCH_BYTES, fsImpl);
-    if (hash(payload) !== entry.sha256) throw new Error('published run hash mismatch');
+    if (hash(payload) !== evidence.sha256) throw new Error('published run hash mismatch');
   }
 }
 
@@ -213,14 +243,18 @@ export async function publishLatestPointers(batches, {
   runsDir,
   latestDir,
   runId,
+  receipt,
   fsImpl = systemFs,
   randomUUID = systemRandomUUID,
 } = {}) {
-  await validatePublishedRun(batches, { runsDir, runId, fsImpl });
+  await validatePublishedRun(batches, { runsDir, runId, receipt, fsImpl });
   for (const [sourceId, batch] of Object.entries(batches)) {
     await writeJsonAtomic(join(latestDir, `${sourceId}.json`), {
       run_id: runId,
       batch_id: batch.batch_id,
+      batch_sha256: receipt.sources[sourceId].sha256,
+      run_manifest_sha256: receipt.runManifestSha256,
+      intent_sha256: receipt.intentSha256,
       generated_at: batch.generated_at,
       path: join(runsDir, runId, `${sourceId}.json`),
     }, { fsImpl, randomUUID, label: `latest pointer ${sourceId}` });

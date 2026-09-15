@@ -77,7 +77,7 @@ export async function collectAndPrepare({
     }
 
     const published = await publishRun(batches, { runsDir, runId, randomUUID, checkpointIntent });
-    await publishPointers(batches, { runsDir, latestDir, runId, randomUUID });
+    await publishPointers(batches, { runsDir, latestDir, runId, randomUUID, receipt: published?.receipt });
     let checkpoint;
     try {
       checkpoint = await commitCheckpoints({

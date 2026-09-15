@@ -118,8 +118,8 @@ test('local mode invokes acquisition and publishes atomically', async () => {
     invokeRun: async ({ outputDir, checkpointOut, runId }) => { calls.push(['run', outputDir, checkpointOut, runId]); },
     loadBatches: async ({ outputDir }) => ({ 'blog:test': batch('blog:test') }),
     loadIntent: async () => intentEnvelope({ run_id: 'run', sources: [] }),
-    publishRun: async (batches, opts) => { calls.push(['publish-run', opts.runsDir, opts.runId]); },
-    publishPointers: async (batches, opts) => { calls.push(['publish-pointers', opts.latestDir, opts.runId]); },
+    publishRun: async (batches, opts) => { calls.push(['publish-run', opts.runsDir, opts.runId]); return { receipt: { marker: true } }; },
+    publishPointers: async (batches, opts) => { calls.push(['publish-pointers', opts.latestDir, opts.runId, opts.receipt]); },
     commitCheckpoints: async () => { calls.push(['commit']); return { checkpointStatus: 'committed' }; },
   });
 
@@ -133,6 +133,7 @@ test('local mode invokes acquisition and publishes atomically', async () => {
   assert.equal(calls[0][3], result.runId);
   assert.equal(calls[1][0], 'publish-run');
   assert.equal(calls[2][0], 'publish-pointers');
+  assert.deepEqual(calls[2][3], { marker: true });
   assert.equal(calls[3][0], 'commit');
   assert.equal(result.checkpointStatus, 'committed');
 });
@@ -263,7 +264,7 @@ test('python staging to immutable Node run to Python CAS uses the published inte
   const loaded = await loadCheckpointIntent({ path: join(outputDir, 'checkpoint-intent.json'), batches, runId });
   const runsDir = join(acquisition, 'runs');
   const published = await publishBatchRun(batches, { runsDir, runId, checkpointIntent: loaded });
-  await publishLatestPointers(batches, { runsDir, latestDir: join(acquisition, 'latest'), runId });
+  await publishLatestPointers(batches, { runsDir, latestDir: join(acquisition, 'latest'), runId, receipt: published.receipt });
   await writeFile(join(outputDir, 'checkpoint-intent.json'), JSON.stringify({ run_id: 'mutated' }));
   const commitArgs = ['commit-state', '--intent', published.publishedIntentPath,
     '--state-root', join(acquisition, 'source-state'), '--expected-sha256', loaded.sha256,
