@@ -9,7 +9,7 @@
 `e7d04a8b470cbca12ffe4b11e1e6f6e5f1210413`。修复 validator 与 finalize 输出文件名
 契约不一致，Skill 明确验证后文件使用独立目录和同一 digestId 文件名。
 
-验收：Node 24 全量 648 项通过、1 项安装 smoke 单独通过；Python 145 项通过；
+v0.3.1 历史发布验收：Node 24 全量 648 项通过、1 项安装 smoke 单独通过；Python 145 项通过；
 精确归档 81 项通过、2 项 Git-only 跳过；交接 2 项及全新隔离 RSS/Blog 安装通过。
 原失败请求在隔离输出目录生成成功，状态仍为 partial，未改变实际投递历史。
 
@@ -71,13 +71,15 @@ central Feed 仍是默认输入，也没有任何中心来源下线。Windows �
 但 central 模式继续可用。
 
 当前验证基线：Python 全量 364/364；Node Task 5/durable 定向套件 70/70；Registry 定向套件
-分别 107/107 与 59/59；HTTP client 60/60；state 94/94。Node 全量并非全绿，仅剩
+分别 107/107 与 59/59；HTTP client 定向套件 38/38；state 94/94。Node 全量并非全绿，仅剩
 release-manifest drift 导致的 3 项失败；manifest 必须在正式发布时随最终归档统一刷新，本检查点
 不得提前修改，也不得把当前状态描述为全量通过。
 
-## 验证与剩余工作
+## v0.3.1 历史发布验证与既有观察项
 
-- Python 全量 145 项、完整 Node 测试通过；归档专用测试 81 项通过、2 项 Git-only 跳过。
+本节结果属于 2026-09-09 的 v0.3.1 正式发布对象，不是当前 v0.4.0 开发分支结果；
+完整测试与归档计数见上文“历史发布验收”。
+
 - 精确归档全新 Python 安装及 RSS/Blog 抽取通过；三平台注册、安装/重装与投递 fixture 通过。
 - manifest、Feed、secret、license、provenance、公开下载 checksum 与 tag target 验证通过。
 - GitHub 自动流程因 Python 对照测试先于 Node 依赖安装而失败，未生成资产；本次将同一受保护
@@ -87,12 +89,15 @@ release-manifest drift 导致的 3 项失败；manifest 必须在正式发布时
 - R5 是逐来源真实观察，不是 v0.3.0 发布前置条件。17 个官网 Blog 的完整本地观察验收
   尚未完成；至少 14 天从首个有效真实运行起算，不能用 fixture 或提交日期替代。
 - Task 21 中心来源下线尚未执行；必须逐来源积累观察证据、通过门禁后单独操作。
+
+## 当前 v0.4.0 剩余工作
+
 - v0.4.0 仍需实现并验证六类 Adapter、community evidence、真实来源 smoke 和正式发布门禁；
   Foundation Task 1–5 通过不替代这些工作。
 
 ## 使用路径与边界
 
-公开安装请使用 [v0.3.0 Release](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.0)
+公开安装请使用最新正式版 [v0.3.1 Release](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.1)
 中的归档、checksum 和 manifest；仓库 README 包含对应安装步骤。
 
 v0.3.0 仅新增 RSS/官网 Blog 本地采集。GitHub/HN/Reddit/Techmeme/arXiv 属 v0.4.0，

@@ -3,7 +3,7 @@
 更新日期：2026-09-15。当前开发目标：`v0.4.0`。
 
 本文补充现有采集母计划，不改变 v0.4–v0.7 的来源分配。版本顺序是开发建议，尚无人员和
-工期承诺；R1–R4 已完成，v0.3.0 已公开发布，其余按下列状态推进。
+工期承诺；R1–R4 已完成，v0.3.0 及当前正式修复版 v0.3.1 已公开发布，其余按下列状态推进。
 当前事实见 [项目进度](project-progress.md)。
 
 ## v0.3.0：先完成可安装、可运行、可验证的闭环
@@ -69,7 +69,8 @@ Daily、Trending 与 Weekly 作为同一来源，部分视图失败时来源状�
 
 当前没有任何新增来源 live/cutover，central Feed 仍为默认输入且未下线任何中心来源。
 Windows 本地来源状态不受支持，但 central 模式继续可用。当前验证基线为 Python 364/364、
-Node Task 5/durable 70/70、Registry 107/107 与 59/59、HTTP 60/60、state 94/94；Node 全量
+Node Task 5/durable 70/70、Registry 107/107 与 59/59、HTTP client 定向套件 38/38、
+state 94/94；Node 全量
 仍有 3 项 release-manifest drift，必须在正式发布时刷新 manifest，因此此处不标记全量 GREEN，
 也不勾选 v0.4.0 完成。
 
