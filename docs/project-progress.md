@@ -1,6 +1,6 @@
 # Follow-up 项目进度
 
-更新日期：2026-09-09
+更新日期：2026-09-15
 
 ## 当前状态
 
@@ -46,6 +46,35 @@ Skill 链接，已备份旧链接后由安装器重新注册；自动跨版本�
 central 仍为默认值；shadow 不将本地候选混入 Digest。功能实现不代表所有来源已完成
 真实观察，也不代表中心 Feed 已下线。配置、切换和回滚见 [运行手册](operations/local-acquisition-runbook.md)。
 
+## v0.4.0 采集基础检查点（2026-09-15）
+
+v0.4.0 Foundation Task 1–5 已完成，为后续社区与学术 Adapter 提供以下基础：
+
+- 受限公共 HTTP client 仅允许固定 allowlist 上的 HTTPS，将已验证公网地址 pinned 到 TLS 连接，
+  并对重定向、路径、timeout、body 上限和安全错误分类逐跳执行门禁。
+- macOS/Linux 提供逐来源、逐 stream 的本地状态与 CAS；安全 POSIX I/O、并发锁、目录/文件
+  身份复核和 durability uncertainty 均失败关闭。其他平台的本地状态明确失败关闭，不使用路径
+  fallback。
+- canonical Registry 保留原有 82 个不可变 source ID，新增后共有 89 个来源；其中
+  `central-live` 70 个、`local-enabled` 54 个，各消费者必须显式选择 scope。
+- Runtime 以内部 immutable `CheckpointUpdate` 携带待提交更新，严格验证 stream、前置时间、
+  checkpoint 字段、大小和凭据；更新不进入公开 Signal Batch。
+- Node 是唯一原子 run publisher：完整 batches、immutable checkpoint intent 和 `run.json` 经
+  校验、hash 绑定、fsync 与同目录 rename 后才公开；不可伪造的 immutable publication receipt
+  绑定 run manifest、intent 与 batch hash，latest pointer 再绑定 receipt 证据。全部 pointer 发布后
+  才调用 Python 对 intent 重算 hash 并逐 stream CAS；冲突或 durability uncertainty 保留已发布 run，
+  以 partial/uncertain 报告，不自动重试。
+
+这个检查点**不代表 v0.4.0 已可用或已完成**。GitHub、Hacker News、Reddit、Techmeme、
+arXiv、Hugging Face Papers 六类 Adapter 均尚未实现；没有任何新增来源完成 live/cutover。
+central Feed 仍是默认输入，也没有任何中心来源下线。Windows 本地来源状态仍不受支持，
+但 central 模式继续可用。
+
+当前验证基线：Python 全量 364/364；Node Task 5/durable 定向套件 70/70；Registry 定向套件
+分别 107/107 与 59/59；HTTP client 60/60；state 94/94。Node 全量并非全绿，仅剩
+release-manifest drift 导致的 3 项失败；manifest 必须在正式发布时随最终归档统一刷新，本检查点
+不得提前修改，也不得把当前状态描述为全量通过。
+
 ## 验证与剩余工作
 
 - Python 全量 145 项、完整 Node 测试通过；归档专用测试 81 项通过、2 项 Git-only 跳过。
@@ -58,6 +87,8 @@ central 仍为默认值；shadow 不将本地候选混入 Digest。功能实现�
 - R5 是逐来源真实观察，不是 v0.3.0 发布前置条件。17 个官网 Blog 的完整本地观察验收
   尚未完成；至少 14 天从首个有效真实运行起算，不能用 fixture 或提交日期替代。
 - Task 21 中心来源下线尚未执行；必须逐来源积累观察证据、通过门禁后单独操作。
+- v0.4.0 仍需实现并验证六类 Adapter、community evidence、真实来源 smoke 和正式发布门禁；
+  Foundation Task 1–5 通过不替代这些工作。
 
 ## 使用路径与边界
 

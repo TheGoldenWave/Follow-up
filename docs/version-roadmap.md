@@ -1,6 +1,6 @@
 # Follow-up 后续版本开发计划
 
-更新日期：2026-09-09。候选版本：`feature/v0.3.0-acquisition-runtime` / `0.3.0`。
+更新日期：2026-09-15。当前开发目标：`v0.4.0`。
 
 本文补充现有采集母计划，不改变 v0.4–v0.7 的来源分配。版本顺序是开发建议，尚无人员和
 工期承诺；R1–R4 已完成，v0.3.0 已公开发布，其余按下列状态推进。
@@ -45,6 +45,33 @@ HF-1 的设计见 `superpowers/specs/2026-09-14-hugging-face-papers-source-desig
 Daily、Trending 与 Weekly 作为同一来源，部分视图失败时来源状态为 `partial`，三个视图
 均失败时为 `error`；不新增平台命名
 频道，不因 Adapter 就绪自动下线中心来源。不包含 X、视频转录和认证 Sidecar。
+
+### v0.4.0 交付清单（2026-09-15）
+
+基础检查点已完成，但 v0.4.0 尚未完成：
+
+- [x] Foundation Task 1：受限、固定 allowlist 且将已验证公网地址 pinned 到 TLS 连接的
+  HTTPS client；redirect/public-IP/path、timeout、body 与安全错误分类失败关闭。
+- [x] Foundation Task 2：macOS/Linux 逐来源、逐 stream 状态与 CAS；其他平台本地状态失败关闭。
+- [x] Foundation Task 3：内部 immutable checkpoint update 契约；pending update 不进入 Signal Batch。
+- [x] Foundation Task 4：canonical Registry 89/all、70 `central-live`、54 `local-enabled`；
+  原有 82 个 source ID 保持不变。
+- [x] Foundation Task 5：Node 独占原子 run 发布；immutable intent/receipt/pointer hash chain；
+  全部发布完成后才逐 stream CAS。
+- [ ] Adapter：实现 GitHub、Hacker News、Reddit、Techmeme、arXiv、Hugging Face Papers
+  六类 Adapter 及正常、空结果、限流、部分失败和增量状态 fixture。
+- [ ] Community evidence：保留 GitHub/HN/Reddit/Hugging Face 的独立社区发现与热度证据，
+  完成与学术原始来源的确定性聚类与 `corroboration` 语义验证。
+- [ ] Smoke 与 cutover 门禁：六类真实来源逐一 smoke，记录 machine-verifiable 结果、人工相关率、
+  secret 检查和回滚证据；通过 shadow 与来源级门禁前不得 live/cutover。
+- [ ] Release：更新最终版本源与 release manifest，完成 Node/Python/Feed、secret、license、
+  provenance、精确归档安装/升级及公开资产验证，再发布 v0.4.0。
+
+当前没有任何新增来源 live/cutover，central Feed 仍为默认输入且未下线任何中心来源。
+Windows 本地来源状态不受支持，但 central 模式继续可用。当前验证基线为 Python 364/364、
+Node Task 5/durable 70/70、Registry 107/107 与 59/59、HTTP 60/60、state 94/94；Node 全量
+仍有 3 项 release-manifest drift，必须在正式发布时刷新 manifest，因此此处不标记全量 GREEN，
+也不勾选 v0.4.0 完成。
 
 ## v0.5.0：视频、播客与受控工具
 
