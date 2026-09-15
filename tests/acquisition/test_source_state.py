@@ -269,18 +269,40 @@ class MergeAndPruneTests(unittest.TestCase):
             [f"2026-09-{day:02d}" for day in range(2, 16)],
         )
 
-    def test_merge_bounds_techmeme_archive_before_commit(self) -> None:
+    def test_merge_rejects_overlong_techmeme_archive_update(self) -> None:
         archive = checkpoint()
         archive["cursor"] = {
             "current_processing_date": "2026-09-16",
             "complete_dates": [f"2026-09-{day:02d}" for day in range(1, 16)],
         }
-        merged = merge_checkpoint_updates(
-            state(source_id="community:techmeme"),
-            [{"stream_id": "archive", "previous_checkpoint_at": None, "checkpoint": archive}],
-            updated_at=NOW,
+        with self.assertRaises(SourceStateError):
+            merge_checkpoint_updates(
+                state(source_id="community:techmeme"),
+                [{"stream_id": "archive", "previous_checkpoint_at": None, "checkpoint": archive}],
+                updated_at=NOW,
+            )
+
+    def test_merge_validates_every_archive_date_before_rejecting_overflow(self) -> None:
+        valid = [f"2026-09-{day:02d}" for day in range(1, 15)]
+        cases = (
+            valid + ["not-a-date"],
+            [None] + valid,
+            ["2026-09-01"] + valid,
+            ["2027-01-01"] + valid,
         )
-        self.assertEqual(len(merged["streams"]["archive"]["cursor"]["complete_dates"]), 14)
+        for complete_dates in cases:
+            archive = checkpoint()
+            archive["cursor"] = {
+                "current_processing_date": "2026-09-16",
+                "complete_dates": complete_dates,
+            }
+            with self.subTest(complete_dates=complete_dates), self.assertRaises(SourceStateError):
+                merge_checkpoint_updates(
+                    state(source_id="community:techmeme"),
+                    [{"stream_id": "archive", "previous_checkpoint_at": None,
+                      "checkpoint": archive}],
+                    updated_at=NOW,
+                )
 
     def test_removed_query_stream_is_retained_for_7_days_then_pruned(self) -> None:
         streams = {

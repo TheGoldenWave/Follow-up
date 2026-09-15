@@ -151,7 +151,7 @@ def _canonical_bytes(value: Any) -> bytes:
         raise SourceStateError("state must be finite JSON data") from exc
 
 
-def _validate_archive_cursor(cursor: Any) -> None:
+def _validate_archive_cursor(cursor: Any, *, allow_overflow: bool = False) -> None:
     if not isinstance(cursor, dict):
         _fail("Techmeme archive cursor must be an object")
     _require_exact_fields(
@@ -165,7 +165,7 @@ def _validate_archive_cursor(cursor: Any) -> None:
     parsed = [_parse_date(item, "complete_dates item") for item in dates]
     if parsed != sorted(set(parsed)):
         _fail("complete_dates must be an ascending ordered set")
-    if len(parsed) > 14:
+    if len(parsed) > 14 and not allow_overflow:
         _fail("complete_dates must contain at most 14 dates")
     if any(item >= current for item in parsed):
         _fail("every complete date must precede current_processing_date")
@@ -353,12 +353,6 @@ def merge_checkpoint_updates(
                 f"stream {stream_id!r} checkpoint changed (expected {previous!r}, found {current_at!r})"
             )
         replacement = copy.deepcopy(update["checkpoint"])
-        if merged["source_id"].endswith(":techmeme") and stream_id == "archive":
-            wrapper = {
-                "source_id": merged["source_id"],
-                "streams": {"archive": replacement},
-            }
-            _bound_archive_dates(wrapper)
         _validate_checkpoint(
             replacement, f"updates[{index}].checkpoint",
             archive=merged["source_id"].endswith(":techmeme") and stream_id == "archive",
@@ -386,6 +380,12 @@ def prune_state(
     state: Mapping[str, Any], active_stream_ids: Iterable[str] | None = None, *, now: str,
 ) -> dict[str, Any]:
     """Prune expired removed queries and bound Techmeme archive date history."""
+    if isinstance(state, Mapping) and str(state.get("source_id", "")).endswith(":techmeme"):
+        raw_streams = state.get("streams")
+        if isinstance(raw_streams, Mapping) and "archive" in raw_streams:
+            raw_archive = raw_streams["archive"]
+            if isinstance(raw_archive, Mapping):
+                _validate_archive_cursor(raw_archive.get("cursor"), allow_overflow=True)
     pruned = copy.deepcopy(state)
     archive_bounded = _bound_archive_dates(pruned)
     validate_state(pruned)
