@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import copy
 from datetime import date, datetime, timedelta, timezone
-import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import stat
-import tempfile
 from typing import Any, Callable, Iterable, Mapping
 
 from .contracts import is_credential_key
 from .redaction import redact_text
+from .state_store_posix import PosixBackendError, PosixStateBackend, posix_backend_available
 
 STATE_SCHEMA_VERSION = "1.0"
 MAX_STATE_BYTES = 256 * 1024
@@ -29,8 +27,18 @@ _RFC3339_UTC_RE = re.compile(
 )
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _FINGERPRINT_RE = re.compile(r"^[0-9a-f]{64}$")
+_FROZEN_UNICODE_WHITESPACE = (
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000"
+)
+_FROZEN_WHITESPACE_RE = re.compile(f"[{re.escape(_FROZEN_UNICODE_WHITESPACE)}]+")
+_DISALLOWED_CONTROL_RE = re.compile(
+    r"[\u0000-\u0008\u000e-\u001f\u007f-\u0084\u0086-\u009f]"
+)
 _HIGH_CONFIDENCE_CREDENTIAL_VALUES = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,255}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,255}\b"),
     re.compile(r"\bsk-[A-Za-z0-9]{32,255}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"),
@@ -39,9 +47,9 @@ _HIGH_CONFIDENCE_CREDENTIAL_VALUES = (
 _STATE_FIELDS = frozenset({"schema_version", "source_id", "streams", "updated_at"})
 _STREAM_FIELDS = frozenset({
     "successful_window_end", "cursor", "etag", "last_modified",
-    "recent_native_ids", "query_fingerprint", "checkpoint_at",
+    "recent_native_ids", "query_fingerprint", "inactive_since", "checkpoint_at",
 })
-_REQUIRED_STREAM_FIELDS = _STREAM_FIELDS - {"query_fingerprint"}
+_REQUIRED_STREAM_FIELDS = _STREAM_FIELDS - {"query_fingerprint", "inactive_since"}
 _UPDATE_FIELDS = frozenset({"stream_id", "previous_checkpoint_at", "checkpoint"})
 
 # The order is part of the fingerprint contract. Aliases cover the bounded
@@ -151,7 +159,7 @@ def _canonical_bytes(value: Any) -> bytes:
         raise SourceStateError("state must be finite JSON data") from exc
 
 
-def _validate_archive_cursor(cursor: Any, *, allow_overflow: bool = False) -> None:
+def _validate_archive_cursor(cursor: Any, *, max_dates: int = 14) -> None:
     if not isinstance(cursor, dict):
         _fail("Techmeme archive cursor must be an object")
     _require_exact_fields(
@@ -165,33 +173,16 @@ def _validate_archive_cursor(cursor: Any, *, allow_overflow: bool = False) -> No
     parsed = [_parse_date(item, "complete_dates item") for item in dates]
     if parsed != sorted(set(parsed)):
         _fail("complete_dates must be an ascending ordered set")
-    if len(parsed) > 14 and not allow_overflow:
-        _fail("complete_dates must contain at most 14 dates")
+    if len(parsed) > max_dates:
+        _fail(f"complete_dates must contain at most {max_dates} dates")
     if any(item >= current for item in parsed):
         _fail("every complete date must precede current_processing_date")
 
 
-def _bound_archive_dates(state: dict[str, Any]) -> bool:
-    """Bound an archive cursor before strict validation; return whether changed."""
-    if not isinstance(state, dict) or not str(state.get("source_id", "")).endswith(":techmeme"):
-        return False
-    streams = state.get("streams")
-    if not isinstance(streams, dict):
-        return False
-    archive = streams.get("archive")
-    if not isinstance(archive, dict):
-        return False
-    cursor = archive.get("cursor")
-    if not isinstance(cursor, dict):
-        return False
-    complete_dates = cursor.get("complete_dates")
-    if not isinstance(complete_dates, list) or len(complete_dates) <= 14:
-        return False
-    cursor["complete_dates"] = complete_dates[-14:]
-    return True
-
-
-def _validate_checkpoint(checkpoint: Any, label: str, *, archive: bool = False) -> None:
+def _validate_checkpoint(
+    checkpoint: Any, label: str, *, archive: bool = False, archive_max_dates: int = 14,
+    allow_inactive: bool = True,
+) -> None:
     if not isinstance(checkpoint, dict):
         _fail(f"{label} must be an object")
     fields = frozenset(checkpoint)
@@ -201,6 +192,10 @@ def _validate_checkpoint(checkpoint: Any, label: str, *, archive: bool = False) 
         checkpoint["successful_window_end"], f"{label}.successful_window_end", nullable=True,
     )
     _parse_rfc3339_utc(checkpoint["checkpoint_at"], f"{label}.checkpoint_at")
+    if "inactive_since" in checkpoint:
+        if not allow_inactive:
+            _fail(f"{label}.inactive_since is store-managed")
+        _parse_rfc3339_utc(checkpoint["inactive_since"], f"{label}.inactive_since")
     for field in ("etag", "last_modified"):
         if checkpoint[field] is not None and not isinstance(checkpoint[field], str):
             _fail(f"{label}.{field} must be a string or null")
@@ -218,7 +213,7 @@ def _validate_checkpoint(checkpoint: Any, label: str, *, archive: bool = False) 
         _fail(f"{label}.query_fingerprint must be a lowercase SHA-256 hex digest")
     list(_iter_values(checkpoint["cursor"], f"{label}.cursor"))
     if archive:
-        _validate_archive_cursor(checkpoint["cursor"])
+        _validate_archive_cursor(checkpoint["cursor"], max_dates=archive_max_dates)
 
 
 def validate_state(value: Any, *, expected_source_id: str | None = None) -> Any:
@@ -245,6 +240,8 @@ def validate_state(value: Any, *, expected_source_id: str | None = None) -> Any:
         )
         query_source = source_id.endswith(":github") or source_id.endswith(":hacker-news")
         query_stream = stream_id.startswith("query.") or stream_id.startswith("search.")
+        if "inactive_since" in checkpoint and not query_stream:
+            _fail(f"streams.{stream_id}.inactive_since is only valid for query streams")
         if query_source and query_stream and "query_fingerprint" not in checkpoint:
             _fail(f"streams.{stream_id}.query_fingerprint is required")
     _parse_rfc3339_utc(value["updated_at"], "updated_at", nullable=True)
@@ -257,7 +254,16 @@ def validate_state(value: Any, *, expected_source_id: str | None = None) -> Any:
 def _normalize_query_text(value: Any) -> str:
     if not isinstance(value, str):
         _fail("query must be a string")
-    return " ".join(value.split())
+    _reject_semantic_controls(value, "query")
+    normalized = _FROZEN_WHITESPACE_RE.sub(" ", value).strip(" ")
+    if not normalized:
+        _fail("query must not be empty after whitespace normalization")
+    return normalized
+
+
+def _reject_semantic_controls(value: str, label: str) -> None:
+    if _DISALLOWED_CONTROL_RE.search(value):
+        _fail(f"{label} contains a disallowed control character")
 
 
 def _normalize_filter_value(name: str, value: Any, label: str) -> str:
@@ -270,10 +276,13 @@ def _normalize_filter_value(name: str, value: Any, label: str) -> str:
     if name in _TEXT_FILTERS:
         if not isinstance(value, str):
             _fail(f"{label} must be a string")
-        return value.strip()
+        _reject_semantic_controls(value, label)
+        return value.strip(_FROZEN_UNICODE_WHITESPACE)
     if name in _SET_FILTERS and isinstance(value, (list, tuple, set, frozenset)):
         if any(not isinstance(item, str) for item in value):
             _fail(f"{label} collection must contain strings")
+        for item in value:
+            _reject_semantic_controls(item, label)
         items = sorted(set(value), key=lambda item: item.encode("utf-8"))
         return json.dumps(items, ensure_ascii=False, separators=(",", ":"))
     _fail(f"{label} has an unsupported value")
@@ -353,10 +362,13 @@ def merge_checkpoint_updates(
                 f"stream {stream_id!r} checkpoint changed (expected {previous!r}, found {current_at!r})"
             )
         replacement = copy.deepcopy(update["checkpoint"])
+        is_archive = merged["source_id"].endswith(":techmeme") and stream_id == "archive"
         _validate_checkpoint(
             replacement, f"updates[{index}].checkpoint",
-            archive=merged["source_id"].endswith(":techmeme") and stream_id == "archive",
+            archive=is_archive, archive_max_dates=15, allow_inactive=False,
         )
+        if is_archive and len(replacement["cursor"]["complete_dates"]) == 15:
+            replacement["cursor"]["complete_dates"] = replacement["cursor"]["complete_dates"][-14:]
         replacement_at = _parse_rfc3339_utc(
             replacement["checkpoint_at"], f"updates[{index}].checkpoint.checkpoint_at",
         )
@@ -380,38 +392,34 @@ def prune_state(
     state: Mapping[str, Any], active_stream_ids: Iterable[str] | None = None, *, now: str,
 ) -> dict[str, Any]:
     """Prune expired removed queries and bound Techmeme archive date history."""
-    if isinstance(state, Mapping) and str(state.get("source_id", "")).endswith(":techmeme"):
-        raw_streams = state.get("streams")
-        if isinstance(raw_streams, Mapping) and "archive" in raw_streams:
-            raw_archive = raw_streams["archive"]
-            if isinstance(raw_archive, Mapping):
-                _validate_archive_cursor(raw_archive.get("cursor"), allow_overflow=True)
     pruned = copy.deepcopy(state)
-    archive_bounded = _bound_archive_dates(pruned)
     validate_state(pruned)
     now_dt = _parse_rfc3339_utc(now, "now")
     assert now_dt is not None
     active = set(state["streams"]) if active_stream_ids is None else set(active_stream_ids)
     if any(not isinstance(item, str) or _STREAM_ID_RE.fullmatch(item) is None for item in active):
         _fail("active_stream_ids contains an invalid stream ID")
-    changed = archive_bounded
+    changed = False
     for stream_id in list(pruned["streams"]):
         is_query = stream_id.startswith("query.") or stream_id.startswith("search.")
-        if is_query and stream_id not in active:
-            checkpoint_dt = _parse_rfc3339_utc(
-                pruned["streams"][stream_id]["checkpoint_at"], "checkpoint_at",
-            )
-            assert checkpoint_dt is not None
-            if now_dt - checkpoint_dt >= timedelta(days=7):
+        if not is_query:
+            continue
+        checkpoint = pruned["streams"][stream_id]
+        if stream_id in active:
+            if "inactive_since" in checkpoint:
+                del checkpoint["inactive_since"]
+                changed = True
+        else:
+            inactive_since = checkpoint.get("inactive_since")
+            if inactive_since is None:
+                checkpoint["inactive_since"] = now
+                changed = True
+                continue
+            inactive_dt = _parse_rfc3339_utc(inactive_since, "inactive_since")
+            assert inactive_dt is not None
+            if now_dt - inactive_dt >= timedelta(days=7):
                 del pruned["streams"][stream_id]
                 changed = True
-    archive = pruned["streams"].get("archive")
-    if pruned["source_id"].endswith(":techmeme") and archive is not None:
-        cursor = archive["cursor"]
-        bounded = sorted(set(cursor["complete_dates"]))[-14:]
-        if bounded != cursor["complete_dates"]:
-            cursor["complete_dates"] = bounded
-            changed = True
     if changed:
         pruned["updated_at"] = now
     validate_state(pruned)
@@ -431,52 +439,38 @@ def _default_clock() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def state_store_available(platform_name: str | None = None) -> bool:
+    """Return whether secure persistent source state is available."""
+    return posix_backend_available(platform_name)
+
+
 class SourceStateStore:
     """Load and atomically CAS-commit one JSON state file per source."""
 
     def __init__(
         self, root: str | os.PathLike[str] | None = None,
-        *, clock: Callable[[], datetime] | None = None,
+        *, clock: Callable[[], datetime] | None = None, platform_name: str | None = None,
+        backend_hooks: Mapping[str, Callable[[], None]] | None = None,
     ) -> None:
         default = Path.home() / ".follow-builders" / "acquisition" / "source-state"
-        absolute_root = os.path.abspath(os.fspath(default if root is None else root))
-        # macOS exposes its temporary tree through the system-owned /var and
-        # /tmp compatibility symlinks. Canonicalize only those mount aliases;
-        # user-controlled symlink components below them remain visible and are
-        # rejected by _reject_symlink_path.
-        if absolute_root == "/var" or absolute_root.startswith("/var/"):
-            absolute_root = "/private" + absolute_root
-        elif absolute_root == "/tmp" or absolute_root.startswith("/tmp/"):
-            absolute_root = "/private" + absolute_root
-        self.root = Path(absolute_root)
+        try:
+            self._backend = PosixStateBackend(
+                default if root is None else root,
+                platform_name=platform_name,
+                hooks=backend_hooks,
+            )
+        except PosixBackendError as exc:
+            raise SourceStateError(str(exc), code=exc.code) from exc
+        self.root = self._backend.root
         self._clock = _default_clock if clock is None else clock
 
     def _validate_source_id(self, source_id: str) -> None:
         if not isinstance(source_id, str) or _SOURCE_ID_RE.fullmatch(source_id) is None:
             _fail("source_id is unsafe")
 
-    def _reject_symlink_path(self) -> None:
-        current = Path(self.root.anchor)
-        for part in self.root.parts[1:]:
-            current = current / part
-            try:
-                mode = current.lstat().st_mode
-            except FileNotFoundError:
-                continue
-            if stat.S_ISLNK(mode):
-                raise SourceStateError(f"state path contains symlink: {current}", code="unsafe-state")
-
-    def _ensure_root(self) -> None:
-        self._reject_symlink_path()
-        self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self._reject_symlink_path()
-        if not self.root.is_dir():
-            raise SourceStateError("state root is not a directory", code="unsafe-state")
-        os.chmod(self.root, 0o700)
-
-    def _path(self, source_id: str) -> Path:
+    def _filename(self, source_id: str) -> str:
         self._validate_source_id(source_id)
-        return self.root / f"{source_id}.json"
+        return f"{source_id}.json"
 
     def _initial(self, source_id: str) -> dict[str, Any]:
         return {
@@ -488,38 +482,16 @@ class SourceStateStore:
 
     def load(self, source_id: str) -> dict[str, Any]:
         """Load validated state; return an empty state only when the file is absent."""
-        path = self._path(source_id)
-        self._reject_symlink_path()
         try:
-            root_info = self.root.lstat()
-        except FileNotFoundError:
-            root_info = None
-        if root_info is not None:
-            if not stat.S_ISDIR(root_info.st_mode):
-                raise SourceStateError("state root is not a directory", code="unsafe-state")
-            if stat.S_IMODE(root_info.st_mode) & 0o077:
-                raise SourceStateError("state root permissions exceed 0700", code="unsafe-state")
-        try:
-            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(path, flags)
-        except FileNotFoundError:
+            payload = self._backend.read(self._filename(source_id), MAX_STATE_BYTES)
+        except PosixBackendError as exc:
+            raise SourceStateError(str(exc), code=exc.code) from exc
+        except OSError as exc:
+            raise SourceStateError("state file cannot be opened safely", code="unsafe-state") from exc
+        if payload is None:
             initial = self._initial(source_id)
             validate_state(initial, expected_source_id=source_id)
             return initial
-        except OSError as exc:
-            raise SourceStateError("state file cannot be opened safely", code="unsafe-state") from exc
-        try:
-            info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode):
-                raise SourceStateError("state target is not a regular file", code="unsafe-state")
-            if stat.S_IMODE(info.st_mode) & 0o077:
-                raise SourceStateError("state file permissions exceed 0600", code="unsafe-state")
-            with os.fdopen(descriptor, "rb", closefd=False) as handle:
-                payload = handle.read(MAX_STATE_BYTES + 1)
-        finally:
-            os.close(descriptor)
-        if len(payload) > MAX_STATE_BYTES:
-            _fail("state file exceeds 256 KiB")
         try:
             value = json.loads(payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -533,54 +505,42 @@ class SourceStateStore:
     ) -> dict[str, Any]:
         """Lock, CAS-merge, fsync, and atomically replace one source state."""
         self._validate_source_id(source_id)
-        self._ensure_root()
-        lock_path = self.root / f".{source_id}.lock"
-        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-        try:
-            lock_fd = os.open(lock_path, flags, 0o600)
-        except OSError as exc:
-            raise SourceStateError("state lock cannot be opened safely", code="unsafe-state") from exc
-        temp_path: str | None = None
-        try:
-            os.fchmod(lock_fd, 0o600)
-            fcntl.flock(lock_fd, fcntl.LOCK_EX)
-            current = self.load(source_id)
+        filename = self._filename(source_id)
+        update_list = list(updates)
+
+        def transform(payload: bytes | None) -> tuple[bytes, dict[str, Any]]:
+            if payload is None:
+                current = self._initial(source_id)
+            else:
+                try:
+                    current = json.loads(payload.decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise SourceStateError("state file is corrupt") from exc
+                validate_state(current, expected_source_id=source_id)
             commit_at = _format_utc(self._clock())
             merged = merge_checkpoint_updates(
-                current, updates, updated_at=commit_at,
+                current, update_list, updated_at=commit_at,
             )
             if active_stream_ids is not None:
+                effective_active = set(active_stream_ids)
+                effective_active.update(update["stream_id"] for update in update_list)
                 merged = prune_state(
-                    merged, active_stream_ids=active_stream_ids,
+                    merged, active_stream_ids=effective_active,
                     now=commit_at if now is None else now,
                 )
             validate_state(merged, expected_source_id=source_id)
-            payload = _canonical_bytes(merged) + b"\n"
+            payload = _canonical_bytes(merged)
             if len(payload) > MAX_STATE_BYTES:
                 _fail("serialized state exceeds 256 KiB")
-            temp_fd, temp_path = tempfile.mkstemp(
-                prefix=f".{source_id}.json.", suffix=".tmp", dir=self.root,
+            return payload, merged
+
+        try:
+            return self._backend.atomic_update(
+                filename, f".{source_id}.lock", MAX_STATE_BYTES, transform,
             )
-            try:
-                os.fchmod(temp_fd, 0o600)
-                with os.fdopen(temp_fd, "wb", closefd=True) as handle:
-                    handle.write(payload)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                os.replace(temp_path, self._path(source_id))
-                temp_path = None
-                directory_fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-                try:
-                    os.fsync(directory_fd)
-                finally:
-                    os.close(directory_fd)
-            finally:
-                if temp_path is not None:
-                    try:
-                        os.unlink(temp_path)
-                    except FileNotFoundError:
-                        pass
-            return merged
-        finally:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-            os.close(lock_fd)
+        except PosixBackendError as exc:
+            raise SourceStateError(str(exc), code=exc.code) from exc
+        except SourceStateError:
+            raise
+        except OSError as exc:
+            raise SourceStateError("state commit failed", code="state-write-failed") from exc

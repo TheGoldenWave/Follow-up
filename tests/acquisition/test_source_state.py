@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
@@ -19,6 +20,7 @@ from follow_up_acquisition.source_state import (
     merge_checkpoint_updates,
     prune_state,
     query_fingerprint,
+    state_store_available,
     validate_state,
 )
 
@@ -26,7 +28,9 @@ from follow_up_acquisition.source_state import (
 NOW = "2026-09-15T08:00:00Z"
 
 
-def checkpoint(*, at: str = NOW, fingerprint: str | None = None) -> dict:
+def checkpoint(
+    *, at: str = NOW, fingerprint: str | None = None, inactive_since: str | None = None,
+) -> dict:
     value = {
         "successful_window_end": "2026-09-15T07:00:00Z",
         "cursor": "page-2",
@@ -37,6 +41,8 @@ def checkpoint(*, at: str = NOW, fingerprint: str | None = None) -> dict:
     }
     if fingerprint is not None:
         value["query_fingerprint"] = fingerprint
+    if inactive_since is not None:
+        value["inactive_since"] = inactive_since
     return value
 
 
@@ -102,6 +108,35 @@ class QueryFingerprintTests(unittest.TestCase):
                 "id": "ai", "query": "ai", "sort": "popular", "filters": {},
             })
 
+    def test_frozen_unicode_whitespace_collapses_but_other_controls_reject(self) -> None:
+        whitespace = (
+            "\t\n\v\f\r \u0085\u00a0\u1680"
+            "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+            "\u2028\u2029\u202f\u205f\u3000"
+        )
+        baseline = query_fingerprint("github", {
+            "id": "ai", "query": "a b", "sort": "updated", "filters": {},
+        })
+        for character in whitespace:
+            with self.subTest(codepoint=ord(character)):
+                self.assertEqual(query_fingerprint("github", {
+                    "id": "ai", "query": f"a{character}b", "sort": "updated", "filters": {},
+                }), baseline)
+        invalid_queries = (
+            {"id": "ai", "query": "a\x1cb", "sort": "updated", "filters": {}},
+            {"id": "ai", "query": "ai", "sort": "updated", "filters": {"owner": "a\x1cb"}},
+            {"id": "ai", "query": "ai", "sort": "updated", "filters": {"topics": ["a\x1cb"]}},
+        )
+        for query in invalid_queries:
+            with self.subTest(query=query), self.assertRaises(SourceStateError):
+                query_fingerprint("github", query)
+
+    def test_rejects_empty_normalized_query(self) -> None:
+        with self.assertRaises(SourceStateError):
+            query_fingerprint("github", {
+                "id": "ai", "query": "\u2003\t", "sort": "updated", "filters": {},
+            })
+
     def test_rejects_non_query_adapter_and_invalid_query_shape(self) -> None:
         with self.assertRaises(SourceStateError):
             query_fingerprint("reddit", {"id": "x", "query": "ai", "filters": {}})
@@ -135,6 +170,11 @@ class ValidateStateTests(unittest.TestCase):
         with self.assertRaises(SourceStateError):
             validate_state(state(streams={"top": value}))
 
+    def test_accepts_exactly_500_recent_native_ids(self) -> None:
+        value = checkpoint()
+        value["recent_native_ids"] = [str(index) for index in range(500)]
+        validate_state(state(streams={"top": value}))
+
     def test_github_and_hn_query_streams_require_fingerprint(self) -> None:
         for source_id, stream_id in (
             ("community:github", "query.ai"),
@@ -142,6 +182,19 @@ class ValidateStateTests(unittest.TestCase):
         ):
             with self.subTest(source_id=source_id), self.assertRaises(SourceStateError):
                 validate_state(state(source_id=source_id, streams={stream_id: checkpoint()}))
+
+    def test_inactive_since_is_store_managed_query_lifecycle_state(self) -> None:
+        query_state = state(streams={
+            "query.ai": checkpoint(fingerprint="a" * 64, inactive_since=NOW),
+        })
+        validate_state(query_state)
+        with self.assertRaises(SourceStateError):
+            validate_state(state(streams={"top": checkpoint(inactive_since=NOW)}))
+        invalid = state(streams={
+            "query.ai": checkpoint(fingerprint="a" * 64, inactive_since="yesterday"),
+        })
+        with self.assertRaises(SourceStateError):
+            validate_state(invalid)
 
     def test_rejects_credential_shaped_keys_and_values(self) -> None:
         for cursor in ({"api_key": "raw"}, "Authorization: Bearer secret-value"):
@@ -153,6 +206,7 @@ class ValidateStateTests(unittest.TestCase):
     def test_rejects_standalone_high_confidence_credential_values(self) -> None:
         credential_values = (
             "gh" + "p_" + "a" * 36,
+            "github_" + "pat_" + "A" * 70,
             "s" + "k-" + "A" * 32,
             "AK" + "IA" + "A" * 16,
             "-----BEGIN " + "PRIVATE KEY-----",
@@ -188,6 +242,20 @@ class ValidateStateTests(unittest.TestCase):
         value["cursor"] = "x" * MAX_STATE_BYTES
         with self.assertRaises(SourceStateError):
             validate_state(state(streams={"top": value}))
+
+    def test_accepts_exact_256_kib_canonical_state_and_rejects_one_more_byte(self) -> None:
+        value = checkpoint()
+        value["cursor"] = ""
+        document = state(source_id="community:other", streams={"top": value})
+        compact = lambda item: json.dumps(
+            item, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+        value["cursor"] = "x" * (MAX_STATE_BYTES - len(compact(document)))
+        self.assertEqual(len(compact(document)), MAX_STATE_BYTES)
+        validate_state(document)
+        value["cursor"] += "x"
+        with self.assertRaises(SourceStateError):
+            validate_state(document)
 
     def test_rejects_invalid_techmeme_archive_date_sets(self) -> None:
         cases = (
@@ -229,6 +297,13 @@ class MergeAndPruneTests(unittest.TestCase):
                 "checkpoint": checkpoint(), "status": "failed",
             }], updated_at=NOW)
 
+    def test_adapter_update_cannot_set_inactive_since(self) -> None:
+        with self.assertRaises(SourceStateError):
+            merge_checkpoint_updates(state(), [{
+                "stream_id": "query.ai", "previous_checkpoint_at": None,
+                "checkpoint": checkpoint(fingerprint="a" * 64, inactive_since=NOW),
+            }], updated_at=NOW)
+
     def test_rejects_checkpoint_compare_and_swap_mismatch(self) -> None:
         original = state(streams={"top": checkpoint(at=NOW)})
         with self.assertRaises(StateConflictError):
@@ -253,27 +328,40 @@ class MergeAndPruneTests(unittest.TestCase):
                 "checkpoint": checkpoint(at="2026-09-15T09:00:00Z", fingerprint="b" * 64),
             }], updated_at="2026-09-15T09:00:00Z")
 
-    def test_prunes_archive_to_current_and_14_complete_dates(self) -> None:
+    def test_prune_rejects_overlong_persisted_archive(self) -> None:
         archive = checkpoint()
         archive["cursor"] = {
             "current_processing_date": "2026-09-16",
             "complete_dates": [f"2026-09-{day:02d}" for day in range(1, 16)],
         }
-        pruned = prune_state(
-            state(source_id="community:techmeme", streams={"archive": archive}),
-            active_stream_ids={"archive"}, now=NOW,
-        )
-        self.assertEqual(pruned["streams"]["archive"]["cursor"]["current_processing_date"], "2026-09-16")
-        self.assertEqual(
-            pruned["streams"]["archive"]["cursor"]["complete_dates"],
-            [f"2026-09-{day:02d}" for day in range(2, 16)],
-        )
+        with self.assertRaises(SourceStateError):
+            prune_state(
+                state(source_id="community:techmeme", streams={"archive": archive}),
+                active_stream_ids={"archive"}, now=NOW,
+            )
 
-    def test_merge_rejects_overlong_techmeme_archive_update(self) -> None:
+    def test_merge_folds_valid_15_date_archive_update_to_14(self) -> None:
         archive = checkpoint()
         archive["cursor"] = {
             "current_processing_date": "2026-09-16",
             "complete_dates": [f"2026-09-{day:02d}" for day in range(1, 16)],
+        }
+        merged = merge_checkpoint_updates(
+            state(source_id="community:techmeme"),
+            [{"stream_id": "archive", "previous_checkpoint_at": None, "checkpoint": archive}],
+            updated_at=NOW,
+        )
+        self.assertEqual(
+            merged["streams"]["archive"]["cursor"]["complete_dates"],
+            [f"2026-09-{day:02d}" for day in range(2, 16)],
+        )
+        validate_state(merged)
+
+    def test_merge_rejects_16_date_archive_update(self) -> None:
+        archive = checkpoint()
+        archive["cursor"] = {
+            "current_processing_date": "2026-09-17",
+            "complete_dates": [f"2026-09-{day:02d}" for day in range(1, 17)],
         }
         with self.assertRaises(SourceStateError):
             merge_checkpoint_updates(
@@ -304,19 +392,50 @@ class MergeAndPruneTests(unittest.TestCase):
                     updated_at=NOW,
                 )
 
-    def test_removed_query_stream_is_retained_for_7_days_then_pruned(self) -> None:
-        streams = {
-            "query.recent": checkpoint(at="2026-09-08T08:00:01Z", fingerprint="a" * 64),
-            "query.expired": checkpoint(at="2026-09-08T08:00:00Z", fingerprint="b" * 64),
-            "top": checkpoint(at="2020-01-01T00:00:00Z"),
-        }
-        pruned = prune_state(state(streams=streams), active_stream_ids={"top"}, now=NOW)
-        self.assertIn("query.recent", pruned["streams"])
-        self.assertNotIn("query.expired", pruned["streams"])
-        self.assertIn("top", pruned["streams"])
+    def test_first_inactive_run_starts_grace_even_for_old_checkpoint(self) -> None:
+        original = state(streams={
+            "query.ai": checkpoint(at="2020-01-01T00:00:00Z", fingerprint="a" * 64),
+        })
+        pruned = prune_state(original, active_stream_ids=set(), now=NOW)
+        self.assertEqual(pruned["streams"]["query.ai"]["inactive_since"], NOW)
+
+    def test_inactive_query_is_retained_before_7_days_and_deleted_at_boundary(self) -> None:
+        before = checkpoint(
+            fingerprint="a" * 64, inactive_since="2026-09-08T08:00:01Z",
+        )
+        boundary = checkpoint(
+            fingerprint="b" * 64, inactive_since="2026-09-08T08:00:00Z",
+        )
+        pruned = prune_state(
+            state(streams={"query.before": before, "query.boundary": boundary}),
+            active_stream_ids=set(), now=NOW,
+        )
+        self.assertIn("query.before", pruned["streams"])
+        self.assertNotIn("query.boundary", pruned["streams"])
+
+    def test_reactivation_and_successful_update_clear_inactive_since(self) -> None:
+        inactive = checkpoint(
+            at="2026-09-15T06:00:00Z", fingerprint="a" * 64,
+            inactive_since="2026-09-10T08:00:00Z",
+        )
+        reactivated = prune_state(
+            state(streams={"query.ai": inactive}), active_stream_ids={"query.ai"}, now=NOW,
+        )
+        self.assertNotIn("inactive_since", reactivated["streams"]["query.ai"])
+        merged = merge_checkpoint_updates(state(streams={"query.ai": inactive}), [{
+            "stream_id": "query.ai", "previous_checkpoint_at": "2026-09-15T06:00:00Z",
+            "checkpoint": checkpoint(at=NOW, fingerprint="a" * 64),
+        }], updated_at=NOW)
+        self.assertNotIn("inactive_since", merged["streams"]["query.ai"])
 
 
 class SourceStateStoreTests(unittest.TestCase):
+    def test_non_posix_store_is_explicitly_unsupported(self) -> None:
+        self.assertFalse(state_store_available("nt"))
+        with tempfile.TemporaryDirectory() as temp_dir, self.assertRaises(SourceStateError) as ctx:
+            SourceStateStore(Path(temp_dir), platform_name="nt")
+        self.assertEqual(ctx.exception.code, "unsupported-platform")
+
     def test_missing_state_load_returns_initial_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = SourceStateStore(Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc))
@@ -338,6 +457,25 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertEqual((root / "community:github.json").stat().st_mode & 0o777, 0o600)
             self.assertEqual(list(root.glob(".*.tmp")), [])
 
+    def test_store_surfaces_post_replace_durability_uncertainty(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "state"
+            store = SourceStateStore(root)
+            store.commit("community:other", [{
+                "stream_id": "top", "previous_checkpoint_at": None,
+                "checkpoint": checkpoint(at="2026-09-15T06:00:00Z"),
+            }])
+            def fail() -> None:
+                raise OSError("directory fsync failed")
+            uncertain = SourceStateStore(root, backend_hooks={"before_directory_fsync": fail})
+            with self.assertRaises(SourceStateError) as ctx:
+                uncertain.commit("community:other", [{
+                    "stream_id": "top", "previous_checkpoint_at": "2026-09-15T06:00:00Z",
+                    "checkpoint": checkpoint(at=NOW),
+                }])
+            self.assertEqual(ctx.exception.code, "state-durability-uncertain")
+            self.assertEqual(store.load("community:other")["streams"]["top"]["checkpoint_at"], NOW)
+
     def test_commit_enforces_compare_and_swap_against_disk(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = SourceStateStore(Path(temp_dir))
@@ -352,24 +490,50 @@ class SourceStateStoreTests(unittest.TestCase):
                 }])
             self.assertEqual(ctx.exception.code, "state-conflict")
 
+    def test_two_concurrent_stale_writers_allow_exactly_one_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            first = SourceStateStore(root)
+            second = SourceStateStore(root)
+            barrier = threading.Barrier(3)
+            outcomes: list[str] = []
+            outcome_lock = threading.Lock()
+            def writer(store: SourceStateStore, at: str) -> None:
+                barrier.wait()
+                try:
+                    store.commit("community:other", [{
+                        "stream_id": "top", "previous_checkpoint_at": None,
+                        "checkpoint": checkpoint(at=at),
+                    }])
+                    outcome = "committed"
+                except StateConflictError:
+                    outcome = "conflict"
+                with outcome_lock:
+                    outcomes.append(outcome)
+            threads = [
+                threading.Thread(target=writer, args=(first, "2026-09-15T08:00:01Z")),
+                threading.Thread(target=writer, args=(second, "2026-09-15T08:00:02Z")),
+            ]
+            for thread in threads:
+                thread.start()
+            barrier.wait()
+            for thread in threads:
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
+            self.assertCountEqual(outcomes, ["committed", "conflict"])
+
     def test_commit_atomically_persists_query_pruning(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             store = SourceStateStore(
                 Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
-            store.commit("community:github", [
-                {"stream_id": "query.expired", "previous_checkpoint_at": None,
-                 "checkpoint": checkpoint(at="2026-09-08T08:00:00Z", fingerprint="a" * 64)},
-                {"stream_id": "query.recent", "previous_checkpoint_at": None,
-                 "checkpoint": checkpoint(at="2026-09-08T08:00:01Z", fingerprint="b" * 64)},
-                {"stream_id": "top", "previous_checkpoint_at": None, "checkpoint": checkpoint()},
-            ])
-            store.commit(
-                "community:github", [], active_stream_ids={"top"}, now=NOW,
-            )
+            store.commit("community:github", [{
+                "stream_id": "query.ai", "previous_checkpoint_at": None,
+                "checkpoint": checkpoint(at="2020-01-01T00:00:00Z", fingerprint="a" * 64),
+            }])
+            store.commit("community:github", [], active_stream_ids=set(), now=NOW)
             persisted = store.load("community:github")
-            self.assertNotIn("query.expired", persisted["streams"])
-            self.assertIn("query.recent", persisted["streams"])
+            self.assertEqual(persisted["streams"]["query.ai"]["inactive_since"], NOW)
 
     def test_pruning_does_not_delete_a_concurrently_advanced_stream(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -387,6 +551,91 @@ class SourceStateStoreTests(unittest.TestCase):
             }])
             store.commit("community:github", [], active_stream_ids=set(), now=NOW)
             self.assertIn("query.ai", store.load("community:github")["streams"])
+
+    def test_waiting_stale_prune_cannot_delete_concurrent_success(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            setup = SourceStateStore(root)
+            old_at = "2026-08-01T00:00:00Z"
+            setup.commit("community:github", [{
+                "stream_id": "query.ai", "previous_checkpoint_at": None,
+                "checkpoint": checkpoint(at=old_at, fingerprint="a" * 64),
+            }])
+            setup.commit(
+                "community:github", [], active_stream_ids=set(), now="2026-08-02T00:00:00Z",
+            )
+            update_has_lock = threading.Event()
+            release_update = threading.Event()
+            def pause_update() -> None:
+                update_has_lock.set()
+                if not release_update.wait(timeout=5):
+                    raise RuntimeError("test update release timed out")
+            updater = SourceStateStore(root, backend_hooks={"before_replace": pause_update})
+            pruner = SourceStateStore(root)
+            failures: list[BaseException] = []
+            def update() -> None:
+                try:
+                    updater.commit("community:github", [{
+                        "stream_id": "query.ai", "previous_checkpoint_at": old_at,
+                        "checkpoint": checkpoint(at=NOW, fingerprint="a" * 64),
+                    }])
+                except BaseException as exc:
+                    failures.append(exc)
+            def prune() -> None:
+                try:
+                    pruner.commit("community:github", [], active_stream_ids=set(), now=NOW)
+                except BaseException as exc:
+                    failures.append(exc)
+            update_thread = threading.Thread(target=update)
+            prune_thread = threading.Thread(target=prune)
+            update_thread.start()
+            self.assertTrue(update_has_lock.wait(timeout=5))
+            prune_thread.start()
+            release_update.set()
+            update_thread.join(timeout=5)
+            prune_thread.join(timeout=5)
+            self.assertEqual(failures, [])
+            persisted = setup.load("community:github")["streams"]["query.ai"]
+            self.assertEqual(persisted["checkpoint_at"], NOW)
+            self.assertEqual(persisted["inactive_since"], NOW)
+
+    def test_successful_update_is_active_even_if_active_set_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = SourceStateStore(Path(temp_dir))
+            old_at = "2026-08-01T00:00:00Z"
+            store.commit("community:github", [{
+                "stream_id": "query.ai", "previous_checkpoint_at": None,
+                "checkpoint": checkpoint(at=old_at, fingerprint="a" * 64),
+            }])
+            store.commit(
+                "community:github", [], active_stream_ids=set(), now="2026-08-02T00:00:00Z",
+            )
+            store.commit("community:github", [{
+                "stream_id": "query.ai", "previous_checkpoint_at": old_at,
+                "checkpoint": checkpoint(at=NOW, fingerprint="a" * 64),
+            }], active_stream_ids=set(), now=NOW)
+            persisted = store.load("community:github")["streams"]["query.ai"]
+            self.assertNotIn("inactive_since", persisted)
+
+    def test_commit_accepts_state_at_exact_serialized_size_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = SourceStateStore(
+                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+            )
+            value = checkpoint()
+            value["cursor"] = ""
+            expected = state(source_id="community:other", streams={"top": value})
+            compact = lambda item: json.dumps(
+                item, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")
+            value["cursor"] = "x" * (MAX_STATE_BYTES - len(compact(expected)))
+            self.assertEqual(len(compact(expected)), MAX_STATE_BYTES)
+            store.commit("community:other", [{
+                "stream_id": "top", "previous_checkpoint_at": None, "checkpoint": value,
+            }])
+            self.assertEqual(
+                len(compact(store.load("community:other"))), MAX_STATE_BYTES,
+            )
 
     def test_corrupt_oversized_and_symlink_state_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
