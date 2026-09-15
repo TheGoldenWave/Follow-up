@@ -156,6 +156,129 @@ def _validate_json_shape(value: Any) -> None:
             raise SourceStateError("checkpoint contains a non-JSON value")
 
 
+def _bounded_json_string_size(value: str, limit: int) -> int:
+    """Return exact ensure_ascii=False JSON string bytes, stopping above limit."""
+    size = 2  # surrounding quotation marks
+    if size > limit:
+        raise SourceStateError("checkpoint updates exceed aggregate size limit")
+    for character in value:
+        codepoint = ord(character)
+        if character in {'"', "\\", "\b", "\f", "\n", "\r", "\t"}:
+            width = 2
+        elif codepoint < 0x20:
+            width = 6
+        elif codepoint <= 0x7F:
+            width = 1
+        elif codepoint <= 0x7FF:
+            width = 2
+        elif 0xD800 <= codepoint <= 0xDFFF:
+            raise SourceStateError("checkpoint contains invalid Unicode")
+        elif codepoint <= 0xFFFF:
+            width = 3
+        else:
+            width = 4
+        size += width
+        if size > limit:
+            raise SourceStateError("checkpoint updates exceed aggregate size limit")
+    return size
+
+
+def _bounded_json_number_size(value: int | float, limit: int) -> int:
+    if type(value) is int:
+        # Four bits encode at most one decimal digit.  This cheap lower bound
+        # rejects enormous integers before attempting a decimal conversion.
+        if value.bit_length() > max(limit, 0) * 4 + 4:
+            raise SourceStateError("checkpoint updates exceed aggregate size limit")
+        try:
+            encoded = str(value)
+        except ValueError as exc:
+            raise SourceStateError("checkpoint integer cannot be encoded") from exc
+    else:
+        encoded = repr(value)
+    if len(encoded) > limit:
+        raise SourceStateError("checkpoint updates exceed aggregate size limit")
+    return len(encoded)
+
+
+def _bounded_canonical_json_size(value: Any, limit: int) -> int:
+    """Compute exact compact canonical JSON UTF-8 bytes without serializing it."""
+    size = 0
+    stack: list[tuple[str, Any, bool]] = [("node", value, True)]
+
+    def add(width: int) -> None:
+        nonlocal size
+        size += width
+        if size > limit:
+            raise SourceStateError("checkpoint updates exceed aggregate size limit")
+
+    while stack:
+        kind, item, first = stack.pop()
+        if kind == "dict-items":
+            try:
+                key, child = next(item)
+            except StopIteration:
+                continue
+            if not first:
+                add(1)
+            add(_bounded_json_string_size(key, limit - size))
+            add(1)  # colon
+            stack.append((kind, item, False))
+            stack.append(("node", child, True))
+            continue
+        if kind == "list-items":
+            try:
+                child = next(item)
+            except StopIteration:
+                continue
+            if not first:
+                add(1)
+            stack.append((kind, item, False))
+            stack.append(("node", child, True))
+            continue
+
+        item_type = type(item)
+        if item_type is dict:
+            add(2)  # braces
+            stack.append(("dict-items", iter(item.items()), True))
+        elif item_type is list:
+            add(2)  # brackets
+            stack.append(("list-items", iter(item), True))
+        elif item_type is str:
+            add(_bounded_json_string_size(item, limit - size))
+        elif item_type in {int, float}:
+            add(_bounded_json_number_size(item, limit - size))
+        elif item_type is bool:
+            add(4 if item else 5)
+        elif item is None:
+            add(4)
+        else:  # Shape validation should make this unreachable.
+            raise SourceStateError("checkpoint contains a non-JSON value")
+    return size
+
+
+def _bounded_checkpoint_update_size(update: CheckpointUpdate, limit: int) -> int:
+    if type(update.stream_id) is not str:
+        raise SourceStateError("checkpoint stream_id must be a string")
+    if update.previous_checkpoint_at is not None and type(update.previous_checkpoint_at) is not str:
+        raise SourceStateError("previous_checkpoint_at must be a string or null")
+
+    # Exact compact JSON object framing for checkpoint/previous_checkpoint_at/stream_id.
+    size = 2 + 2 + 3  # braces, commas, colons
+    for key in ("checkpoint", "previous_checkpoint_at", "stream_id"):
+        size += _bounded_json_string_size(key, limit - size)
+    size += _bounded_json_string_size(update.stream_id, limit - size)
+    if update.previous_checkpoint_at is None:
+        size += 4
+    else:
+        size += _bounded_json_string_size(update.previous_checkpoint_at, limit - size)
+    if size > limit:
+        raise SourceStateError("checkpoint updates exceed aggregate size limit")
+    size += _bounded_canonical_json_size(update.checkpoint, limit - size)
+    if size > limit:
+        raise SourceStateError("checkpoint updates exceed aggregate size limit")
+    return size
+
+
 def _canonical_json_copy(value: dict[str, Any]) -> tuple[dict[str, Any], int]:
     try:
         encoded = json.dumps(
@@ -240,22 +363,11 @@ def validate_checkpoint_updates(
         if type(update.checkpoint) is not dict:
             raise SourceStateError(f"checkpoint_updates[{index}].checkpoint must be an object")
         _validate_json_shape(update.checkpoint)
-        checkpoint, checkpoint_bytes = _canonical_json_copy(update.checkpoint)
-        # Valid stream IDs/timestamps are bounded ASCII.  Avoid encoding an
-        # already-invalid attacker-sized metadata string before semantic checks.
-        stream_bytes = (
-            len(update.stream_id)
-            if type(update.stream_id) is str and len(update.stream_id) <= 128 else 0
-        )
-        previous_bytes = (
-            len(update.previous_checkpoint_at)
-            if type(update.previous_checkpoint_at) is str
-            and len(update.previous_checkpoint_at) <= 64 else 0
-        )
-        envelope_overhead = stream_bytes + previous_bytes + 64
-        retained_bytes += checkpoint_bytes + envelope_overhead + (1 if detached else 0)
-        if retained_bytes > MAX_CHECKPOINT_UPDATE_BYTES:
-            raise SourceStateError("checkpoint updates exceed aggregate size limit")
+        separator_bytes = 1 if detached else 0
+        remaining_bytes = MAX_CHECKPOINT_UPDATE_BYTES - retained_bytes - separator_bytes
+        update_bytes = _bounded_checkpoint_update_size(update, remaining_bytes)
+        checkpoint, _ = _canonical_json_copy(update.checkpoint)
+        retained_bytes += separator_bytes + update_bytes
         detached_update = CheckpointUpdate(
             update.stream_id, update.previous_checkpoint_at, checkpoint,
         )
@@ -344,6 +456,10 @@ class SourceResult:
     checkpoint_updates: tuple[CheckpointUpdate, ...] = ()
 
     def __post_init__(self) -> None:
+        if type(self.checkpoint_updates) not in {list, tuple}:
+            raise SourceStateError("checkpoint_updates must be a list or tuple")
+        if len(self.checkpoint_updates) > MAX_CHECKPOINT_UPDATES:
+            raise SourceStateError("too many checkpoint updates")
         object.__setattr__(self, "checkpoint_updates", tuple(self.checkpoint_updates))
 
 
@@ -439,6 +555,8 @@ class AcquisitionRuntime:
 
     @staticmethod
     def classify_exception(exc: Exception) -> tuple[str, bool]:
+        if isinstance(exc, SourceStateError):
+            return "schema-drift", False
         if isinstance(exc, AdapterError):
             return exc.status, exc.retryable
         # TimeoutError subclasses OSError; check it first.
@@ -447,6 +565,21 @@ class AcquisitionRuntime:
         if isinstance(exc, (ConnectionError, OSError)):
             return "unreachable", True
         return "error", False
+
+    @staticmethod
+    def invalid_checkpoint_result(
+        adapter: Adapter, source: str, request: dict[str, Any],
+    ) -> SourceResult:
+        return SourceResult(
+            adapter.adapter_id,
+            adapter.adapter_version,
+            source,
+            "schema-drift",
+            code="invalid-checkpoint-update",
+            message="adapter returned invalid checkpoint updates",
+            retryable=False,
+            request=request,
+        )
 
     def collect_one(
         self,
@@ -479,6 +612,8 @@ class AcquisitionRuntime:
 
         try:
             result = adapter.collect(source, request)
+        except SourceStateError:
+            return self.invalid_checkpoint_result(adapter, source, request)
         except Exception as exc:  # noqa: BLE001
             status, retryable = self.classify_exception(exc)
             return SourceResult(
@@ -493,16 +628,7 @@ class AcquisitionRuntime:
                 )
             return replace(result, checkpoint_updates=updates)
         except Exception:  # noqa: BLE001 - adapter state is an untrusted boundary
-            return SourceResult(
-                adapter.adapter_id,
-                adapter.adapter_version,
-                source,
-                "schema-drift",
-                code="invalid-checkpoint-update",
-                message="adapter returned invalid checkpoint updates",
-                retryable=False,
-                request=request,
-            )
+            return self.invalid_checkpoint_result(adapter, source, request)
 
     def run(
         self,

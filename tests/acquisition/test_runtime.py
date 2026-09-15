@@ -8,6 +8,8 @@ import unittest
 from collections.abc import Iterator, Mapping
 from unittest import mock
 
+import follow_up_acquisition.runtime as runtime_module
+
 from follow_up_acquisition.contracts import SCHEMA_VERSION
 from follow_up_acquisition.runtime import (
     AcquisitionRuntime,
@@ -76,6 +78,40 @@ class CheckpointContractTests(unittest.TestCase):
         )
         self.assertIs(result.request, FIXED_REQUEST)
         self.assertEqual(result.checkpoint_updates, ())
+
+    def test_source_result_rejects_custom_and_subclassed_update_iterables_without_iteration(self):
+        class HostileIterator:
+            iterated = False
+
+            def __iter__(self):
+                type(self).iterated = True
+                raise RuntimeError("secret-iterator-detail")
+
+        class HostileList(list):
+            iterated = False
+
+            def __iter__(self):
+                type(self).iterated = True
+                raise RuntimeError("secret-list-detail")
+
+        for updates in (HostileIterator(), HostileList()):
+            with self.assertRaises(SourceStateError) as ctx:
+                SourceResult(
+                    "fake", "1.0.0", "community:other", "ok",
+                    checkpoint_updates=updates,  # type: ignore[arg-type]
+                )
+            self.assertNotIn("secret", str(ctx.exception))
+        self.assertFalse(HostileIterator.iterated)
+        self.assertFalse(HostileList.iterated)
+
+    def test_source_result_rejects_update_count_before_tuple_conversion(self):
+        update = CheckpointUpdate("top", None, make_checkpoint())
+        oversized = [update] * (MAX_CHECKPOINT_UPDATES + 1)
+        with self.assertRaises(SourceStateError):
+            SourceResult(
+                "fake", "1.0.0", "community:other", "ok",
+                checkpoint_updates=oversized,
+            )
 
     def test_validate_checkpoint_updates_returns_detached_immutable_tuple(self):
         checkpoint = make_checkpoint(cursor={"page": 2})
@@ -179,6 +215,52 @@ class CheckpointContractTests(unittest.TestCase):
         with self.assertRaises(SourceStateError):
             validate_checkpoint_updates("community:other", updates())
         self.assertEqual(consumed, MAX_CHECKPOINT_UPDATES + 1)
+
+    def test_oversize_strings_are_rejected_before_json_serialization(self):
+        cases = (
+            "a" * (MAX_STATE_BYTES + 1),
+            "界" * (MAX_STATE_BYTES // 3 + 1),
+            '"\\\n' * (MAX_STATE_BYTES // 6 + 1),
+        )
+        for cursor in cases:
+            with mock.patch.object(
+                runtime_module, "_canonical_json_copy",
+                side_effect=AssertionError("serializer must not run"),
+            ) as serializer:
+                with self.assertRaises(SourceStateError):
+                    validate_checkpoint_updates("community:other", (
+                        CheckpointUpdate("top", None, make_checkpoint(cursor=cursor)),
+                    ))
+            serializer.assert_not_called()
+
+    def test_canonical_utf8_budget_accepts_exact_boundary_and_rejects_one_byte_less(self):
+        update = CheckpointUpdate(
+            "top", None, make_checkpoint(cursor={
+                '界"\\\n': ["😀", True, False, None, 42, -7, 1.25],
+            }),
+        )
+        canonical = json.dumps(
+            [{
+                "stream_id": update.stream_id,
+                "previous_checkpoint_at": update.previous_checkpoint_at,
+                "checkpoint": update.checkpoint,
+            }],
+            ensure_ascii=False,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        with mock.patch.object(
+            runtime_module, "MAX_CHECKPOINT_UPDATE_BYTES", len(canonical),
+        ):
+            validated = validate_checkpoint_updates("community:other", (update,))
+        self.assertEqual(thaw_checkpoint_update(validated[0])["checkpoint"], update.checkpoint)
+
+        with mock.patch.object(
+            runtime_module, "MAX_CHECKPOINT_UPDATE_BYTES", len(canonical) - 1,
+        ):
+            with self.assertRaises(SourceStateError):
+                validate_checkpoint_updates("community:other", (update,))
 
     def test_validate_checkpoint_updates_accepts_canonical_previous_timestamp(self):
         validated = validate_checkpoint_updates("community:other", (
@@ -412,6 +494,52 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(result.status, "timeout")
         self.assertTrue(result.retryable)
 
+    def test_collect_one_maps_source_result_update_shape_failure_to_fixed_diagnostic(self):
+        class HostileUpdates:
+            iterated = False
+
+            def __iter__(self):
+                type(self).iterated = True
+                raise RuntimeError("secret-iterator-detail")
+
+        class ConstructingAdapter(FakeAdapter):
+            def collect(self, source, request):
+                return SourceResult(
+                    self.adapter_id, self.adapter_version, source, "ok",
+                    (make_candidate("bad", "https://bad.example/item"),),
+                    checkpoint_updates=HostileUpdates(),  # type: ignore[arg-type]
+                )
+
+        result = self.runtime.collect_one(
+            ConstructingAdapter(), "community:other", FIXED_REQUEST,
+        )
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.candidates, ())
+        self.assertEqual(result.checkpoint_updates, ())
+        self.assertEqual(result.code, "invalid-checkpoint-update")
+        self.assertEqual(result.message, "adapter returned invalid checkpoint updates")
+        self.assertNotIn("secret", json.dumps(dataclasses.asdict(result)))
+        self.assertFalse(HostileUpdates.iterated)
+
+    def test_collect_one_maps_oversized_source_result_updates_to_fixed_diagnostic(self):
+        class ConstructingAdapter(FakeAdapter):
+            def collect(self, source, request):
+                update = CheckpointUpdate("top", None, make_checkpoint())
+                return SourceResult(
+                    self.adapter_id, self.adapter_version, source, "ok",
+                    (make_candidate("bad", "https://bad.example/item"),),
+                    checkpoint_updates=[update] * (MAX_CHECKPOINT_UPDATES + 1),
+                )
+
+        result = self.runtime.collect_one(
+            ConstructingAdapter(), "community:other", FIXED_REQUEST,
+        )
+        self.assertEqual(result.status, "schema-drift")
+        self.assertEqual(result.candidates, ())
+        self.assertEqual(result.checkpoint_updates, ())
+        self.assertEqual(result.code, "invalid-checkpoint-update")
+        self.assertEqual(result.message, "adapter returned invalid checkpoint updates")
+
     def test_collect_one_honors_availability_probe(self):
         adapter = FakeAdapter(probe="skipped-unconfigured")
         result = self.runtime.collect_one(adapter, "src:a", FIXED_REQUEST)
@@ -584,6 +712,43 @@ class OrchestrationTests(unittest.TestCase):
             self.assertEqual(
                 batches[f"independent-{index}"]["source_status"]["status"], "ok",
             )
+
+    def test_run_isolates_infinite_checkpoint_update_iterable_without_iteration(self):
+        class InfiniteUpdates:
+            iterated = False
+
+            def __iter__(self):
+                type(self).iterated = True
+                return self
+
+            def __next__(self):
+                type(self).iterated = True
+                return CheckpointUpdate("top", None, make_checkpoint())
+
+        class ConstructingAdapter(FakeAdapter):
+            def collect(self, source, request):
+                return SourceResult(
+                    self.adapter_id, self.adapter_version, source, "ok",
+                    (make_candidate("bad", "https://bad.example/item"),),
+                    checkpoint_updates=InfiniteUpdates(),  # type: ignore[arg-type]
+                )
+
+        healthy = FakeAdapter(result=SourceResult(
+            "fake", "1.0.0", "healthy", "ok",
+            (make_candidate("good", "https://good.example/item"),),
+        ))
+        batches = self.runtime.run(
+            [(ConstructingAdapter(), "hostile"), (healthy, "healthy")], FIXED_REQUEST,
+        )
+        self.assertEqual(batches["hostile"]["source_status"], {
+            "status": "schema-drift",
+            "code": "invalid-checkpoint-update",
+            "message": "adapter returned invalid checkpoint updates",
+            "retryable": False,
+        })
+        self.assertEqual(batches["hostile"]["items"], [])
+        self.assertEqual(batches["healthy"]["source_status"]["status"], "ok")
+        self.assertFalse(InfiniteUpdates.iterated)
 
     def test_run_filters_by_source_ids(self):
         adapter = FakeAdapter()
