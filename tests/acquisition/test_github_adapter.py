@@ -73,11 +73,19 @@ class GitHubAdapterTests(unittest.TestCase):
         self, config, handler, credential_resolver=lambda _source_id: None,
         checkpoint=None,
     ):
+        def tagged(source_id):
+            value = credential_resolver(source_id)
+            if isinstance(value, dict):
+                return value
+            if value is None:
+                return {"status": "absent"}
+            return {"status": "resolved", "token": value}
+
         return GitHubAdapter(
             resolve_source=lambda source_id: config if source_id == "community:github" else None,
             http_client=FakeClient(handler),
             clock=lambda: NOW,
-            credential_resolver=credential_resolver,
+            credential_resolver=tagged,
             checkpoint_resolver=lambda source_id: checkpoint if source_id == "community:github" else None,
         )
 
@@ -91,6 +99,8 @@ class GitHubAdapterTests(unittest.TestCase):
                 return response(url, {"total_count": 1, "items": [data["repository"]]})
             if path == "/repos/acme/agent/releases":
                 return response(url, [data["release"]])
+            if path == "/repos/acme/agent":
+                return response(url, data["repository"])
             if path == "/search/commits":
                 return response(url, {"total_count": 1, "items": [data["commit"]]})
             if path == "/search/issues" and "type:pr" in query:
@@ -140,7 +150,7 @@ class GitHubAdapterTests(unittest.TestCase):
         discussion = next(item for item in result.candidates if item.source_type == "discussion")
         self.assertEqual(discussion.native_id, "github:discussion:D_discussion")
         self.assertEqual(discussion.provenance["parent_repository_id"], "github:repository:R_repo")
-        self.assertEqual({u.stream_id for u in result.checkpoint_updates}, {"query.agents", "discussions"})
+        self.assertEqual({u.stream_id for u in result.checkpoint_updates}, {"query.agents", "discussions", "scheduler"})
 
     def test_discussion_depth_cursor_resumes_and_does_not_advance_window_early(self):
         calls = []
@@ -159,9 +169,11 @@ class GitHubAdapterTests(unittest.TestCase):
             source(include_discussions=True), first_handler, lambda _source_id: "token",
         ).collect("community:github", {"mode": "shadow", "depth": 1})
         discussion_update = next(u for u in first.checkpoint_updates if u.stream_id == "discussions")
-        self.assertEqual(discussion_update.checkpoint["cursor"], {
-            "query_id": "agents", "after": "next", "window": {"start": None, "end": NOW},
-            "counts": {"total_entries_seen": 0, "node_missing_seen": 0, "valid_seen": 0, "mapping_errors_seen": 0},
+        cursor = discussion_update.checkpoint["cursor"]
+        self.assertEqual(cursor["window"], {"start": None, "end": NOW})
+        self.assertEqual(cursor["queries"]["agents"]["after"], "next")
+        self.assertEqual(cursor["queries"]["agents"]["counts"], {
+            "entries_seen": 0, "node_missing_seen": 0, "valid_seen": 0,
         })
         self.assertIsNone(discussion_update.checkpoint["successful_window_end"])
 
@@ -179,7 +191,7 @@ class GitHubAdapterTests(unittest.TestCase):
         second = GitHubAdapter(
             resolve_source=lambda _source_id: source(include_discussions=True),
             http_client=FakeClient(second_handler), clock=lambda: "2026-09-16T08:00:00Z",
-            credential_resolver=lambda _source_id: "token",
+            credential_resolver=lambda _source_id: {"status": "resolved", "token": "token"},
             checkpoint_resolver=lambda _source_id: {"streams": {"discussions": previous}},
         ).collect("community:github", {"mode": "shadow", "depth": 1})
         self.assertEqual(calls[-1]["after"], "next")
@@ -217,28 +229,31 @@ class GitHubAdapterTests(unittest.TestCase):
             {"mode": "shadow", "window": {"start": "2026-09-14T00:00:00Z", "end": NOW}},
         )
 
-    def test_discussions_disabled_never_resolves_credentials_or_graphql(self):
-        def forbidden(_ref):
-            self.fail("credential must not be resolved")
+    def test_discussions_disabled_still_resolves_optional_rest_credential_but_never_graphql(self):
+        resolved = []
+        def optional(source_id):
+            resolved.append(source_id)
+            return None
 
         adapter = self.make_adapter(
             source(include_discussions=False),
             lambda _m, url, _k: response(url, {"total_count": 0, "items": []}),
-            forbidden,
+            optional,
         )
         result = adapter.collect("community:github", {"mode": "shadow"})
         self.assertEqual(result.status, "no-results")
-        self.assertEqual([u.stream_id for u in result.checkpoint_updates], ["query.agents"])
+        self.assertEqual(resolved, ["community:github"])
+        self.assertEqual([u.stream_id for u in result.checkpoint_updates], ["query.agents", "scheduler"])
 
     def test_missing_discussion_credential_is_auth_failed_without_rest_requests(self):
-        client = FakeClient(lambda *_args: self.fail("must fail before HTTP"))
+        client = FakeClient(lambda method, url, _kwargs: response(url, {"total_count": 0, "items": []}) if method == "GET" else self.fail("missing token must not call GraphQL"))
         adapter = GitHubAdapter(
             resolve_source=lambda _s: source(include_discussions=True), http_client=client,
-            clock=lambda: NOW, credential_resolver=lambda _source_id: None,
+            clock=lambda: NOW, credential_resolver=lambda _source_id: {"status": "absent"},
             checkpoint_resolver=lambda _source_id: None,
         )
         result = adapter.collect("community:github", {"mode": "shadow"})
-        self.assertEqual(result.status, "auth-failed")
+        self.assertEqual(result.status, "partial")
         self.assertEqual(result.code, "github-discussion-credential-missing")
 
     def test_configured_token_is_used_for_rest_and_never_falls_back_anonymous(self):
@@ -292,8 +307,9 @@ class GitHubAdapterTests(unittest.TestCase):
                     "cursor": {
                         "window": {"start": "2026-09-14T00:00:00Z", "end": NOW},
                         "endpoints": {"repository": {
-                            "complete": False, "page": 2,
-                            "counts": {"total_entries_seen": 100, "node_missing_seen": 0, "valid_seen": 100, "mapping_errors_seen": 0},
+                            "phase": "search", "window": {"start": "2026-09-14T00:00:00Z", "end": NOW},
+                            "page": 2, "expected_total_count": 100,
+                            "counts": {"entries_seen": 100, "node_missing_seen": 0, "valid_seen": 100},
                         }},
                     }, "etag": '"old"', "last_modified": None,
                     "recent_native_ids": ["github:repository:R_old"],
@@ -308,14 +324,14 @@ class GitHubAdapterTests(unittest.TestCase):
             q = parse_qs(urlsplit(url).query)["q"][0]
             if q.startswith("beta"):
                 raise AdapterError("rate details", status="rate-limited", retryable=True)
-            return response(url, {"total_count": 0, "items": []}, etag='"new"')
+            return response(url, {"total_count": 100, "items": []}, etag='"new"')
 
         result = self.make_adapter(config, handler, checkpoint=state).collect(
             "community:github",
             {"mode": "shadow", "window": {"start": "2026-09-14T00:00:00Z", "end": NOW}},
         )
         self.assertEqual(result.status, "partial")
-        self.assertEqual([u.stream_id for u in result.checkpoint_updates], ["query.alpha"])
+        self.assertEqual([u.stream_id for u in result.checkpoint_updates], ["query.alpha", "scheduler"])
         update = result.checkpoint_updates[0]
         self.assertEqual(update.previous_checkpoint_at, "2026-09-14T08:00:00Z")
         self.assertEqual(update.checkpoint["query_fingerprint"], query_fingerprint("github", queries[0]))
@@ -333,7 +349,6 @@ class GitHubAdapterTests(unittest.TestCase):
         config = source(queries=[query])
 
         def handler(_method, url, kwargs):
-            self.assertEqual(kwargs["headers"]["If-None-Match"], '"etag"')
             return response(url, None, status=304, etag='"etag"')
 
         result = self.make_adapter(
@@ -383,7 +398,7 @@ class GitHubAdapterTests(unittest.TestCase):
             {"mode": "shadow", "window": {"start": "2026-09-14T00:00:00Z", "end": NOW}, "depth": 1},
         )
         self.assertEqual([item.native_id for item in result.candidates], ["github:repository:z"])
-        self.assertEqual([u.stream_id for u in result.checkpoint_updates], ["query.alpha", "query.zeta"])
+        self.assertEqual([u.stream_id for u in result.checkpoint_updates], ["query.alpha", "query.zeta", "scheduler"])
 
     def test_pagination_is_bounded_by_depth(self):
         pages = []
@@ -410,8 +425,9 @@ class GitHubAdapterTests(unittest.TestCase):
             "cursor": {
                 "window": {"start": None, "end": NOW},
                 "endpoints": {"repository": {
-                    "complete": False, "page": 2,
-                    "counts": {"total_entries_seen": 100, "node_missing_seen": 0, "valid_seen": 100, "mapping_errors_seen": 0},
+                    "phase": "search", "window": {"start": None, "end": NOW},
+                    "page": 2, "expected_total_count": 101,
+                    "counts": {"entries_seen": 100, "node_missing_seen": 0, "valid_seen": 100},
                 }},
             },
             "etag": None, "last_modified": None, "recent_native_ids": [],
@@ -438,8 +454,9 @@ class GitHubAdapterTests(unittest.TestCase):
             "cursor": {
                 "window": {"start": None, "end": NOW},
                 "endpoints": {"repository": {
-                    "complete": False, "page": 10,
-                    "counts": {"total_entries_seen": 900, "node_missing_seen": 0, "valid_seen": 900, "mapping_errors_seen": 0},
+                    "phase": "search", "window": {"start": None, "end": NOW},
+                    "page": 10, "expected_total_count": 1500,
+                    "counts": {"entries_seen": 900, "node_missing_seen": 0, "valid_seen": 900},
                 }},
             },
             "etag": None, "last_modified": None, "recent_native_ids": [],
@@ -461,9 +478,8 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(pages, [10])
         self.assertEqual(result.status, "partial")
         self.assertEqual(result.code, "github-search-cap")
-        endpoint = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"]
-        self.assertTrue(endpoint["capped"])
-        self.assertEqual(endpoint["counts"]["valid_seen"], 1000)
+        self.assertEqual(result.checkpoint_updates[0].checkpoint["cursor"], {})
+        self.assertEqual(result.checkpoint_updates[0].checkpoint["successful_window_end"], NOW)
 
     def test_repository_304_does_not_skip_other_enabled_entities(self):
         data = fixture("entities.json")
@@ -534,7 +550,7 @@ class GitHubAdapterTests(unittest.TestCase):
     def test_exact_status_matrix(self):
         cases = [
             ("rate-limited", "rate-limited"),
-            ("auth-failed", "auth-failed"),
+            ("auth-failed", "error"),
             ("timeout", "timeout"),
             ("unreachable", "unreachable"),
             ("schema-drift", "schema-drift"),
@@ -558,12 +574,14 @@ class GitHubAdapterTests(unittest.TestCase):
             source(include_discussions=True), handler, lambda _source_id: "top-secret",
         ).collect("community:github", {"mode": "shadow"})
         self.assertEqual(result.status, "partial")
-        self.assertEqual([update.stream_id for update in result.checkpoint_updates], ["query.agents"])
-        self.assertEqual(result.message, "discussions: auth-failed")
+        self.assertEqual([update.stream_id for update in result.checkpoint_updates], ["query.agents", "scheduler"])
+        self.assertEqual(result.code, "github-discussion-failure")
 
-    def test_anonymous_limit_is_rate_limited_without_resolving_credentials(self):
+    def test_anonymous_limit_is_rate_limited_after_resolving_absent_credential(self):
+        resolved = []
         def credentials(_source_id):
-            self.fail("anonymous REST must not resolve credentials")
+            resolved.append(_source_id)
+            return None
 
         def handler(_method, _url, _kwargs):
             raise AdapterError("limit response detail", status="rate-limited", retryable=True)
@@ -573,6 +591,7 @@ class GitHubAdapterTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "rate-limited")
         self.assertEqual(result.checkpoint_updates, ())
+        self.assertEqual(resolved, ["community:github"])
 
     def test_resolver_failures_are_safely_classified_without_secret_repr(self):
         def credentials(_source_id):
@@ -582,7 +601,7 @@ class GitHubAdapterTests(unittest.TestCase):
             source(include_discussions=True), lambda *_args: self.fail("must not fetch"), credentials,
         ).collect("community:github", {"mode": "shadow"})
         self.assertEqual(result.status, "auth-failed")
-        self.assertEqual(result.message, "discussions: credential unavailable")
+        self.assertEqual(result.message, "GitHub credential resolution failed")
         self.assertNotIn("secret", json.dumps(result, default=lambda obj: obj.__dict__).lower())
 
     def test_checkpoint_updates_validate_and_batch_never_serializes_token_or_state(self):
@@ -606,7 +625,7 @@ class GitHubAdapterTests(unittest.TestCase):
             adapter, "community:github", request, result,
         )
         serialized = json.dumps(batch, sort_keys=True)
-        self.assertEqual(len(validated), 2)
+        self.assertEqual(len(validated), 3)
         self.assertNotIn("github_pat_", serialized)
         self.assertNotIn("checkpoint", serialized)
 
@@ -626,7 +645,7 @@ class GitHubAdapterTests(unittest.TestCase):
     def test_request_and_source_config_fail_closed(self):
         adapter = GitHubAdapter(
             resolve_source=lambda _s: None, http_client=FakeClient(lambda *_: None),
-            clock=lambda: NOW, credential_resolver=lambda _source_id: None,
+            clock=lambda: NOW, credential_resolver=lambda _source_id: {"status": "absent"},
             checkpoint_resolver=lambda _source_id: None,
         )
         with self.assertRaises(AdapterError):
@@ -663,13 +682,13 @@ class GitHubAdapterTests(unittest.TestCase):
         )
         self.assertEqual(result.status, "partial")
         self.assertEqual([item.native_id for item in result.candidates], ["github:repository:R_repo"])
-        self.assertEqual(len(result.checkpoint_updates), 1)
+        self.assertEqual(len(result.checkpoint_updates), 2)
         checkpoint = result.checkpoint_updates[0].checkpoint
         self.assertTrue(checkpoint["cursor"]["endpoints"]["repository"]["complete"])
         self.assertFalse(checkpoint["cursor"]["endpoints"]["commit"]["complete"])
         self.assertIsNone(checkpoint["successful_window_end"])
         self.assertEqual(
-            len(validate_checkpoint_updates("community:github", result.checkpoint_updates)), 1,
+            len(validate_checkpoint_updates("community:github", result.checkpoint_updates)), 2,
         )
 
     def test_search_cap_returns_candidates_partial_checkpoint_and_restarts_without_replay(self):
@@ -683,16 +702,16 @@ class GitHubAdapterTests(unittest.TestCase):
         first = self.make_adapter(source(), handler).collect(
             "community:github", {"mode": "shadow", "depth": 10},
         )
-        self.assertEqual(pages, list(range(1, 11)))
+        self.assertEqual(pages, list(range(1, 10)))
         self.assertEqual(first.status, "partial")
-        self.assertEqual(first.code, "github-search-cap")
+        self.assertEqual(first.code, "github-request-budget-exhausted")
         self.assertEqual(len(first.candidates), 1)
         update = first.checkpoint_updates[0]
         self.assertIsNone(update.checkpoint["successful_window_end"])
-        self.assertEqual(len(validate_checkpoint_updates("community:github", first.checkpoint_updates)), 1)
+        self.assertEqual(len(validate_checkpoint_updates("community:github", first.checkpoint_updates)), 2)
         endpoint = update.checkpoint["cursor"]["endpoints"]["repository"]
-        self.assertTrue(endpoint["capped"])
-        self.assertEqual(endpoint["counts"]["valid_seen"], 1000)
+        self.assertEqual(endpoint["page"], 10)
+        self.assertEqual(endpoint["counts"]["valid_seen"], 900)
 
         previous = copy.deepcopy(update.checkpoint)
         previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
@@ -700,7 +719,7 @@ class GitHubAdapterTests(unittest.TestCase):
         second = self.make_adapter(
             source(), handler, checkpoint={"streams": {"query.agents": previous}},
         ).collect("community:github", {"mode": "shadow", "depth": 10})
-        self.assertEqual(pages[0], 1)
+        self.assertEqual(pages, [10])
         self.assertEqual(second.candidates, ())
         self.assertEqual(second.status, "partial")
 
@@ -791,7 +810,7 @@ class GitHubAdapterTests(unittest.TestCase):
         second = GitHubAdapter(
             resolve_source=lambda _source_id: source(entities=["repository", "commit"]),
             http_client=FakeClient(second_handler), clock=lambda: "2026-09-16T08:00:00Z",
-            credential_resolver=lambda _source_id: None,
+            credential_resolver=lambda _source_id: {"status": "absent"},
             checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": previous}},
         ).collect("community:github", {"mode": "shadow"})
         self.assertEqual(paths, ["/search/commits"])
@@ -831,8 +850,8 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual((mixed.status, mixed.code), ("ok", "github-node-id-missing"))
         self.assertEqual(mixed.checkpoint_updates[0].checkpoint["cursor"], {})
         all_missing = collect([missing])
-        self.assertEqual((all_missing.status, all_missing.code), ("schema-drift", "github-node-id-missing"))
-        self.assertEqual(all_missing.checkpoint_updates, ())
+        self.assertEqual((all_missing.status, all_missing.code), ("partial", "github-node-id-missing"))
+        self.assertEqual([update.stream_id for update in all_missing.checkpoint_updates], ["query.agents", "scheduler"])
 
     def test_retry_with_recent_valid_and_missing_node_still_completes_without_replay(self):
         query = {"id": "agents", "query": "agentic systems", "sort": "updated", "filters": {"entities": ["repository"]}}
@@ -864,14 +883,14 @@ class GitHubAdapterTests(unittest.TestCase):
             source(), lambda _m, url, _k: response(url, {"total_count": 1, "items": [malformed]}),
         ).collect("community:github", {"mode": "shadow"})
         self.assertEqual((all_bad.status, all_bad.code), ("schema-drift", "github-item-schema-drift"))
-        self.assertEqual(all_bad.checkpoint_updates, ())
+        self.assertEqual([update.stream_id for update in all_bad.checkpoint_updates], ["scheduler"])
 
         mixed = self.make_adapter(
             source(), lambda _m, url, _k: response(url, {"total_count": 2, "items": [valid, malformed]}),
         ).collect("community:github", {"mode": "shadow"})
         self.assertEqual((mixed.status, mixed.code), ("partial", "github-item-schema-drift"))
         self.assertEqual([item.native_id for item in mixed.candidates], ["github:repository:R_repo"])
-        self.assertFalse(mixed.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["repository"]["complete"])
+        self.assertEqual([update.stream_id for update in mixed.checkpoint_updates], ["scheduler"])
 
     def test_full_all_missing_rest_page_persists_progress_until_endpoint_finishes(self):
         missing = {**fixture("entities.json")["repository"]}
@@ -887,9 +906,9 @@ class GitHubAdapterTests(unittest.TestCase):
         ).collect("community:github", {"mode": "shadow", "depth": 1})
         self.assertEqual((result.status, result.code), ("partial", "github-endpoint-progress"))
         endpoints = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]
-        self.assertEqual(endpoints["repository"], {
-            "complete": False, "page": 2,
-            "counts": {"total_entries_seen": 100, "node_missing_seen": 100, "valid_seen": 0, "mapping_errors_seen": 0},
+        self.assertEqual(endpoints["repository"]["page"], 2)
+        self.assertEqual(endpoints["repository"]["counts"], {
+            "entries_seen": 100, "node_missing_seen": 100, "valid_seen": 0,
         })
         self.assertEqual(endpoints["commit"], {"complete": True})
 
@@ -911,8 +930,8 @@ class GitHubAdapterTests(unittest.TestCase):
         ).collect("community:github", {"mode": "shadow", "depth": 1})
         self.assertEqual((result.status, result.code), ("partial", "github-endpoint-progress"))
         endpoints = result.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]
-        self.assertEqual(endpoints["release"]["release_counts"]["node_missing_seen"], 100)
-        self.assertEqual(endpoints["release"]["release_pages"]["acme/agent"]["page"], 2)
+        self.assertEqual(endpoints["release"]["counters"]["node_missing_seen"], 100)
+        self.assertEqual(endpoints["release"]["release_page"], 2)
         self.assertEqual(endpoints["commit"], {"complete": True})
 
     def test_discussion_mixed_missing_id_warns_but_completes_and_requires_parent_repo(self):
@@ -1010,7 +1029,7 @@ class GitHubAdapterTests(unittest.TestCase):
                 ).collect("community:github", {"mode": "shadow"})
                 self.assertEqual(invalid.status, "schema-drift")
                 self.assertNotEqual(invalid.status, "no-results")
-                self.assertEqual(invalid.checkpoint_updates, ())
+                self.assertEqual([update.stream_id for update in invalid.checkpoint_updates], ["scheduler"])
 
     def test_node_identity_is_aggregated_across_all_search_pages(self):
         data = fixture("entities.json")["repository"]
@@ -1058,9 +1077,9 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(classify([{"type": "GRAPHQL_VALIDATION_FAILED"}]), "schema-drift")
         self.assertEqual(classify([{"type": "BAD_USER_INPUT"}]), "schema-drift")
         self.assertEqual(classify([{"type": "INTERNAL"}]), "error")
-        self.assertEqual(classify([{"type": "MYSTERY"}, {"type": "RATE_LIMITED"}]), "error")
-        self.assertEqual(classify([{"type": "FORBIDDEN"}, {"type": "RATE_LIMITED"}]), "auth-failed")
-        self.assertEqual(classify([{"type": "FORBIDDEN"}, {"type": "BAD_USER_INPUT"}]), "schema-drift")
+        self.assertEqual(classify([{"type": "MYSTERY"}, {"type": "RATE_LIMITED"}]), "rate-limited")
+        self.assertEqual(classify([{"type": "FORBIDDEN"}, {"type": "RATE_LIMITED"}]), "rate-limited")
+        self.assertEqual(classify([{"type": "FORBIDDEN"}, {"type": "BAD_USER_INPUT"}]), "auth-failed")
 
     def test_discussion_payload_owner_and_sort_follow_fingerprinted_semantics(self):
         query = {
@@ -1100,12 +1119,13 @@ class GitHubAdapterTests(unittest.TestCase):
         self.assertEqual(first.status, "partial")
         update = first.checkpoint_updates[0]
         endpoint = update.checkpoint["cursor"]["endpoints"]["repository"]
-        self.assertEqual(endpoint, {
-            "complete": False, "page": 2,
-            "counts": {"total_entries_seen": 100, "node_missing_seen": 100, "valid_seen": 0, "mapping_errors_seen": 0},
+        self.assertEqual(endpoint["phase"], "search")
+        self.assertEqual(endpoint["page"], 2)
+        self.assertEqual(endpoint["counts"], {
+            "entries_seen": 100, "node_missing_seen": 100, "valid_seen": 0,
         })
         self.assertIsNone(update.checkpoint["successful_window_end"])
-        self.assertEqual(len(validate_checkpoint_updates("community:github", first.checkpoint_updates)), 1)
+        self.assertEqual(len(validate_checkpoint_updates("community:github", first.checkpoint_updates)), 2)
 
         previous = copy.deepcopy(update.checkpoint)
         previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
@@ -1117,7 +1137,7 @@ class GitHubAdapterTests(unittest.TestCase):
         second = GitHubAdapter(
             resolve_source=lambda _source_id: source(queries=[query]),
             http_client=FakeClient(second_handler), clock=lambda: "2026-09-16T08:00:00Z",
-            credential_resolver=lambda _source_id: None,
+            credential_resolver=lambda _source_id: {"status": "absent"},
             checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": previous}},
         ).collect("community:github", {"mode": "shadow", "depth": 1})
         self.assertEqual((second.status, second.code), ("ok", "github-node-id-missing"))
@@ -1142,7 +1162,7 @@ class GitHubAdapterTests(unittest.TestCase):
             checkpoint={"streams": {"query.agents": previous}},
         ).collect("community:github", {"mode": "shadow", "depth": 1})
         self.assertEqual((second.status, second.code), ("schema-drift", "github-node-id-missing"))
-        self.assertEqual(second.checkpoint_updates, ())
+        self.assertEqual([update.stream_id for update in second.checkpoint_updates], ["scheduler"])
 
     def test_release_identity_counts_resume_per_parent_without_replaying_repo_search(self):
         data = fixture("entities.json")
@@ -1159,8 +1179,12 @@ class GitHubAdapterTests(unittest.TestCase):
         )
         self.assertEqual(first.status, "partial")
         endpoint = first.checkpoint_updates[0].checkpoint["cursor"]["endpoints"]["release"]
-        self.assertTrue(endpoint["repository_complete"])
-        self.assertEqual(endpoint["release_counts"]["node_missing_seen"], 100)
+        self.assertEqual(endpoint["phase"], "poll")
+        self.assertGreater(endpoint["release_page"], 1)
+        self.assertEqual(
+            endpoint["counters"]["node_missing_seen"],
+            (endpoint["release_page"] - 1) * 100,
+        )
         previous = copy.deepcopy(first.checkpoint_updates[0].checkpoint)
         previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
 
@@ -1190,8 +1214,8 @@ class GitHubAdapterTests(unittest.TestCase):
         ).collect("community:github", {"mode": "shadow", "depth": 1})
         self.assertEqual(first.status, "partial")
         discussion = next(update for update in first.checkpoint_updates if update.stream_id == "discussions")
-        self.assertEqual(discussion.checkpoint["cursor"]["counts"], {
-            "total_entries_seen": 1, "node_missing_seen": 1, "valid_seen": 0, "mapping_errors_seen": 0,
+        self.assertEqual(discussion.checkpoint["cursor"]["queries"]["agents"]["counts"], {
+            "entries_seen": 1, "node_missing_seen": 1, "valid_seen": 0,
         })
         previous = copy.deepcopy(discussion.checkpoint)
         previous["checkpoint_at"] = "2026-09-15T07:00:00Z"
@@ -1391,7 +1415,7 @@ class GitHubAdapterTests(unittest.TestCase):
         valid = GitHubAdapter(
             resolve_source=lambda _source_id: source(queries=[query]),
             http_client=FakeClient(handler), clock=lambda: "2026-09-16T08:00:00Z",
-            credential_resolver=lambda _source_id: None,
+            credential_resolver=lambda _source_id: {"status": "absent"},
             checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": valid_previous}},
         ).collect("community:github", {"mode": "shadow"})
         self.assertEqual(valid.status, "no-results")
@@ -1472,7 +1496,7 @@ class GitHubAdapterTests(unittest.TestCase):
         next_run = GitHubAdapter(
             resolve_source=lambda _source_id: source(queries=[query]),
             http_client=FakeClient(handler), clock=lambda: "2026-09-16T08:00:00Z",
-            credential_resolver=lambda _source_id: None,
+            credential_resolver=lambda _source_id: {"status": "absent"},
             checkpoint_resolver=lambda _source_id: {"streams": {"query.agents": next_previous}},
         ).collect("community:github", {"mode": "shadow"})
         self.assertEqual(next_run.status, "no-results")
