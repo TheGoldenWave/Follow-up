@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>r/artificial</title>
+    <item>
+      <title>First agent post</title>
+      <link>https://www.reddit.com/r/artificial/comments/abc123/first_post/</link>
+      <guid isPermaLink="false">t3_abc123</guid>
+      <published>2026-09-15T08:00:00+00:00</published>
+      <score>42</score>
+      <num_comments>7</num_comments>
+      <upvote_ratio>0.91</upvote_ratio>
+    </item>
+    <item>
+      <title>Second post</title>
+      <link>https://www.reddit.com/r/artificial/comments/def456/second_post/</link>
+      <guid isPermaLink="false">t3_def456</guid>
+      <published>2026-09-15T09:00:00+00:00</published>
+    </item>
+    <item>
+      <title>Duplicate of first post</title>
+      <link>https://www.reddit.com/r/artificial/comments/abc123/duplicate_slug/</link>
+      <guid isPermaLink="false">t3_abc123</guid>
+      <published>2026-09-15T09:30:00+00:00</published>
+      <score>99</score>
+    </item>
+    <item>
+      <title>Fourth post</title>
+      <link>https://www.reddit.com/r/artificial/comments/ghi789/fourth_post/</link>
+      <guid isPermaLink="false">t3_ghi789</guid>
+      <published>2026-09-15T10:00:00+00:00</published>
+    </item>
+  </channel>
+</rss>

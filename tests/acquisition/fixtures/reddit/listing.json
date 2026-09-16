@@ -1,0 +1,64 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": "t3_listing2",
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "abc123",
+          "name": "t3_abc123",
+          "subreddit": "artificial",
+          "title": "Listing first agent post",
+          "permalink": "/r/artificial/comments/abc123/listing_first/",
+          "url": "https://example.com/articles/first-agent",
+          "score": 55,
+          "num_comments": 12,
+          "upvote_ratio": 0.87,
+          "created_utc": 1789459200,
+          "link_flair_text": "Research"
+        }
+      },
+      {
+        "kind": "t1",
+        "data": {
+          "id": "comment1",
+          "subreddit": "artificial",
+          "body": "This comment must be ignored"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "abc123",
+          "name": "t3_abc123",
+          "subreddit": "artificial",
+          "title": "Duplicate listing post",
+          "permalink": "/r/artificial/comments/abc123/duplicate_listing/",
+          "url": "https://example.com/articles/duplicate",
+          "score": 999,
+          "num_comments": 999,
+          "upvote_ratio": 0.5,
+          "created_utc": 1789459300,
+          "link_flair_text": "Rumor"
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "listing2",
+          "name": "t3_listing2",
+          "subreddit": "artificial",
+          "title": "Listing second agent post",
+          "permalink": "/r/artificial/comments/listing2/second_listing/",
+          "url": "https://example.com/articles/second-agent",
+          "score": 18,
+          "num_comments": 4,
+          "upvote_ratio": 0.75,
+          "created_utc": 1789466400,
+          "link_flair_text": "Discussion"
+        }
+      }
+    ]
+  }
+}

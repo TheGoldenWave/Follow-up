@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>r/artificial</title>
+  <entry>
+    <title>Atom agent post</title>
+    <id>t3_atom1</id>
+    <link href="https://www.reddit.com/r/artificial/comments/atom1/atom_post/"/>
+    <published>2026-09-15T08:00:00+00:00</published>
+    <updated>2026-09-15T08:30:00+00:00</updated>
+    <score>24</score>
+    <num_comments>3</num_comments>
+    <upvote_ratio>0.8</upvote_ratio>
+  </entry>
+  <entry>
+    <title>Atom post with updated only</title>
+    <id>t3_atom2</id>
+    <link href="https://www.reddit.com/r/artificial/comments/atom2/atom_post_two/"/>
+    <updated>2026-09-15T09:00:00+00:00</updated>
+  </entry>
+</feed>
