@@ -192,11 +192,18 @@ def _require_bounded_integer(value: Any, label: str, *, minimum: int, maximum: i
         raise ConfigError(f"{label} must be an integer from {minimum} to {maximum}")
 
 
-def _require_https_url(value: Any, label: str, *, template: bool = False) -> None:
+def _require_https_url(value: Any, label: str, *, template: str | bool = False) -> None:
     text = _require_string(value, label)
-    if template and text.count("{date}") != 1:
-        raise ConfigError(f"{label} must contain exactly one {{date}} placeholder")
-    candidate = text.replace("{date}", "2000-01-01") if template else text
+    if template:
+        placeholder = "{date}" if template is True else str(template)
+        replacement = "2000-01-01" if placeholder == "{date}" else "260915/h2000"
+        if text.count(placeholder) != 1:
+            raise ConfigError(f"{label} must contain exactly one {placeholder} placeholder")
+        candidate = text.replace(placeholder, replacement)
+        if re.search(r"\{[^}]*\}", candidate):
+            raise ConfigError(f"{label} must contain only the {placeholder} placeholder")
+    else:
+        candidate = text
     try:
         parsed = urlparse(candidate)
         hostname = parsed.hostname
@@ -406,7 +413,7 @@ def _validate_input(source: dict[str, Any], index: int) -> None:
             raise ConfigError(f"{label}.subreddit must match both Reddit URLs")
     elif adapter == "techmeme":
         _require_https_url(value["archive_url_template"],
-                           f"{label}.archive_url_template", template=True)
+                           f"{label}.archive_url_template", template="{snapshot}")
     elif adapter == "hugging-face-papers":
         _require_string_list(value["views"], f"{label}.views", nonempty=True)
         if value["views"] != ["daily", "trending", "weekly"]:

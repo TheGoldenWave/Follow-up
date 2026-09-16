@@ -832,7 +832,7 @@
       "budget": 10,
       "input": {
         "front_url": "https://www.techmeme.com/",
-        "archive_url_template": "https://www.techmeme.com/{date}"
+        "archive_url_template": "https://www.techmeme.com/{snapshot}"
       },
       "legacy": { "feed": null }
     },

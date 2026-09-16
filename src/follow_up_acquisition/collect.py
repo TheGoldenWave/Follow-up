@@ -12,15 +12,16 @@ from dataclasses import dataclass
 from typing import Any
 
 from .adapters.rss import RssAdapter
+from .adapters.techmeme import TechmemeAdapter
 from .adapters.web_publication import WebPublicationAdapter
 from .runtime import AcquisitionRuntime
 from .runtime import CheckpointUpdate
 
 SHADOW_REQUEST: dict[str, str] = {"mode": "shadow"}
 
-# Adapters wired for v0.3.0 local collection. The remaining adapter ids in the
-# registry stay deferred to later versions per the frozen scope.
-_COLLECTABLE_ADAPTERS = frozenset({"rss", "web-publication"})
+# Adapters wired for local collection. Unimplemented registry adapters stay
+# deferred so a partial rollout never breaks the rest of the run.
+_COLLECTABLE_ADAPTERS = frozenset({"rss", "techmeme", "web-publication"})
 
 
 @dataclass(frozen=True)
@@ -60,12 +61,15 @@ def build_source_pairs(sources: list[dict[str, Any]]) -> list[tuple[Any, str]]:
     """Return ``[(adapter, source_id)]`` for every collectable source."""
     by_id = {source["id"]: source for source in sources}
     rss = RssAdapter(resolve_source=lambda source_id: by_id[source_id])
+    techmeme = TechmemeAdapter(resolve_source=lambda source_id: by_id[source_id])
     web = WebPublicationAdapter(resolve_source=lambda source_id: by_id[source_id])
 
     pairs: list[tuple[Any, str]] = []
     for source in sources:
         if source["adapter"] == "rss":
             pairs.append((rss, source["id"]))
+        elif source["adapter"] == "techmeme":
+            pairs.append((techmeme, source["id"]))
         elif source["adapter"] == "web-publication":
             pairs.append((web, source["id"]))
     return pairs

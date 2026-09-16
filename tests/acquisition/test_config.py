@@ -101,7 +101,7 @@ VALID_ADAPTER_INPUTS = {
                "rss_url": "https://www.reddit.com/r/MachineLearning/.rss",
                "listing_url": "https://www.reddit.com/r/MachineLearning/new.json"},
     "techmeme": {"front_url": "https://www.techmeme.com/",
-                 "archive_url_template": "https://www.techmeme.com/{date}"},
+                 "archive_url_template": "https://www.techmeme.com/{snapshot}"},
     "hugging-face-papers": {"structured_endpoint": "https://huggingface.co/api/daily_papers",
                             "page_base_url": "https://huggingface.co/papers",
                             "views": ["daily", "trending", "weekly"], "timezone": "Asia/Shanghai"},
@@ -377,6 +377,34 @@ class SourceRegistryValidationTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ConfigError, "subreddit"):
             validate_source_registry(_registry([source]))
+
+    def test_techmeme_archive_template_requires_snapshot_placeholder(self):
+        base = {"front_url": "https://www.techmeme.com/"}
+        for archive_url_template in (
+            "https://www.techmeme.com/{date}",
+            "https://www.techmeme.com/",
+            "https://www.techmeme.com/{snapshot}/{date}",
+            "http://www.techmeme.com/{snapshot}",
+        ):
+            with self.subTest(archive_url_template=archive_url_template):
+                source = _mutate(
+                    id="community:techmeme-test", channel=None, channel_policy="core-topic",
+                    adapter="techmeme", input={**base, "archive_url_template": archive_url_template},
+                    legacy={"feed": None},
+                )
+                with self.assertRaises(ConfigError):
+                    validate_source_registry(_registry([source]))
+
+    def test_techmeme_archive_template_accepts_snapshot_placeholder(self):
+        source = _mutate(
+            id="community:techmeme-test", channel=None, channel_policy="core-topic",
+            adapter="techmeme", input={
+                "front_url": "https://www.techmeme.com/",
+                "archive_url_template": "https://www.techmeme.com/{snapshot}",
+            },
+            legacy={"feed": None},
+        )
+        validate_source_registry(_registry([source]))
 
     def test_rejects_hugging_face_view_order_or_timezone_shape(self):
         base = {"structured_endpoint": "https://huggingface.co/api/papers",

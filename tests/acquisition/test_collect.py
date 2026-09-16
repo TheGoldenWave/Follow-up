@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from follow_up_acquisition.adapters.rss import RssAdapter
+from follow_up_acquisition.adapters.techmeme import TechmemeAdapter
 from follow_up_acquisition.adapters.web_publication import WebPublicationAdapter
 from follow_up_acquisition.collect import (
     CollectionRun,
@@ -38,17 +39,24 @@ class BuildSourcePairsTests(unittest.TestCase):
     def test_shadow_request_mode(self):
         self.assertEqual(SHADOW_REQUEST, {"mode": "shadow"})
 
-    def test_maps_rss_and_web_publication_adapters(self):
+    def test_maps_rss_techmeme_and_web_publication_adapters(self):
         sources = [
             _source("newsletter:x", "rss"),
+            _source("community:techmeme", "techmeme"),
             _source("blog:y", "web-publication"),
         ]
+        sources[1]["input"] = {
+            "front_url": "https://www.techmeme.com/",
+            "archive_url_template": "https://www.techmeme.com/{snapshot}",
+        }
         pairs = build_source_pairs(sources)
-        self.assertEqual(len(pairs), 2)
+        self.assertEqual(len(pairs), 3)
         self.assertIsInstance(pairs[0][0], RssAdapter)
         self.assertEqual(pairs[0][1], "newsletter:x")
-        self.assertIsInstance(pairs[1][0], WebPublicationAdapter)
-        self.assertEqual(pairs[1][1], "blog:y")
+        self.assertIsInstance(pairs[1][0], TechmemeAdapter)
+        self.assertEqual(pairs[1][1], "community:techmeme")
+        self.assertIsInstance(pairs[2][0], WebPublicationAdapter)
+        self.assertEqual(pairs[2][1], "blog:y")
 
     def test_skips_unimplemented_adapters(self):
         sources = [
@@ -93,6 +101,11 @@ class CollectSourcesTests(unittest.TestCase):
         }
         hf = _source("academic:hugging-face-papers", "hugging-face-papers")
         hf["input"] = {"views": ["weekly", "daily", "trending"]}
+        techmeme = _source("community:techmeme", "techmeme")
+        techmeme["input"] = {
+            "front_url": "https://www.techmeme.com/",
+            "archive_url_template": "https://www.techmeme.com/{snapshot}",
+        }
         self.assertEqual(
             derive_active_stream_ids(github),
             ("discussions", "query.alpha", "query.zeta"),
@@ -104,6 +117,10 @@ class CollectSourcesTests(unittest.TestCase):
         self.assertEqual(
             derive_active_stream_ids(hf),
             ("daily", "trending", "weekly"),
+        )
+        self.assertEqual(
+            derive_active_stream_ids(techmeme),
+            ("archive", "front"),
         )
 
 
