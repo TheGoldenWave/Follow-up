@@ -1,0 +1,58 @@
+{
+  "101": {
+    "id": 101,
+    "type": "story",
+    "by": "alice",
+    "time": 1789457400,
+    "title": "Agent memory gets a deterministic scheduler",
+    "url": "https://example.com/agent-memory?utm_source=hn#readme",
+    "score": 120,
+    "descendants": 20
+  },
+  "102": {
+    "id": 102,
+    "type": "story",
+    "by": "bob",
+    "time": 1789458300,
+    "title": "Ask HN: How do you audit autonomous workflows?",
+    "text": "I would like to understand durable review loops.",
+    "score": 42,
+    "descendants": 9
+  },
+  "103": {
+    "id": 103,
+    "type": "comment",
+    "by": "carol",
+    "time": 1789459500,
+    "text": "This should not become a candidate.",
+    "parent": 101
+  },
+  "104": {
+    "id": 104,
+    "type": "story",
+    "by": "dave",
+    "time": 1789426800,
+    "title": "Older front-page item outside the request window",
+    "url": "https://example.com/old",
+    "score": 10,
+    "descendants": 1
+  },
+  "201": {
+    "id": 201,
+    "type": "story",
+    "by": "erin",
+    "time": 1789459800,
+    "title": "Small language models beat a brittle routing layer",
+    "url": "https://example.com/small-lm",
+    "score": 30,
+    "descendants": 4
+  },
+  "202": {
+    "id": 202,
+    "type": "comment",
+    "by": "frank",
+    "time": 1789460100,
+    "text": "A comment entry must be ignored.",
+    "parent": 201
+  }
+}

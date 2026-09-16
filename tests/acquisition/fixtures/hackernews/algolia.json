@@ -1,0 +1,50 @@
+{
+  "page0": {
+    "hits": [
+      {
+        "story_id": 101,
+        "objectID": "101",
+        "title": "Agent memory gets a deterministic scheduler",
+        "url": "https://example.com/agent-memory?utm_source=hn#readme",
+        "author": "alice",
+        "points": 120,
+        "num_comments": 20,
+        "created_at": "2026-09-15T07:30:00Z"
+      },
+      {
+        "story_id": 301,
+        "objectID": "301",
+        "title": "A new benchmark for tool-using agents",
+        "url": "https://example.com/agent-benchmark",
+        "author": "grace",
+        "points": 80,
+        "num_comments": 12,
+        "created_at": "2026-09-15T07:45:00Z"
+      },
+      {
+        "story_id": 302,
+        "objectID": "302",
+        "title": "Low score result should still be deterministic",
+        "url": "https://example.com/low-score",
+        "author": "heidi",
+        "points": 2,
+        "num_comments": 0,
+        "created_at": "2026-09-15T08:05:00Z"
+      }
+    ]
+  },
+  "page1": {
+    "hits": [
+      {
+        "story_id": 303,
+        "objectID": "303",
+        "title": "Second page result",
+        "url": "https://example.com/page-2",
+        "author": "ivan",
+        "points": 17,
+        "num_comments": 3,
+        "created_at": "2026-09-15T06:00:00Z"
+      }
+    ]
+  }
+}
