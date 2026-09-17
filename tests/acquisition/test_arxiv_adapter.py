@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -100,6 +101,24 @@ class ArxivPureFunctionTests(unittest.TestCase):
         self.assertEqual(value["date_confidence"], "exact")
         self.assertEqual(value["native_metrics"]["updated_at"], "2026-09-17T04:00:00Z")
         self.assertEqual(value["native_metrics"]["version"], 1)
+
+    def test_parses_real_rss_xml_item(self):
+        item = ET.fromstring("""
+            <item>
+              <guid>oai:arXiv.org:2609.17560v1</guid>
+              <link>https://arxiv.org/abs/2609.17560</link>
+              <title>Machine Learning Methods</title>
+              <description>A machine learning paper.</description>
+              <pubDate>Thu, 17 Sep 2026 00:00:00 -0400</pubDate>
+              <author>Ada</author>
+            </item>
+        """)
+        value = parse_arxiv_entry(item, fetched_at=NOW)
+        self.assertIsNotNone(value)
+        assert value is not None
+        self.assertEqual(value["native_id"], "arxiv:2609.17560")
+        self.assertEqual(value["published_at"], "2026-09-17T04:00:00Z")
+        self.assertEqual(value["native_metrics"], {"updated_at": "2026-09-17T04:00:00Z", "version": 1})
 
     def test_relevance_ignores_broad_tags_and_matches_semantic_tags(self):
         tags = ["academic", "daily", "agentic"]
