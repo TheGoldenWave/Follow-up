@@ -78,25 +78,13 @@ def build_source_pairs(
     techmeme = TechmemeAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
     web = WebPublicationAdapter(resolve_source=lambda source_id: by_id[source_id])
 
-    pairs: list[tuple[Any, str]] = []
-    for source in sources:
-        if source["adapter"] == "arxiv":
-            pairs.append((arxiv, source["id"]))
-        elif source["adapter"] == "github":
-            pairs.append((github, source["id"]))
-        elif source["adapter"] == "hackernews":
-            pairs.append((hackernews, source["id"]))
-        elif source["adapter"] == "hugging-face-papers":
-            pairs.append((hugging_face, source["id"]))
-        elif source["adapter"] == "reddit":
-            pairs.append((reddit, source["id"]))
-        elif source["adapter"] == "rss":
-            pairs.append((rss, source["id"]))
-        elif source["adapter"] == "techmeme":
-            pairs.append((techmeme, source["id"]))
-        elif source["adapter"] == "web-publication":
-            pairs.append((web, source["id"]))
-    return pairs
+    adapters = {
+        "arxiv": arxiv, "github": github, "hackernews": hackernews,
+        "hugging-face-papers": hugging_face, "reddit": reddit, "rss": rss,
+        "techmeme": techmeme, "web-publication": web,
+    }
+    return [(adapters[source["adapter"]], source["id"])
+            for source in sources if source["adapter"] in adapters]
 
 
 def collect_sources(

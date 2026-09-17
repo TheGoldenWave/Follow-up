@@ -140,20 +140,36 @@ test('batch mapping rejects an item claiming another source', () => {
 test('core-topic candidates route per item and unclassified items remain review-only', () => {
   const community = {
     id: 'community:github', name: 'GitHub', channel: null, channel_policy: 'core-topic',
-    input: { queries: [{ id: 'agents', query: 'AI agents' }] },
+    input: { queries: [{ id: 'agents', query: 'AI agents' }, { id: 'china', query: 'Chinese technology' }] },
   };
   const routed = { ...item, source: community.id, candidate_id: `${community.id}:1`,
     provenance: { query_id: 'agents' } };
   const review = { ...item, source: community.id, candidate_id: `${community.id}:2`,
     title: 'Miscellaneous update', text: '', provenance: {} };
-  const mapped = mapSignalBatch(batch({ source: community.id, items: [routed, review] }), {
+  const zhTech = { ...item, source: community.id, candidate_id: `${community.id}:3`,
+    title: '科技更新', text: '', provenance: { query_id: 'china' } };
+  const mapped = mapSignalBatch(batch({ source: community.id, items: [routed, review, zhTech] }), {
     sourceIndex: new Map([[community.id, community]]), seenAt: SEEN_AT,
   });
   assert.equal(mapped.candidates[0].channel, 'academic');
   assert.deepEqual(mapped.reviewCandidates.map(({ sourceNativeId }) => sourceNativeId), ['2']);
-  assert.equal(mapped.sourceStatus.candidateCount, 1);
+  assert.deepEqual(mapped.candidates.map(({ channel }) => channel), ['academic', 'zh-tech']);
+  assert.equal(mapped.sourceStatus.candidateCount, 2);
   assert.deepEqual(mapped.sourceStatus, {
-    sourceId: community.id, channel: null, channels: ['academic'], sourceName: 'GitHub',
-    status: 'ok', candidateCount: 1,
+    sourceId: community.id, channel: null, channels: ['academic', 'zh-tech'], sourceName: 'GitHub',
+    status: 'ok', candidateCount: 2,
+  });
+});
+
+test('core-topic empty result retains an empty routed channel set', () => {
+  const community = {
+    id: 'community:github', name: 'GitHub', channel: null, channel_policy: 'core-topic', input: {},
+  };
+  const mapped = mapSignalBatch(batch({ source: community.id, items: [] }), {
+    sourceIndex: new Map([[community.id, community]]), seenAt: SEEN_AT,
+  });
+  assert.deepEqual(mapped.sourceStatus, {
+    sourceId: community.id, channel: null, channels: [], sourceName: 'GitHub',
+    status: 'no-results', candidateCount: 0,
   });
 });
