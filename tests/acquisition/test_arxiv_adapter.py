@@ -81,6 +81,26 @@ class ArxivPureFunctionTests(unittest.TestCase):
         self.assertEqual(value["native_metrics"]["updated_at"], "2026-09-10T01:00:00Z")
         self.assertEqual(value["native_metrics"]["version"], 2)
 
+    def test_parses_real_rss_guid_and_rfc822_date_via_link_fallback(self):
+        value = parse_arxiv_entry(
+            {
+                "guid": "oai:arXiv.org:2609.17560v1",
+                "link": "https://arxiv.org/abs/2609.17560",
+                "title": "Machine Learning Methods",
+                "description": "A machine learning paper.",
+                "pubDate": "Thu, 17 Sep 2026 00:00:00 -0400",
+                "author": "Ada",
+            },
+            fetched_at=NOW,
+        )
+        self.assertIsNotNone(value)
+        assert value is not None
+        self.assertEqual(value["native_id"], "arxiv:2609.17560")
+        self.assertEqual(value["published_at"], "2026-09-17T04:00:00Z")
+        self.assertEqual(value["date_confidence"], "exact")
+        self.assertEqual(value["native_metrics"]["updated_at"], "2026-09-17T04:00:00Z")
+        self.assertEqual(value["native_metrics"]["version"], 1)
+
     def test_relevance_ignores_broad_tags_and_matches_semantic_tags(self):
         tags = ["academic", "daily", "agentic"]
         self.assertTrue(is_relevant(tags, "Agentic Planning Papers", "An abstract"))

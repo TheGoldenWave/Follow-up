@@ -9,6 +9,7 @@ uses page HTML as an authority for metadata.
 from __future__ import annotations
 
 import calendar
+from email.utils import parsedate_to_datetime
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -63,7 +64,10 @@ def _parse_iso(value: Any) -> str | None:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        return None
+        try:
+            parsed = parsedate_to_datetime(text)
+        except (TypeError, ValueError):
+            return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -136,6 +140,8 @@ def normalize_arxiv_id(value: Any) -> str | None:
     if not text:
         return None
     candidate = text.strip()
+    if candidate.lower().startswith("oai:arxiv.org:"):
+        candidate = candidate.rsplit(":", 1)[-1]
     if candidate.lower().startswith("arxiv:"):
         candidate = candidate.split(":", 1)[1]
     match = _ARXIV_ID_FROM_URL_RE.search(candidate)
@@ -264,8 +270,11 @@ def sort_and_limit(items: list[dict[str, Any]], budget: int) -> list[dict[str, A
 
 
 def _feedparser_entry_fields(entry: Mapping[str, Any]) -> dict[str, Any]:
-    updated_at = _datetime_to_iso(entry.get("updated_parsed"))
-    published_at = _datetime_to_iso(entry.get("published_parsed")) or updated_at
+    published_at = (
+        _datetime_to_iso(entry.get("published_parsed"))
+        or _parse_iso(entry.get("published") or entry.get("pubDate"))
+    )
+    updated_at = _datetime_to_iso(entry.get("updated_parsed")) or published_at
     raw_id = entry.get("id") or entry.get("guid") or entry.get("link")
     normalized = normalize_arxiv_id(raw_id or entry.get("link"))
     raw_link = entry.get("link")
@@ -304,9 +313,9 @@ def _element_author(element: ET.Element) -> str | None:
 
 
 def _element_entry_fields(element: ET.Element) -> dict[str, Any]:
-    raw_id = _child_text(element, "id")
     guid = _child_text(element, "guid")
-    link = raw_id or guid
+    raw_id = _child_text(element, "id") or guid
+    link = raw_id
     for child in _children(element, "link"):
         rel = (child.attrib.get("rel") or "alternate").lower()
         href = child.attrib.get("href") or _as_text(child.text)
