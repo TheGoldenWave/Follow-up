@@ -131,7 +131,7 @@ class CollectSourcesTests(unittest.TestCase):
         }
         self.assertEqual(
             derive_active_stream_ids(github),
-            ("discussions", "query.alpha", "query.zeta"),
+            ("discussions", "query.alpha", "query.zeta", "scheduler"),
         )
         self.assertEqual(
             derive_active_stream_ids(hn),

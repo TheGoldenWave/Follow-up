@@ -46,6 +46,7 @@ def derive_active_stream_ids(source: dict[str, Any]) -> tuple[str, ...]:
     streams: list[str] = []
     if adapter == "github":
         streams.extend(f"query.{query['id']}" for query in values.get("queries", []))
+        streams.append("scheduler")
         if values.get("include_discussions"):
             streams.append("discussions")
     elif adapter == "hackernews":
