@@ -13,7 +13,7 @@ const ASSIGNMENT = /(?:^|[\r\n"'])(?:[A-Z0-9_]*(?:API[_-]?KEY|TOKEN|SECRET|PASSW
 const HIGH_CONFIDENCE = [
   ['private-key', /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g],
   ['aws-access-key', /\bAKIA[0-9A-Z]{16}\b/g],
-  ['github-token', /\bgh[pousr]_[A-Za-z0-9]{36,255}\b/g],
+  ['github-token', /\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{20,255})\b/g],
   ['openai-key', /\bsk-[A-Za-z0-9]{32,255}\b/g],
 ];
 

@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 import { checkProvenance } from '../release/check-provenance.js';
 import { verifyDependencyLicenses } from '../release/verify-dependency-licenses.js';
-import { scanDirectory, scanGitTree } from '../release/scan-secrets.js';
+import { scanBuffer, scanDirectory, scanGitTree } from '../release/scan-secrets.js';
 import { loadSourceRegistry } from '../source-registry.js';
 
 const execFileAsync = promisify(execFile);
@@ -44,6 +44,13 @@ test('secret scanner permits documented placeholders and public integrity digest
   ].join('\n'));
 
   assert.deepEqual(await scanDirectory(root), []);
+});
+
+test('secret scanner recognizes fine-grained GitHub tokens', () => {
+  const findings = scanBuffer('fixture.txt', Buffer.from(
+    'github_pat_abcdefghijklmnopqrstuvwxyz_123456789',
+  ));
+  assert.ok(findings.some((finding) => finding.rule === 'github-token'));
 });
 
 test('dependency license report exactly matches the lockfile and approved licenses', async () => {
@@ -197,6 +204,7 @@ test('release workflow runs secret, dependency-license, and provenance gates bef
   for (const command of [
     'scan-secrets.js --tracked',
     'scan-secrets.js --archive',
+    'verify-v0.4-source-smoke.js',
     'verify-dependency-licenses.js',
     'check-provenance.js',
   ]) {

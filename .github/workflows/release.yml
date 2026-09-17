@@ -41,6 +41,9 @@ jobs:
       - name: Scan tracked release content for credentials
         run: node scripts/release/scan-secrets.js --tracked "$GITHUB_SHA"
 
+      - name: Verify v0.4 source smoke evidence
+        run: node scripts/release/verify-v0.4-source-smoke.js
+
       - name: Verify dependency licenses and inventory
         run: node scripts/release/verify-dependency-licenses.js
 
