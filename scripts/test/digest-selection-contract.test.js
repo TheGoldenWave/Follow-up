@@ -84,6 +84,20 @@ test('request requires bound content stats, exact source aggregates, and consist
   assert.equal(validateCurationRequest(wrongHash).valid, false);
 });
 
+test('curation requests preserve only valid bound community evidence', async () => {
+  const request = await fixture('curation/valid-request.json');
+  request.eligibleCandidates[0].communityEvidence = {
+    role: 'community-discovery',
+    views: [{ kind: 'daily', pageUrl: 'https://huggingface.co/papers/date/2026-09-16' }],
+  };
+  request.requestHash = createRequestHash(request);
+  assert.equal(validateCurationRequest(request).valid, true);
+
+  request.eligibleCandidates[0].communityEvidence.views = [];
+  request.requestHash = createRequestHash(request);
+  assert.equal(validateCurationRequest(request).valid, false);
+});
+
 test('selection manifest is cryptographically bound to its exact request', async () => {
   const request = await fixture('curation/valid-request.json');
   const selection = await fixture('selections/valid-selection.json');

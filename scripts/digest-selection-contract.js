@@ -19,9 +19,13 @@ const requestSchema = JSON.parse(readFileSync(
 const selectionSchema = JSON.parse(readFileSync(
   new URL('../contracts/digest-selection.schema.json', import.meta.url), 'utf8',
 ));
+const communityEvidenceSchema = JSON.parse(readFileSync(
+  new URL('../contracts/community-evidence.schema.json', import.meta.url), 'utf8',
+));
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv, { mode: 'full' });
+ajv.addSchema(communityEvidenceSchema);
 const validateRequestSchema = ajv.compile(requestSchema);
 const validateSelectionSchema = ajv.compile(selectionSchema);
 
