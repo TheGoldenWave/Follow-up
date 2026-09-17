@@ -183,7 +183,10 @@
         "lastSeenAt": { "$ref": "#/$defs/dateTime" },
         "contentFingerprint": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
         "summarizationContent": { "type": "string" },
-        "contentTruncated": { "type": "boolean" }
+        "contentTruncated": { "type": "boolean" },
+        "communityEvidence": {
+          "$ref": "https://github.com/TheGoldenWave/Follow-up/contracts/community-evidence.schema.json"
+        }
       },
       "allOf": [
         {

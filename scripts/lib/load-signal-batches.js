@@ -7,6 +7,7 @@ import {
   DEFAULT_CONTENT_CHARACTER_LIMIT,
   truncateUnicode,
 } from '../candidate-normalization.js';
+import { validateCommunityEvidence } from '../community-evidence-contract.js';
 import { sanitizeDiagnostic } from '../source-status.js';
 import { routeSourceChannel } from './route-channels.js';
 
@@ -40,6 +41,10 @@ export function mapSignalBatchItem(item, { source, channel, seenAt }) {
     ? item.text
     : (title || '');
   const { content, truncated } = truncateUnicode(rawText, DEFAULT_CONTENT_CHARACTER_LIMIT);
+  const evidence = item.native_metrics?.community_evidence;
+  if (evidence !== undefined && !validateCommunityEvidence(evidence).valid) {
+    throw new Error('Invalid community evidence in Signal Batch item');
+  }
   const candidate = {
     candidateId: createCandidateId({
       channel,
@@ -60,6 +65,7 @@ export function mapSignalBatchItem(item, { source, channel, seenAt }) {
     lastSeenAt: seenAt,
     summarizationContent: content,
     contentTruncated: truncated,
+    ...(evidence === undefined ? {} : { communityEvidence: structuredClone(evidence) }),
   };
   candidate.contentFingerprint = createContentFingerprint(candidate);
   return candidate;

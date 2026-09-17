@@ -103,6 +103,18 @@ test('registry contains one current status per source and candidate objects are 
   assert.equal(validate({ schemaVersion: '1.0', ...extraCandidateField }).valid, false);
 });
 
+test('permits only shared-contract community evidence on candidates', () => {
+  const fields = validFields();
+  fields.candidates[0].communityEvidence = {
+    role: 'community-discovery',
+    views: [{ kind: 'daily', pageUrl: 'https://huggingface.co/papers/date/2026-09-16' }],
+  };
+  assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, true);
+
+  fields.candidates[0].communityEvidence.views = [];
+  assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, false);
+});
+
 test('validation errors are actionable without echoing secret values', () => {
   const fields = validFields();
   fields.candidates[0].canonicalUrl = 'https://example.com/?token=super-secret';

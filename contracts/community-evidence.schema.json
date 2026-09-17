@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/community-evidence.schema.json",
+  "title": "Follow-up Community Discovery Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["role", "views"],
+  "properties": {
+    "role": { "const": "community-discovery" },
+    "views": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/view" }
+    },
+    "github": { "$ref": "#/$defs/github" }
+  },
+  "$defs": {
+    "view": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "pageUrl"],
+      "properties": {
+        "kind": { "enum": ["daily", "trending", "weekly"] },
+        "pageUrl": { "type": "string", "format": "uri", "pattern": "^https://", "maxLength": 512 },
+        "rank": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+        "upvotes": { "type": "integer", "minimum": 0, "maximum": 1000000000 }
+      }
+    },
+    "github": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "format": "uri", "pattern": "^https://github\\.com/", "maxLength": 1024 },
+        "stars": { "type": "integer", "minimum": 0, "maximum": 1000000000 }
+      }
+    }
+  }
+}

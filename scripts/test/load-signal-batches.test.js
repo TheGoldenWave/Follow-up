@@ -63,6 +63,26 @@ test('mapSignalBatchItem maps snake_case to a camelCase candidate', () => {
   assert.ok(candidate.contentFingerprint);
 });
 
+test('maps only valid community evidence from a Signal Batch item', () => {
+  const candidate = mapSignalBatchItem({
+    ...item,
+    native_metrics: {
+      community_evidence: {
+        role: 'community-discovery',
+        views: [{ kind: 'daily', pageUrl: 'https://huggingface.co/papers/date/2026-09-16' }],
+      },
+    },
+  }, { source, channel: 'blogs', seenAt: SEEN_AT });
+  assert.deepEqual(candidate.communityEvidence, {
+    role: 'community-discovery',
+    views: [{ kind: 'daily', pageUrl: 'https://huggingface.co/papers/date/2026-09-16' }],
+  });
+  assert.throws(() => mapSignalBatchItem({
+    ...item,
+    native_metrics: { community_evidence: { role: 'community-discovery', views: [] } },
+  }, { source, channel: 'blogs', seenAt: SEEN_AT }), /community evidence/i);
+});
+
 test('mapSignalBatchItem falls back to title when text is missing', () => {
   const candidate = mapSignalBatchItem(
     { ...item, text: null },
