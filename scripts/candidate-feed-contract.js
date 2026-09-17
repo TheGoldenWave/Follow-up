@@ -19,8 +19,13 @@ const schema = JSON.parse(readFileSync(
   new URL('../contracts/candidate-feed.schema.json', import.meta.url),
   'utf8',
 ));
+const communityEvidenceSchema = JSON.parse(readFileSync(
+  new URL('../contracts/community-evidence.schema.json', import.meta.url),
+  'utf8',
+));
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv, { mode: 'full' });
+ajv.addSchema(communityEvidenceSchema);
 const validateSchema = ajv.compile(schema);
 
 function formatErrors(errors = []) {
