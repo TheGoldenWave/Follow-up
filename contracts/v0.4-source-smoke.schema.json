@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/v0.4-source-smoke.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runs"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "runs": { "type": "array", "minItems": 6, "maxItems": 6, "items": { "$ref": "#/$defs/run" } }
+  },
+  "$defs": {
+    "dateTime": { "type": "string", "format": "date-time" },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapterId", "sourceId", "startedAt", "completedAt", "status", "rawCandidateCount", "uniqueCandidateCount", "duplicateRate", "sampledCandidateCount", "relevantCandidateCount", "relevanceRate", "reviewedBy", "notes"],
+      "properties": {
+        "adapterId": { "enum": ["github", "hackernews", "reddit", "techmeme", "arxiv", "hugging-face-papers"] },
+        "sourceId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$" },
+        "startedAt": { "$ref": "#/$defs/dateTime" },
+        "completedAt": { "$ref": "#/$defs/dateTime" },
+        "status": { "enum": ["ok", "no-results", "partial", "error", "timeout"] },
+        "rawCandidateCount": { "type": "integer", "minimum": 0 },
+        "uniqueCandidateCount": { "type": "integer", "minimum": 0 },
+        "duplicateRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "sampledCandidateCount": { "type": "integer", "minimum": 0, "maximum": 5 },
+        "relevantCandidateCount": { "type": "integer", "minimum": 0 },
+        "relevanceRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reviewedBy": { "const": "maintainer" },
+        "notes": { "type": "string", "maxLength": 280, "pattern": "^[^\\r\\n]*$" }
+      }
+    }
+  }
+}
