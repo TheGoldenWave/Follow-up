@@ -38,7 +38,7 @@ def _entry_date(entry: Any) -> tuple[str | None, str]:
     """
     if entry.get("published_parsed"):
         return _struct_to_iso(entry["published_parsed"]), "exact"
-    if entry.get("updated_parsed"):
+    if "updated_parsed" in entry and entry["updated_parsed"]:
         return _struct_to_iso(entry["updated_parsed"]), "inferred"
     raw = entry.get("published") or entry.get("updated")
     if raw:
