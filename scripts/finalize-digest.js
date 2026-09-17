@@ -71,6 +71,13 @@ export function finalizeDigest(request, selection) {
         link: candidate.canonicalUrl,
       };
     });
+    const communityEvidence = (cluster.communityEvidenceCandidateIds ?? []).map((candidateId) => {
+      const candidate = candidateById.get(candidateId);
+      return {
+        candidateId, sourceId: candidate.sourceId, title: candidate.title,
+        link: candidate.canonicalUrl, details: candidate.communityEvidence,
+      };
+    });
     return {
       eventClusterId,
       candidateId: lead.candidateId,
@@ -83,6 +90,7 @@ export function finalizeDigest(request, selection) {
       scores: { ...cluster.scores },
       reason: cluster.selectionReason,
       corroborating,
+      communityEvidence,
     };
   });
   const status = !request.coverage.complete
@@ -107,7 +115,7 @@ export function finalizeDigest(request, selection) {
   };
   const contentStats = { ...baseStats, selectedCount: items.length };
   return validateFinalDigestArtifact({
-    schemaVersion: '1.0', status, digestId: request.digestId, requestHash: request.requestHash,
+    schemaVersion: '1.1', status, digestId: request.digestId, requestHash: request.requestHash,
     frequency: request.frequency, generatedAt: selection.generatedAt,
     coverage: request.coverage, sourceCompleteness: request.sourceCompleteness,
     incompleteSources,
@@ -159,6 +167,7 @@ export async function activateDigestGeneration(outputDir, artifact, message, {
     const candidateIds = artifact.items.flatMap((item) => [
       item.candidateId,
       ...(item.corroborating ?? []).map((candidate) => candidate.candidateId),
+      ...(item.communityEvidence ?? []).map((candidate) => candidate.candidateId),
     ]);
     const eventClusterIds = artifact.items.map((item) => item.eventClusterId);
     await rejectSymlink(root, fsImpl, true);

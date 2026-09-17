@@ -3,6 +3,7 @@ import { constants as fsConstants } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 
+import { validateCommunityEvidence } from './community-evidence-contract.js';
 import { sanitizeDiagnostic } from './source-status.js';
 
 const HASH = /^[a-f0-9]{64}$/u;
@@ -26,6 +27,12 @@ export function renderDigestMessage(artifact) {
     lines.push('', `${index + 1}. ${safePlainText(item.title)}`);
     lines.push(`来源: ${safePlainText(item.sourceId)} | 评分: ${item.scores.totalScore}`);
     lines.push(`理由: ${safePlainText(item.reason)}`);
+    const evidence = item.communityEvidence ?? [];
+    for (const candidate of evidence.slice(0, 3)) {
+      const kinds = candidate.details?.views?.map(({ kind }) => kind).join('、') || '发现';
+      lines.push(`社区热度: ${safePlainText(candidate.sourceId)}（${safePlainText(kinds)}）`);
+    }
+    if (evidence.length > 3) lines.push(`另有 ${evidence.length - 3} 项社区证据`);
     lines.push(item.link);
   }
   return `${lines.join('\n')}\n`;
@@ -115,7 +122,7 @@ export function validateFinalDigestArtifact(artifact) {
     'schemaVersion', 'status', 'digestId', 'requestHash', 'frequency', 'generatedAt',
     'coverage', 'sourceCompleteness', 'incompleteSources', 'contentStats', 'items', 'message',
   ], 'Digest artifact');
-  if (artifact.schemaVersion !== '1.0'
+  if (!['1.0', '1.1'].includes(artifact.schemaVersion)
     || !['ready', 'no-important-updates', 'partial', 'incomplete-history'].includes(artifact.status)) {
     throw new Error('Digest artifact status is not deliverable');
   }
@@ -189,6 +196,7 @@ export function validateFinalDigestArtifact(artifact) {
     exactFields(item, [
       'eventClusterId', 'candidateId', 'channel', 'sourceId', 'title', 'author',
       'publishedAt', 'link', 'scores', 'reason', 'corroborating',
+      ...(artifact.schemaVersion === '1.1' ? ['communityEvidence'] : []),
     ], 'Digest item');
     exactFields(item.scores, ['impact', 'relevance', 'evidence', 'novelty', 'corroboration', 'totalScore'], 'Digest item scores');
     const scoreLimits = { impact: 30, relevance: 25, evidence: 20, novelty: 15, corroboration: 10, totalScore: 100 };
@@ -204,7 +212,8 @@ export function validateFinalDigestArtifact(artifact) {
       || !(item.author === null || typeof item.author === 'string')
       || !(item.publishedAt === null || validTimestamp(item.publishedAt))
       || typeof item.reason !== 'string' || item.reason.length === 0 || item.reason.length > 280
-      || !Array.isArray(item.corroborating)) {
+      || !Array.isArray(item.corroborating)
+      || (artifact.schemaVersion === '1.1' && !Array.isArray(item.communityEvidence))) {
       throw new Error('Digest item score or fields are invalid');
     }
     for (const candidate of item.corroborating) {
@@ -213,6 +222,14 @@ export function validateFinalDigestArtifact(artifact) {
         || typeof candidate.title !== 'string' || typeof candidate.link !== 'string'
         || !candidate.link.startsWith('https://')) {
         throw new Error('Digest corroborating item is invalid');
+      }
+    }
+    for (const candidate of item.communityEvidence ?? []) {
+      exactFields(candidate, ['candidateId', 'sourceId', 'title', 'link', 'details'], 'Digest community evidence item');
+      if (!HASH.test(candidate.candidateId) || typeof candidate.sourceId !== 'string'
+        || typeof candidate.title !== 'string' || typeof candidate.link !== 'string'
+        || !candidate.link.startsWith('https://') || !validateCommunityEvidence(candidate.details).valid) {
+        throw new Error('Digest community evidence item is invalid');
       }
     }
   }
@@ -278,6 +295,13 @@ function collectCandidateIds(items) {
     if (item.corroborating !== undefined) {
       if (!Array.isArray(item.corroborating)) throw new Error('selected candidate IDs are invalid');
       for (const candidate of item.corroborating) {
+        requireHash(candidate?.candidateId, 'selected candidate ID');
+        ids.push(candidate.candidateId);
+      }
+    }
+    if (item.communityEvidence !== undefined) {
+      if (!Array.isArray(item.communityEvidence)) throw new Error('selected candidate IDs are invalid');
+      for (const candidate of item.communityEvidence) {
         requireHash(candidate?.candidateId, 'selected candidate ID');
         ids.push(candidate.candidateId);
       }

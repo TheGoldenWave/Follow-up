@@ -6,6 +6,7 @@ import { basename, join } from 'node:path';
 import test from 'node:test';
 
 import { createRequestHash } from '../digest-selection-contract.js';
+import { createEventClusterId } from '../digest-selection.js';
 import { loadActiveDigestMessage } from '../deliver.js';
 import { finalizeDigest, main, renderDigestMessage } from '../finalize-digest.js';
 
@@ -68,6 +69,39 @@ test('finalize renders only deterministically selected items for a ready digest'
   assert.deepEqual(result.contentStats, {
     candidateCount: 2, eligibleCount: 2, excludedCount: 0, selectedCount: 1,
   });
+});
+
+test('finalize keeps community discovery apart from corroboration', async () => {
+  const request = await fixture('curation/valid-request.json');
+  request.eligibleCandidates[1].communityEvidence = {
+    role: 'community-discovery',
+    views: [{ kind: 'daily', pageUrl: 'https://huggingface.co/papers/date/2026-09-16' }],
+  };
+  request.requestHash = createRequestHash(request);
+  const selection = await fixture('selections/valid-selection.json');
+  const cluster = selection.clusters[0];
+  cluster.corroboratingCandidateIds = [];
+  cluster.communityEvidenceCandidateIds = [request.eligibleCandidates[1].candidateId];
+  cluster.eventClusterId = createEventClusterId([
+    cluster.leadCandidateId,
+    ...cluster.communityEvidenceCandidateIds,
+  ]);
+  cluster.scores = { impact: 25, relevance: 20, evidence: 18, novelty: 10, corroboration: 0, totalScore: 73 };
+  selection.schemaVersion = '1.1';
+  selection.requestHash = request.requestHash;
+  selection.selectedEventClusterIds = [cluster.eventClusterId];
+
+  const result = finalizeDigest(request, selection);
+  assert.deepEqual(result.items[0].corroborating, []);
+  assert.deepEqual(result.items[0].communityEvidence, [{
+    candidateId: request.eligibleCandidates[1].candidateId,
+    sourceId: 'x:reporter', title: 'Independent launch report',
+    link: 'https://x.example/reporter/status/1',
+    details: request.eligibleCandidates[1].communityEvidence,
+  }]);
+  const message = renderDigestMessage(result);
+  assert.match(message, /社区热度/);
+  assert.doesNotMatch(message, /社区热度.*交叉印证/);
 });
 
 test('complete empty daily and weekly runs use localized no-update wording', async () => {
@@ -257,7 +291,7 @@ test('finalize writes a plain-text user message rather than delivering artifact 
     eventClusterIds: [
       'ec811d9a4a78bcbaca36363ed9cce4348e7ef3a3f12533603af3b268d4311e69',
     ],
-    artifactHash: '3a76bee2490701d957173fe279ddf273819342fad39cc054c267354a6fa4f854',
+    artifactHash: '2c05ecc6c8f90235e487122de11708b618255b59eae8e7a936563759622a1765',
     messageHash: '3e52f62499f0467b5f1b2972c4dda8a0f8d737271266a97248bf96c062726eb9',
     artifact: 'artifact.json', message: 'message.txt',
   });
