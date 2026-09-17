@@ -115,6 +115,21 @@ test('permits only shared-contract community evidence on candidates', () => {
   assert.equal(validate({ schemaVersion: '1.0', ...fields }).valid, false);
 });
 
+test('allows core-topic source status while candidates remain in live channels', () => {
+  const fields = validFields();
+  fields.registry[0] = {
+    sourceId: 'community:github', channel: 'core-topic', sourceName: 'GitHub',
+    status: 'ok', candidateCount: 1,
+  };
+  fields.candidates[0].sourceId = 'community:github';
+  fields.candidates[0].channel = 'academic';
+  fields.candidates[0].candidateId = createCandidateId(fields.candidates[0]);
+  fields.candidates[0].contentFingerprint = createContentFingerprint(fields.candidates[0]);
+  assert.equal(validate({ schemaVersion: '1.0', ...fields }, [{
+    id: 'community:github', channel: null, channel_policy: 'core-topic', name: 'GitHub',
+  }]).valid, true);
+});
+
 test('validation errors are actionable without echoing secret values', () => {
   const fields = validFields();
   fields.candidates[0].canonicalUrl = 'https://example.com/?token=super-secret';

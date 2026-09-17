@@ -9,7 +9,7 @@ import {
 } from '../candidate-normalization.js';
 import { validateCommunityEvidence } from '../community-evidence-contract.js';
 import { sanitizeDiagnostic } from '../source-status.js';
-import { routeSourceChannel } from './route-channels.js';
+import { REVIEW_CHANNEL, routeSourceChannel } from './route-channels.js';
 
 const FAILURE_STATUSES = new Set([
   'rate-limited', 'auth-failed', 'unreachable', 'timeout',
@@ -71,11 +71,11 @@ export function mapSignalBatchItem(item, { source, channel, seenAt }) {
   return candidate;
 }
 
-export function mapSignalBatchSourceStatus(batch, { source, channel }) {
+export function mapSignalBatchSourceStatus(batch, { source, channel, candidateCount }) {
   const status = batch.source_status?.status ?? 'error';
-  const candidateCount = Array.isArray(batch.items) ? batch.items.length : 0;
+  const mappedCount = candidateCount ?? (Array.isArray(batch.items) ? batch.items.length : 0);
   let nodeStatus;
-  if (status === 'ok') nodeStatus = candidateCount > 0 ? 'ok' : 'no-results';
+  if (status === 'ok') nodeStatus = mappedCount > 0 ? 'ok' : 'no-results';
   else if (status === 'no-results') nodeStatus = 'no-results';
   else if (status === 'partial') nodeStatus = 'partial';
   else nodeStatus = 'error';
@@ -84,7 +84,7 @@ export function mapSignalBatchSourceStatus(batch, { source, channel }) {
     channel,
     sourceName: source?.name ?? batch.source,
     status: nodeStatus,
-    candidateCount,
+    candidateCount: mappedCount,
   };
   if (nodeStatus === 'error' || nodeStatus === 'partial') {
     const message = batch.source_status?.message;
@@ -109,19 +109,26 @@ export function mapSignalBatch(batch, { sourceIndex, seenAt }) {
   if (!source) {
     throw new Error(`No source registry entry for Signal Batch source ${sourceId}`);
   }
-  const channel = routeSourceChannel(source);
   if ((batch.items ?? []).some(item => item.source !== sourceId)) {
     throw new TypeError('item source does not match batch');
   }
   const resolvedSeenAt = normalizeDate(batch.generated_at) ?? seenAt;
-  const candidates = (batch.items ?? []).map((item) => (
-    mapSignalBatchItem(item, { source, channel, seenAt: resolvedSeenAt })
-  ));
+  const candidates = [];
+  const reviewCandidates = [];
+  for (const item of batch.items ?? []) {
+    const channel = routeSourceChannel(source, item);
+    const candidate = mapSignalBatchItem(item, { source, channel, seenAt: resolvedSeenAt });
+    (channel === REVIEW_CHANNEL ? reviewCandidates : candidates).push(candidate);
+  }
+  const sourceChannel = source.channel_policy === 'core-topic' ? 'core-topic' : source.channel;
   return {
     sourceId,
-    channel,
-    sourceStatus: mapSignalBatchSourceStatus(batch, { source, channel }),
+    channel: sourceChannel,
+    sourceStatus: mapSignalBatchSourceStatus(batch, {
+      source, channel: sourceChannel, candidateCount: candidates.length,
+    }),
     candidates,
+    reviewCandidates,
   };
 }
 
@@ -130,10 +137,12 @@ export function loadSignalBatches(batches, { sources, seenAt }) {
   const sourceIndex = new Map(sources.map((source) => [source.id, source]));
   const candidates = [];
   const sourceStatuses = [];
+  const reviewCandidates = [];
   for (const batch of batches) {
     const mapped = mapSignalBatch(batch, { sourceIndex, seenAt });
     candidates.push(...mapped.candidates);
+    reviewCandidates.push(...mapped.reviewCandidates);
     sourceStatuses.push(mapped.sourceStatus);
   }
-  return { candidates, sourceStatuses };
+  return { candidates, reviewCandidates, sourceStatuses };
 }

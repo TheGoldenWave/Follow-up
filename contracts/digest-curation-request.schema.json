@@ -50,6 +50,9 @@
     "channel": {
       "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
     },
+    "sourceChannel": {
+      "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech", "core-topic"]
+    },
     "sourceId": {
       "type": "string",
       "maxLength": 128,
@@ -165,7 +168,7 @@
       ],
       "properties": {
         "candidateId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "channel": { "$ref": "#/$defs/channel" },
+        "channel": { "$ref": "#/$defs/sourceChannel" },
         "sourceId": { "$ref": "#/$defs/sourceId" },
         "sourceNativeId": { "type": "string", "minLength": 1, "maxLength": 512 },
         "canonicalUrl": {

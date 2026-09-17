@@ -71,6 +71,9 @@
     "channel": {
       "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
     },
+    "sourceChannel": {
+      "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech", "core-topic"]
+    },
     "sourceId": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$"
@@ -126,7 +129,7 @@
       "required": ["sourceId", "channel", "sourceName", "status", "candidateCount"],
       "properties": {
         "sourceId": { "$ref": "#/$defs/sourceId" },
-        "channel": { "$ref": "#/$defs/channel" },
+        "channel": { "$ref": "#/$defs/sourceChannel" },
         "sourceName": { "type": "string", "minLength": 1 },
         "status": { "enum": ["ok", "no-results", "partial", "error"] },
         "candidateCount": { "type": "integer", "minimum": 0 },

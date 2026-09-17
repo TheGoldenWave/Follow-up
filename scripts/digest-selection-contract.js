@@ -143,7 +143,7 @@ function requestSemanticErrors(request) {
   for (const [index, candidate] of (request?.eligibleCandidates ?? []).entries()) {
     const source = sourceById.get(candidate.sourceId);
     if (!source) errors.push(`/eligibleCandidates/${index}/sourceId is absent from /sourceStatuses`);
-    else if (source.channel !== candidate.channel) {
+    else if (source.channel !== 'core-topic' && source.channel !== candidate.channel) {
       errors.push(`/eligibleCandidates/${index}/channel must match its source status`);
     }
   }

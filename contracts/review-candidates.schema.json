@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheGoldenWave/Follow-up/contracts/review-candidates.schema.json",
+  "title": "Follow-up Review Candidates",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "candidates"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "candidates": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/candidate" }
+    }
+  },
+  "$defs": {
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidateId", "sourceId", "title", "canonicalUrl", "firstSeenAt", "lastSeenAt", "reason"],
+      "properties": {
+        "candidateId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "sourceId": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$" },
+        "sourceNativeId": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "canonicalUrl": { "type": "string", "format": "uri" },
+        "firstSeenAt": { "type": "string", "format": "date-time" },
+        "lastSeenAt": { "type": "string", "format": "date-time" },
+        "reason": { "const": "unclassified-core-topic" }
+      }
+    }
+  }
+}

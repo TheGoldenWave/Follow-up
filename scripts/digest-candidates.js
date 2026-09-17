@@ -46,7 +46,9 @@ export async function resolveDigestCandidates({
   if (!feed || !Array.isArray(feed.candidates) || !Array.isArray(feed.registry)) {
     throw new TypeError('Candidate Feed must contain candidates and registry arrays');
   }
-  const sourceStatuses = feed.registry.filter(({ channel }) => enabledChannels.includes(channel));
+  const sourceStatuses = feed.registry.filter(({ channel }) => (
+    channel === 'core-topic' || enabledChannels.includes(channel)
+  ));
   const enabledSourceIds = sourceStatuses.map(({ sourceId }) => sourceId);
   const coverage = deriveDigestWindow({
     frequency,

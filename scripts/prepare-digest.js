@@ -249,8 +249,8 @@ export async function loadCurationPrompt(options = {}) {
 }
 
 function expectedRegistry(registry) {
-  return registry.map(({ id, sourceId, channel, name }) => ({
-    id: id ?? sourceId, channel, name,
+  return registry.map(({ id, sourceId, channel, channel_policy, name }) => ({
+    id: id ?? sourceId, channel: channel_policy === 'core-topic' ? 'core-topic' : channel, name,
   }));
 }
 
@@ -466,9 +466,11 @@ export async function prepareDigest({
     config: normalizedConfig, frequency: resolvedFrequency, now, deliveryEvents,
     loadCandidateFeed: async () => effectiveFeed,
   });
-  const enabledRegistry = registry.filter(({ channel }) => normalizedConfig.enabledChannels.includes(channel));
+  const enabledRegistry = registry.filter(({ channel, channel_policy }) => (
+    channel_policy === 'core-topic' || normalizedConfig.enabledChannels.includes(channel)
+  ));
   const enabledMissingSources = completeness.missingSources.filter(({ channel }) => (
-    normalizedConfig.enabledChannels.includes(channel)
+    channel === 'core-topic' || normalizedConfig.enabledChannels.includes(channel)
   ));
   const reportedStatuses = resolved.sourceStatuses.map((status) => ({ ...status }));
   const sourceStatuses = [

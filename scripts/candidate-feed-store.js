@@ -15,7 +15,9 @@ export const CANDIDATE_RETENTION = Object.freeze({
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function expectedRegistry(registry) {
-  return registry.map(({ id, sourceId, channel }) => ({ id: id ?? sourceId, channel }));
+  return registry.map(({ id, sourceId, channel, channel_policy }) => ({
+    id: id ?? sourceId, channel: channel_policy === 'core-topic' ? 'core-topic' : channel,
+  }));
 }
 
 function retentionTimestamp(candidate) {

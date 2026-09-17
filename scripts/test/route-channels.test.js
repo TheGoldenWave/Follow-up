@@ -31,6 +31,15 @@ test('core-topic routes academic keywords to academic and blogs', () => {
   assert.deepEqual(channels, ['academic', 'blogs']);
 });
 
+test('core-topic routing uses candidate query provenance and content', () => {
+  const value = source('community:github', null, 'core-topic', {
+    queries: [{ id: 'agentic-systems', query: 'agentic systems' }],
+  });
+  assert.deepEqual(routeCoreTopicChannels(value, {
+    title: 'Runtime release', text: '', provenance: { query_id: 'agentic-systems' },
+  }), ['academic', 'blogs']);
+});
+
 test('core-topic routes Chinese keywords to zh-tech', () => {
   const channels = routeCoreTopicChannels(
     source('digg:b', 'reports', 'core-topic', { topic: '中国大模型科技新闻' }),

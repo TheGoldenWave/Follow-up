@@ -136,3 +136,20 @@ test('batch mapping rejects an item claiming another source', () => {
     sourceIndex: new Map([['blog:test', source]]), seenAt: SEEN_AT,
   }), /item source does not match batch/);
 });
+
+test('core-topic candidates route per item and unclassified items remain review-only', () => {
+  const community = {
+    id: 'community:github', name: 'GitHub', channel: null, channel_policy: 'core-topic',
+    input: { queries: [{ id: 'agents', query: 'AI agents' }] },
+  };
+  const routed = { ...item, source: community.id, candidate_id: `${community.id}:1`,
+    provenance: { query_id: 'agents' } };
+  const review = { ...item, source: community.id, candidate_id: `${community.id}:2`,
+    title: 'Miscellaneous update', text: '', provenance: {} };
+  const mapped = mapSignalBatch(batch({ source: community.id, items: [routed, review] }), {
+    sourceIndex: new Map([[community.id, community]]), seenAt: SEEN_AT,
+  });
+  assert.equal(mapped.candidates[0].channel, 'academic');
+  assert.deepEqual(mapped.reviewCandidates.map(({ sourceNativeId }) => sourceNativeId), ['2']);
+  assert.equal(mapped.sourceStatus.candidateCount, 1);
+});

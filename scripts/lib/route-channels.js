@@ -1,6 +1,6 @@
 // Channel routing for acquisition candidates. Fixed sources map to their
 // declared channel; core-topic sources (Reddit, Digg) map to one or more of the
-// existing seven channels and never create platform-named channels.
+// existing six channels and never create platform-named channels.
 
 export const SEVEN_CHANNELS = Object.freeze([
   'x', 'podcasts', 'blogs', 'newsletters', 'academic', 'zh-tech',
@@ -10,16 +10,22 @@ export const SEVEN_CHANNELS = Object.freeze([
 export const REVIEW_CHANNEL = 'review';
 
 // Topic keyword → target channels, ordered by specificity. Core-topic sources
-// (Reddit/Digg) land here in later versions; v0.3.0 has none.
+// Candidate content and query provenance are both considered.
 const CORE_TOPIC_RULES = Object.freeze([
-  [/academic|paper|research|arxiv|llm|model|training/i, ['academic', 'blogs']],
+  [/academic|paper|research|arxiv|llm|model|training|agentic|agents/i, ['academic', 'blogs']],
   [/startup|venture|funding|saas|business/i, ['blogs', 'newsletters']],
   [/video|podcast|audio|youtube/i, ['podcasts']],
   [/china|chinese|中文|科技|模型|大模型/i, ['zh-tech']],
 ]);
 
-export function routeCoreTopicChannels(source) {
-  const topic = String(source?.input?.topic ?? source?.input?.query ?? source?.name ?? '');
+export function routeCoreTopicChannels(source, item = {}) {
+  const queryId = item?.provenance?.query_id;
+  const query = source?.input?.queries?.find?.(({ id }) => id === queryId);
+  const topic = [
+    item?.title, item?.text, queryId, query?.query,
+    ...(query?.filters?.topics ?? []), item?.provenance?.subreddit,
+    source?.input?.topic, source?.input?.query, source?.input?.subreddit, source?.name,
+  ].filter((value) => typeof value === 'string').join(' ');
   const matched = [];
   for (const [pattern, channels] of CORE_TOPIC_RULES) {
     if (pattern.test(topic)) {
@@ -31,7 +37,7 @@ export function routeCoreTopicChannels(source) {
   return matched.length > 0 ? matched : [REVIEW_CHANNEL];
 }
 
-export function routeSourceChannel(source) {
+export function routeSourceChannel(source, item) {
   const policy = source?.channel_policy ?? 'fixed';
   if (policy === 'fixed') {
     const channel = source.channel;
@@ -41,7 +47,7 @@ export function routeSourceChannel(source) {
     return channel;
   }
   if (policy === 'core-topic') {
-    return routeCoreTopicChannels(source)[0];
+    return routeCoreTopicChannels(source, item)[0];
   }
   throw new Error(`Source ${source.id} has unknown channel_policy "${policy}"`);
 }

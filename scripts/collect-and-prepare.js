@@ -12,6 +12,7 @@ import { invokeAcquisitionRun, invokeCheckpointCommit, loadCollectedBatches } fr
 import { publishBatchRun, publishLatestPointers } from './lib/publish-batches.js';
 import { loadCheckpointIntent } from './lib/checkpoint-intent.js';
 import { main as prepareMain, parseOptions, writeJsonAtomic } from './prepare-digest.js';
+import { createReviewQueue } from './lib/review-queue.js';
 import { updateLocalPool, localInputForRun } from './lib/local-candidate-store.js';
 import { loadSignalBatches } from './lib/load-signal-batches.js';
 import { normalizeConfig } from './config-contract.js';
@@ -167,6 +168,8 @@ export async function main({ argv = process.argv.slice(2), stdout = process.stdo
           if (Object.values(checks).some(check => !check.secretsClean)) throw new Error('unsafe acquisition output');
           const mapped = loadSignalBatches(Object.values(batches), { sources: sources.sources, seenAt: now });
           const poolPath = join(acquisitionDir, 'candidate-pool.json');
+          await writeJsonAtomic(join(acquisitionDir, 'review-candidates.json'),
+            createReviewQueue(mapped.reviewCandidates, now), { label: 'review candidate queue' });
           let previous = null;
           try { previous = JSON.parse(await readFile(poolPath, 'utf8')); }
           catch (error) { if (error.code !== 'ENOENT') throw error; }

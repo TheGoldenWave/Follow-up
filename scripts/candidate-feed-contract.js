@@ -58,7 +58,7 @@ function uniquenessErrors(feed) {
       const source = sources.get(candidate.sourceId);
       if (!source) {
         errors.push(`/candidates/${index}/sourceId is absent from /registry`);
-      } else if (source.channel !== candidate.channel) {
+      } else if (source.channel !== 'core-topic' && source.channel !== candidate.channel) {
         errors.push(`/candidates/${index}/channel must match its /registry source channel`);
       }
     }
@@ -77,6 +77,7 @@ function semanticErrors(feed) {
   const errors = [];
   const registry = Array.isArray(feed.registry) ? feed.registry : [];
   const candidates = Array.isArray(feed.candidates) ? feed.candidates : [];
+  const sources = new Map(registry.map((source) => [source?.sourceId, source]));
   const actualCandidateCounts = new Map();
   for (const candidate of candidates) {
     if (typeof candidate?.sourceId !== 'string') continue;
@@ -86,7 +87,7 @@ function semanticErrors(feed) {
     );
   }
   for (const [index, source] of registry.entries()) {
-    if (typeof source?.sourceId === 'string' && typeof source?.channel === 'string'
+    if (source?.channel !== 'core-topic' && typeof source?.sourceId === 'string' && typeof source?.channel === 'string'
       && !source.sourceId.startsWith(`${expectedNamespace(source.channel)}:`)) {
       errors.push(`/registry/${index}/sourceId must use the namespace for its channel`);
     }
@@ -113,7 +114,8 @@ function semanticErrors(feed) {
 
   for (const [index, candidate] of candidates.entries()) {
     if (!candidate || typeof candidate !== 'object') continue;
-    if (typeof candidate.sourceId === 'string' && typeof candidate.channel === 'string'
+    if (sources.get(candidate.sourceId)?.channel !== 'core-topic'
+      && typeof candidate.sourceId === 'string' && typeof candidate.channel === 'string'
       && !candidate.sourceId.startsWith(`${expectedNamespace(candidate.channel)}:`)) {
       errors.push(`/candidates/${index}/sourceId must use the namespace for its channel`);
     }
@@ -223,7 +225,8 @@ function normalizedExpectedRegistry(expectedRegistry) {
   const errors = [];
   for (const [index, source] of expectedRegistry.entries()) {
     const sourceId = source?.id ?? source?.sourceId;
-    if (typeof sourceId !== 'string' || typeof source?.channel !== 'string') {
+    const channel = source?.channel_policy === 'core-topic' ? 'core-topic' : source?.channel;
+    if (typeof sourceId !== 'string' || typeof channel !== 'string') {
       errors.push(`/expectedRegistry/${index} requires id and channel`);
       continue;
     }
@@ -232,7 +235,7 @@ function normalizedExpectedRegistry(expectedRegistry) {
       continue;
     }
     expected.set(sourceId, {
-      channel: source.channel,
+      channel,
       sourceName: typeof source.name === 'string' && source.name.length > 0
         ? source.name : sourceId,
     });
