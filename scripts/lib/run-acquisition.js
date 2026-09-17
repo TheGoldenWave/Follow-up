@@ -101,6 +101,7 @@ async function removeOwnedOutput(outputDir, identity, fsImpl) {
 export async function invokeAcquisitionRun({
   outputDir,
   checkpointOut = join(outputDir, 'checkpoint-intent.json'),
+  stateRoot,
   runId = 'manual-run',
   pythonPath,
   cwd,
@@ -127,7 +128,8 @@ export async function invokeAcquisitionRun({
       child = spawnImpl(
         pythonPath,
         ['-I', '-m', 'follow_up_acquisition', 'run', '--run-id', runId,
-          '--output', outputDir, '--checkpoint-out', checkpointOut],
+          '--output', outputDir, '--checkpoint-out', checkpointOut,
+          ...(stateRoot ? ['--state-root', stateRoot] : [])],
         { cwd, env: runtimeEnv, stdio: ['ignore', 'pipe', 'pipe'] },
       );
     } catch {

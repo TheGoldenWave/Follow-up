@@ -65,7 +65,10 @@ export async function collectAndPrepare({
   let cleanupIdentity;
   let invocationCompleted = false;
   try {
-    const invocation = await invokeRun({ outputDir, checkpointOut, runId, env: { ...process.env, HOME: join(userDir, '..') } });
+    const invocation = await invokeRun({
+      outputDir, checkpointOut, runId, stateRoot: join(acquisitionDir, 'source-state'),
+      env: { ...process.env, HOME: join(userDir, '..') },
+    });
     invocationCompleted = true;
     const expectedDirectoryIdentity = invocation?.stagingIdentity;
     cleanupIdentity = expectedDirectoryIdentity;

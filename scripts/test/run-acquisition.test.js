@@ -40,6 +40,16 @@ test('invokeAcquisitionRun resolves on exit 0 and captures stdout', async () => 
   assert.deepEqual(args[0][1], ['-I', '-m', 'follow_up_acquisition', 'run', '--run-id', 'run-1', '--output', '/tmp/acq', '--checkpoint-out', '/tmp/acq/checkpoint-intent.json']);
 });
 
+test('invokeAcquisitionRun passes the existing state root to collection', async () => {
+  const calls = [];
+  await invokeAcquisitionRun({
+    manageOutput: false, outputDir: '/tmp/acq', checkpointOut: '/tmp/acq/checkpoint-intent.json',
+    stateRoot: '/tmp/source-state', runId: 'run-1', pythonPath: 'python3.12',
+    spawnImpl: (_cmd, argv) => { calls.push(argv); return fakeChild(0); },
+  });
+  assert.deepEqual(calls[0].slice(-2), ['--state-root', '/tmp/source-state']);
+});
+
 test('invokeAcquisitionRun rejects on a non-zero exit', async () => {
   await assert.rejects(
     () => invokeAcquisitionRun({ outputDir: '/tmp/acq', pythonPath: 'python3.12', manageOutput: false, spawnImpl: () => fakeChild(1) }),

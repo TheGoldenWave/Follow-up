@@ -122,6 +122,21 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(stdout.getvalue(), "run: no collectable sources\n")
 
+    def test_run_passes_loaded_state_to_collection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_root = root / "source-state"
+            parent = state_root.parent
+            parent.chmod(0o700)
+            output = root / "staging"
+            output.mkdir(mode=0o700)
+            checkpoint_out = output / "checkpoint-intent.json"
+            with patch("follow_up_acquisition.collect.collect_run", return_value=CollectionRun({}, {}, {})) as collect:
+                code = main(["run", "--run-id", "run-state", "--output", str(output),
+                    "--checkpoint-out", str(checkpoint_out), "--state-root", str(state_root)])
+            self.assertEqual(code, 0)
+            self.assertIsNotNone(collect.call_args.kwargs["checkpoint_resolver"])
+
     def test_handshake_run_with_no_batches_still_writes_empty_intent(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

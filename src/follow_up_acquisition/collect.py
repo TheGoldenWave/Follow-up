@@ -8,7 +8,7 @@ rollout never breaks the rest of the run.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable, Mapping
 
 from .adapters.arxiv import ArxivAdapter
 from .adapters.github import GitHubAdapter
@@ -63,16 +63,19 @@ def derive_active_stream_ids(source: dict[str, Any]) -> tuple[str, ...]:
     return tuple(sorted(set(streams), key=lambda item: item.encode("utf-8")))
 
 
-def build_source_pairs(sources: list[dict[str, Any]]) -> list[tuple[Any, str]]:
+def build_source_pairs(
+    sources: list[dict[str, Any]],
+    checkpoint_resolver: Callable[[str], Mapping[str, Any] | None] | None = None,
+) -> list[tuple[Any, str]]:
     """Return ``[(adapter, source_id)]`` for every collectable source."""
     by_id = {source["id"]: source for source in sources}
-    arxiv = ArxivAdapter(resolve_source=lambda source_id: by_id[source_id])
-    github = GitHubAdapter(resolve_source=lambda source_id: by_id[source_id])
-    hackernews = HackerNewsAdapter(resolve_source=lambda source_id: by_id[source_id])
-    hugging_face = HuggingFacePapersAdapter(resolve_source=lambda source_id: by_id[source_id])
+    arxiv = ArxivAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
+    github = GitHubAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
+    hackernews = HackerNewsAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
+    hugging_face = HuggingFacePapersAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
     reddit = RedditAdapter(resolve_source=lambda source_id: by_id[source_id])
     rss = RssAdapter(resolve_source=lambda source_id: by_id[source_id])
-    techmeme = TechmemeAdapter(resolve_source=lambda source_id: by_id[source_id])
+    techmeme = TechmemeAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
     web = WebPublicationAdapter(resolve_source=lambda source_id: by_id[source_id])
 
     pairs: list[tuple[Any, str]] = []
@@ -100,18 +103,20 @@ def collect_sources(
     sources: list[dict[str, Any]],
     request: dict[str, Any] | None = None,
     source_ids: set[str] | None = None,
+    checkpoint_resolver: Callable[[str], Mapping[str, Any] | None] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Collect the given sources and return ``{source_id: batch}``."""
-    return collect_run(sources, request, source_ids).batches
+    return collect_run(sources, request, source_ids, checkpoint_resolver).batches
 
 
 def collect_run(
     sources: list[dict[str, Any]],
     request: dict[str, Any] | None = None,
     source_ids: set[str] | None = None,
+    checkpoint_resolver: Callable[[str], Mapping[str, Any] | None] | None = None,
 ) -> CollectionRun:
     """Collect batches while retaining validated immutable checkpoint updates."""
-    pairs = build_source_pairs(sources)
+    pairs = build_source_pairs(sources, checkpoint_resolver)
     runtime = AcquisitionRuntime()
     effective_request = request if request is not None else SHADOW_REQUEST
     by_id = {source["id"]: source for source in sources}
