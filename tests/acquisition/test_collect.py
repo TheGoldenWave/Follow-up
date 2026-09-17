@@ -8,6 +8,9 @@ from unittest.mock import patch
 from follow_up_acquisition.adapters.rss import RssAdapter
 from follow_up_acquisition.adapters.arxiv import ArxivAdapter
 from follow_up_acquisition.adapters.hugging_face_papers import HuggingFacePapersAdapter
+from follow_up_acquisition.adapters.github import GitHubAdapter
+from follow_up_acquisition.adapters.hackernews import HackerNewsAdapter
+from follow_up_acquisition.adapters.reddit import RedditAdapter
 from follow_up_acquisition.adapters.techmeme import TechmemeAdapter
 from follow_up_acquisition.adapters.web_publication import WebPublicationAdapter
 from follow_up_acquisition.collect import (
@@ -74,6 +77,18 @@ class BuildSourcePairsTests(unittest.TestCase):
         self.assertEqual(pairs[0][1], "academic:c")
         self.assertIsInstance(pairs[1][0], HuggingFacePapersAdapter)
         self.assertEqual(pairs[1][1], "academic:hf")
+
+    def test_collects_public_community_adapters_without_credential_configuration(self):
+        sources = [
+            _source("community:github", "github"),
+            _source("community:hacker-news", "hackernews"),
+            _source("community:reddit", "reddit"),
+        ]
+        pairs = build_source_pairs(sources)
+        self.assertEqual([source_id for _adapter, source_id in pairs], [source["id"] for source in sources])
+        self.assertIsInstance(pairs[0][0], GitHubAdapter)
+        self.assertIsInstance(pairs[1][0], HackerNewsAdapter)
+        self.assertIsInstance(pairs[2][0], RedditAdapter)
 
 
 class CollectSourcesTests(unittest.TestCase):
