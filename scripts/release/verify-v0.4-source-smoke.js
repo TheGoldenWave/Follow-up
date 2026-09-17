@@ -9,12 +9,12 @@ import addFormats from 'ajv-formats';
 import { scanBuffer } from './scan-secrets.js';
 
 const EXPECTED = new Map([
-  ['github', 'community:github'],
-  ['hackernews', 'community:hacker-news'],
-  ['reddit', 'community:reddit-machinelearning'],
-  ['techmeme', 'community:techmeme'],
-  ['arxiv', 'academic:arxiv-cs-ai'],
-  ['hugging-face-papers', 'academic:hugging-face-papers'],
+  ['github', new Set(['community:github'])],
+  ['hackernews', new Set(['community:hacker-news'])],
+  ['reddit', new Set(['community:reddit-artificial', 'community:reddit-localllama', 'community:reddit-machinelearning'])],
+  ['techmeme', new Set(['community:techmeme'])],
+  ['arxiv', new Set(['academic:arxiv-cs-ai', 'academic:arxiv-cs-cl', 'academic:arxiv-cs-cr', 'academic:arxiv-cs-cv', 'academic:arxiv-cs-lg', 'academic:arxiv-cs-ro'])],
+  ['hugging-face-papers', new Set(['academic:hugging-face-papers'])],
 ]);
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SENSITIVE_NOTE = /(?:github_pat_|\bgh[pousr]_|\bsk-|\bAKIA|-----BEGIN|https?:\/\/)/i;
@@ -41,7 +41,7 @@ export function validateSourceSmoke(evidence, { now = new Date().toISOString() }
     if (!run || typeof run !== 'object') continue;
     if (seen.has(run.adapterId)) errors.push(`${path}/adapterId must be unique`);
     seen.add(run.adapterId);
-    if (EXPECTED.get(run.adapterId) !== run.sourceId) errors.push(`${path}/sourceId must match adapterId`);
+    if (!EXPECTED.get(run.adapterId)?.has(run.sourceId)) errors.push(`${path}/sourceId must match adapterId`);
     const startedAt = Date.parse(run.startedAt);
     const completedAt = Date.parse(run.completedAt);
     if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || startedAt > completedAt) {

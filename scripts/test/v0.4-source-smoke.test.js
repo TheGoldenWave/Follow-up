@@ -30,6 +30,13 @@ test('accepts exactly six fresh, reviewed, secret-free successful source runs', 
   assert.deepEqual(validateSourceSmoke(evidence(), { now: NOW }), []);
 });
 
+test('accepts another canonical source for multi-source adapters', () => {
+  const value = evidence();
+  value.runs.find(({ adapterId }) => adapterId === 'arxiv').sourceId = 'academic:arxiv-cs-lg';
+  value.runs.find(({ adapterId }) => adapterId === 'reddit').sourceId = 'community:reddit-localllama';
+  assert.deepEqual(validateSourceSmoke(value, { now: NOW }), []);
+});
+
 test('rejects duplicate adapters, stale or reversed times, failed status, and invalid metrics', () => {
   for (const mutate of [
     value => { value.runs[1].adapterId = 'github'; },
