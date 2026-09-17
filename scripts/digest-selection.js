@@ -112,7 +112,8 @@ export function validateSelectionAgainstRequest(request, manifest, { excludedCan
   const assigned = new Map();
   const clusterById = new Map();
   const totalCandidateReferences = manifest.clusters.reduce(
-    (total, cluster) => total + 1 + cluster.corroboratingCandidateIds.length,
+    (total, cluster) => total + 1 + cluster.corroboratingCandidateIds.length
+      + (cluster.communityEvidenceCandidateIds?.length ?? 0),
     0,
   );
   if (totalCandidateReferences > Math.min(request.eligibleCandidates.length, 1000)) {
@@ -123,9 +124,16 @@ export function validateSelectionAgainstRequest(request, manifest, { excludedCan
     const path = `/clusters/${index}`;
     if (clusterById.has(cluster.eventClusterId)) errors.push(`${path}/eventClusterId must be unique`);
     clusterById.set(cluster.eventClusterId, cluster);
-    const members = [cluster.leadCandidateId, ...cluster.corroboratingCandidateIds];
+    const community = cluster.communityEvidenceCandidateIds ?? [];
+    const members = [cluster.leadCandidateId, ...cluster.corroboratingCandidateIds, ...community];
     if (cluster.corroboratingCandidateIds.includes(cluster.leadCandidateId)) {
       errors.push(`${path}/leadCandidateId must not appear in corroboratingCandidateIds`);
+    }
+    if (community.includes(cluster.leadCandidateId)) {
+      errors.push(`${path}/leadCandidateId must not appear in communityEvidenceCandidateIds`);
+    }
+    if (new Set(members).size !== members.length) {
+      errors.push(`${path} member IDs must be mutually exclusive`);
     }
     for (const candidateId of members) {
       if (!candidateById.has(candidateId)) errors.push(`${path} references an ineligible candidate`);
@@ -144,9 +152,22 @@ export function validateSelectionAgainstRequest(request, manifest, { excludedCan
     if (totalScore !== impact + relevance + evidence + novelty + corroboration) {
       errors.push(`${path}/scores/totalScore must equal the component sum`);
     }
-    const sourceIds = new Set(members.map((candidateId) => candidateById.get(candidateId)?.sourceId).filter(Boolean));
-    if (corroboration > 0 && sourceIds.size < 2) {
-      errors.push(`${path}/scores/corroboration requires at least two source IDs`);
+    if (manifest.schemaVersion === '1.1') {
+      const isCommunity = (candidateId) => (
+        candidateById.get(candidateId)?.communityEvidence?.role === 'community-discovery'
+      );
+      for (const candidateId of community) {
+        if (!isCommunity(candidateId)) errors.push(`${path}/communityEvidenceCandidateIds requires community evidence`);
+      }
+      for (const candidateId of [cluster.leadCandidateId, ...cluster.corroboratingCandidateIds]) {
+        if (isCommunity(candidateId)) errors.push(`${path}/corroborating members must not be community evidence`);
+      }
+      const factual = [cluster.leadCandidateId, ...cluster.corroboratingCandidateIds];
+      const sourceIds = new Set(factual.map((candidateId) => candidateById.get(candidateId)?.sourceId).filter(Boolean));
+      const expectedCorroboration = sourceIds.size < 2 ? 0 : sourceIds.size === 2 ? 4 : sourceIds.size === 3 ? 7 : 10;
+      if (corroboration !== expectedCorroboration) {
+        errors.push(`${path}/scores/corroboration must equal the factual source count`);
+      }
     }
   }
 

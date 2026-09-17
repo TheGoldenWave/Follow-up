@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "digestId", "requestHash", "generatedAt", "clusters", "selectedEventClusterIds"],
   "properties": {
-    "schemaVersion": { "const": "1.0" },
+    "schemaVersion": { "enum": ["1.0", "1.1"] },
     "digestId": { "$ref": "#/$defs/stableId" },
     "requestHash": { "$ref": "#/$defs/hashId" },
     "generatedAt": { "type": "string", "format": "date-time", "maxLength": 35 },
@@ -22,6 +22,14 @@
       "items": { "$ref": "#/$defs/hashId" }
     }
   },
+  "allOf": [{
+    "if": { "properties": { "schemaVersion": { "const": "1.1" } } },
+    "then": {
+      "properties": {
+        "clusters": { "items": { "required": ["communityEvidenceCandidateIds"] } }
+      }
+    }
+  }],
   "$defs": {
     "hashId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "stableId": {
@@ -55,6 +63,12 @@
         "eventClusterId": { "$ref": "#/$defs/hashId" },
         "leadCandidateId": { "$ref": "#/$defs/hashId" },
         "corroboratingCandidateIds": {
+          "type": "array",
+          "maxItems": 999,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/hashId" }
+        },
+        "communityEvidenceCandidateIds": {
           "type": "array",
           "maxItems": 999,
           "uniqueItems": true,

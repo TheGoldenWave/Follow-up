@@ -70,10 +70,47 @@ function cluster(candidate, totalScore, evidence = 15, corroboratingCandidateIds
     eventClusterId: createEventClusterId([candidate.candidateId, ...corroboratingCandidateIds]),
     leadCandidateId: candidate.candidateId,
     corroboratingCandidateIds,
+    communityEvidenceCandidateIds: [],
     scores: { impact, relevance, evidence, novelty, corroboration, totalScore },
     selectionReason: `Select ${candidate.candidateId[0]}`,
   };
 }
+
+test('selection keeps community discovery separate from corroboration', () => {
+  const lead = candidate('a', 'academic', 'academic:arxiv', '2026-09-06T07:00:00.000Z');
+  const community = {
+    ...candidate('b', 'academic', 'academic:hugging-face-papers', '2026-09-06T07:00:00.000Z'),
+    communityEvidence: {
+      role: 'community-discovery',
+      views: [{ kind: 'daily', pageUrl: 'https://huggingface.co/papers/date/2026-09-16' }],
+    },
+  };
+  const requestDocument = request([lead, community]);
+  const item = cluster(lead, 65, 15);
+  item.communityEvidenceCandidateIds = [community.candidateId];
+  item.eventClusterId = createEventClusterId([
+    lead.candidateId,
+    ...item.corroboratingCandidateIds,
+    ...item.communityEvidenceCandidateIds,
+  ]);
+  item.scores = { impact: 30, relevance: 20, evidence: 15, novelty: 0, corroboration: 0, totalScore: 65 };
+  const manifest = {
+    schemaVersion: '1.1', digestId, requestHash: requestDocument.requestHash,
+    generatedAt: '2026-09-06T08:01:00.000Z', clusters: [item],
+    selectedEventClusterIds: [item.eventClusterId],
+  };
+  assert.deepEqual(validateSelectionAgainstRequest(requestDocument, manifest), { valid: true, errors: [] });
+
+  const missing = structuredClone(manifest);
+  delete missing.clusters[0].communityEvidenceCandidateIds;
+  assert.equal(validateSelectionAgainstRequest(requestDocument, missing).valid, false);
+
+  const mislabeled = structuredClone(manifest);
+  mislabeled.clusters[0].communityEvidenceCandidateIds = [];
+  mislabeled.clusters[0].corroboratingCandidateIds = [community.candidateId];
+  mislabeled.clusters[0].eventClusterId = createEventClusterId([lead.candidateId, community.candidateId]);
+  assert.equal(validateSelectionAgainstRequest(requestDocument, mislabeled).valid, false);
+});
 
 test('event cluster identity reuses length-prefixed framing with UTF-8 byte-order candidate IDs', () => {
   const ids = ['f'.repeat(64), '0'.repeat(64), 'a'.repeat(64)];
