@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from follow_up_acquisition.adapters.rss import RssAdapter
+from follow_up_acquisition.adapters.arxiv import ArxivAdapter
 from follow_up_acquisition.adapters.techmeme import TechmemeAdapter
 from follow_up_acquisition.adapters.web_publication import WebPublicationAdapter
 from follow_up_acquisition.collect import (
@@ -58,14 +59,17 @@ class BuildSourcePairsTests(unittest.TestCase):
         self.assertIsInstance(pairs[2][0], WebPublicationAdapter)
         self.assertEqual(pairs[2][1], "blog:y")
 
-    def test_skips_unimplemented_adapters(self):
+    def test_collects_arxiv_and_skips_unimplemented_adapters(self):
         sources = [
             _source("x:a", "x"),
             _source("podcast:b", "podcast"),
             _source("academic:c", "arxiv"),
             _source("report:d", "report"),
         ]
-        self.assertEqual(build_source_pairs(sources), [])
+        pairs = build_source_pairs(sources)
+        self.assertEqual(len(pairs), 1)
+        self.assertIsInstance(pairs[0][0], ArxivAdapter)
+        self.assertEqual(pairs[0][1], "academic:c")
 
 
 class CollectSourcesTests(unittest.TestCase):

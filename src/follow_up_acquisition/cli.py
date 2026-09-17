@@ -405,7 +405,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             except (OSError, ValueError):
                 print("run: checkpoint intent exceeds size limit or cannot be staged safely")
                 return 1
-        print("run: no collectable sources (v0.3.0 adapters are rss and web-publication)")
+        print("run: no collectable sources")
         return 0
 
     output_dir = Path(args.output) if args.output else _default_output_dir()

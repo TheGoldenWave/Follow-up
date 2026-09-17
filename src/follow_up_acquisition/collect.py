@@ -1,9 +1,8 @@
 """Shadow-mode collection: wire the registry, adapters, and runtime together.
 
 This module is the only place that maps registry ``adapter`` values to adapter
-instances. Sources whose adapter is not implemented in v0.3.0 (X, podcast,
-arXiv, reports, Sidecars) are skipped, so a partial rollout never breaks the
-rest of the run.
+instances. Sources whose adapter is not implemented are skipped, so a partial
+rollout never breaks the rest of the run.
 """
 
 from __future__ import annotations
@@ -11,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .adapters.arxiv import ArxivAdapter
 from .adapters.rss import RssAdapter
 from .adapters.techmeme import TechmemeAdapter
 from .adapters.web_publication import WebPublicationAdapter
@@ -21,7 +21,7 @@ SHADOW_REQUEST: dict[str, str] = {"mode": "shadow"}
 
 # Adapters wired for local collection. Unimplemented registry adapters stay
 # deferred so a partial rollout never breaks the rest of the run.
-_COLLECTABLE_ADAPTERS = frozenset({"rss", "techmeme", "web-publication"})
+_COLLECTABLE_ADAPTERS = frozenset({"arxiv", "rss", "techmeme", "web-publication"})
 
 
 @dataclass(frozen=True)
@@ -60,13 +60,16 @@ def derive_active_stream_ids(source: dict[str, Any]) -> tuple[str, ...]:
 def build_source_pairs(sources: list[dict[str, Any]]) -> list[tuple[Any, str]]:
     """Return ``[(adapter, source_id)]`` for every collectable source."""
     by_id = {source["id"]: source for source in sources}
+    arxiv = ArxivAdapter(resolve_source=lambda source_id: by_id[source_id])
     rss = RssAdapter(resolve_source=lambda source_id: by_id[source_id])
     techmeme = TechmemeAdapter(resolve_source=lambda source_id: by_id[source_id])
     web = WebPublicationAdapter(resolve_source=lambda source_id: by_id[source_id])
 
     pairs: list[tuple[Any, str]] = []
     for source in sources:
-        if source["adapter"] == "rss":
+        if source["adapter"] == "arxiv":
+            pairs.append((arxiv, source["id"]))
+        elif source["adapter"] == "rss":
             pairs.append((rss, source["id"]))
         elif source["adapter"] == "techmeme":
             pairs.append((techmeme, source["id"]))

@@ -120,7 +120,7 @@ class CliTests(unittest.TestCase):
             with contextlib.redirect_stdout(stdout):
                 code = main(["run", "--registry", registry])
         self.assertEqual(code, 0)
-        self.assertIn("no collectable sources", stdout.getvalue())
+        self.assertEqual(stdout.getvalue(), "run: no collectable sources\n")
 
     def test_handshake_run_with_no_batches_still_writes_empty_intent(self):
         with tempfile.TemporaryDirectory() as tmp:

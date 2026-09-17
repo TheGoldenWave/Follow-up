@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>arXiv RSS</title>
+    <item>
+      <title>Agentic Planning Papers</title>
+      <link>https://arxiv.org/abs/2401.00001v1</link>
+      <guid isPermaLink="false">https://arxiv.org/abs/2401.00001v1</guid>
+      <published>2026-09-09T00:00:00Z</published>
+      <updated>2026-09-10T01:00:00Z</updated>
+      <description>An abstract about agents.</description>
+      <author>Ada Lovelace</author>
+    </item>
+    <item>
+      <title>Robotics Planning Papers</title>
+      <link>https://arxiv.org/abs/2401.00002v2</link>
+      <guid isPermaLink="false">https://arxiv.org/abs/2401.00002v2</guid>
+      <published>2026-09-08T00:00:00Z</published>
+      <updated>2026-09-09T02:00:00Z</updated>
+      <description>An abstract about robotics.</description>
+      <author>Grace Hopper</author>
+    </item>
+    <item>
+      <title>Biology Notes</title>
+      <link>https://arxiv.org/abs/2401.00003v1</link>
+      <guid isPermaLink="false">https://arxiv.org/abs/2401.00003v1</guid>
+      <published>2026-09-07T00:00:00Z</published>
+      <updated>2026-09-07T01:00:00Z</updated>
+      <description>An abstract about cells.</description>
+      <author>Barbara McClintock</author>
+    </item>
+  </channel>
+</rss>

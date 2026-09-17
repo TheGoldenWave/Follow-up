@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>https://arxiv.org/abs/2401.00001v1</id>
+    <updated>2026-09-12T03:00:00Z</updated>
+    <published>2026-09-09T00:00:00Z</published>
+    <title>Agentic Planning Papers</title>
+    <summary>A complete abstract from the metadata API.</summary>
+    <author><name>Ada Lovelace</name></author>
+  </entry>
+  <entry>
+    <id>https://arxiv.org/abs/2401.00002v2</id>
+    <updated>2026-09-11T02:00:00Z</updated>
+    <published>2026-09-08T00:00:00Z</published>
+    <title>Robotics Planning Papers</title>
+    <summary>A complete robotics abstract.</summary>
+    <author><name>Grace Hopper</name></author>
+  </entry>
+</feed>
