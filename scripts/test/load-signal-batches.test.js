@@ -152,4 +152,8 @@ test('core-topic candidates route per item and unclassified items remain review-
   assert.equal(mapped.candidates[0].channel, 'academic');
   assert.deepEqual(mapped.reviewCandidates.map(({ sourceNativeId }) => sourceNativeId), ['2']);
   assert.equal(mapped.sourceStatus.candidateCount, 1);
+  assert.deepEqual(mapped.sourceStatus, {
+    sourceId: community.id, channel: null, channels: ['academic'], sourceName: 'GitHub',
+    status: 'ok', candidateCount: 1,
+  });
 });

@@ -16,7 +16,8 @@ export function normalizeAcquisitionMode(value) {
 // `no-results` is a genuine empty result and must not fall back to central.
 const LOCAL_AUTHORITATIVE = new Set(['ok', 'no-results', 'partial']);
 function failureStatus(sourceId, metadata, message) {
-  return { sourceId, channel: metadata?.channel ?? 'blogs', sourceName: metadata?.sourceName ?? sourceId, candidateCount: 0, status: 'error', errorSummary: message };
+  const channel = metadata && Object.hasOwn(metadata, 'channel') ? metadata.channel : 'blogs';
+  return { sourceId, channel, ...(channel === null ? { channels: metadata?.channels ?? [] } : {}), sourceName: metadata?.sourceName ?? sourceId, candidateCount: 0, status: 'error', errorSummary: message };
 }
 
 /**

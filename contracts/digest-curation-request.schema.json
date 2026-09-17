@@ -50,9 +50,6 @@
     "channel": {
       "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech"]
     },
-    "sourceChannel": {
-      "enum": ["x", "podcasts", "blogs", "newsletters", "academic", "zh-tech", "core-topic"]
-    },
     "sourceId": {
       "type": "string",
       "maxLength": 128,
@@ -168,7 +165,7 @@
       ],
       "properties": {
         "candidateId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-        "channel": { "$ref": "#/$defs/sourceChannel" },
+        "channel": { "$ref": "#/$defs/channel" },
         "sourceId": { "$ref": "#/$defs/sourceId" },
         "sourceNativeId": { "type": "string", "minLength": 1, "maxLength": 512 },
         "canonicalUrl": {
@@ -195,7 +192,14 @@
       "required": ["sourceId", "channel", "sourceName", "status", "candidateCount"],
       "properties": {
         "sourceId": { "$ref": "#/$defs/sourceId" },
-        "channel": { "$ref": "#/$defs/channel" },
+        "channel": {
+          "oneOf": [{ "$ref": "#/$defs/channel" }, { "type": "null" }]
+        },
+        "channels": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/channel" }
+        },
         "sourceName": { "type": "string", "minLength": 1, "maxLength": 200 },
         "status": { "enum": ["ok", "no-results", "partial", "error"] },
         "candidateCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
@@ -211,6 +215,11 @@
         {
           "if": { "properties": { "status": { "enum": ["partial", "error"] } } },
           "then": { "required": ["errorSummary"] }
+        },
+        {
+          "if": { "properties": { "channel": { "type": "null" } } },
+          "then": { "required": ["channels"] },
+          "else": { "not": { "required": ["channels"] } }
         }
       ]
     }

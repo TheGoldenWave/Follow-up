@@ -9,7 +9,7 @@ import {
 } from '../candidate-normalization.js';
 import { validateCommunityEvidence } from '../community-evidence-contract.js';
 import { sanitizeDiagnostic } from '../source-status.js';
-import { REVIEW_CHANNEL, routeSourceChannel } from './route-channels.js';
+import { REVIEW_CHANNEL, SEVEN_CHANNELS, routeSourceChannel } from './route-channels.js';
 
 const FAILURE_STATUSES = new Set([
   'rate-limited', 'auth-failed', 'unreachable', 'timeout',
@@ -71,7 +71,7 @@ export function mapSignalBatchItem(item, { source, channel, seenAt }) {
   return candidate;
 }
 
-export function mapSignalBatchSourceStatus(batch, { source, channel, candidateCount }) {
+export function mapSignalBatchSourceStatus(batch, { source, channel, channels, candidateCount }) {
   const status = batch.source_status?.status ?? 'error';
   const mappedCount = candidateCount ?? (Array.isArray(batch.items) ? batch.items.length : 0);
   let nodeStatus;
@@ -82,6 +82,7 @@ export function mapSignalBatchSourceStatus(batch, { source, channel, candidateCo
   const sourceStatus = {
     sourceId: batch.source,
     channel,
+    ...(channel === null ? { channels } : {}),
     sourceName: source?.name ?? batch.source,
     status: nodeStatus,
     candidateCount: mappedCount,
@@ -120,12 +121,14 @@ export function mapSignalBatch(batch, { sourceIndex, seenAt }) {
     const candidate = mapSignalBatchItem(item, { source, channel, seenAt: resolvedSeenAt });
     (channel === REVIEW_CHANNEL ? reviewCandidates : candidates).push(candidate);
   }
-  const sourceChannel = source.channel_policy === 'core-topic' ? 'core-topic' : source.channel;
+  const sourceChannel = source.channel_policy === 'core-topic' ? null : source.channel;
+  const channels = [...new Set(candidates.map((candidate) => candidate.channel))]
+    .sort((first, second) => SEVEN_CHANNELS.indexOf(first) - SEVEN_CHANNELS.indexOf(second));
   return {
     sourceId,
     channel: sourceChannel,
     sourceStatus: mapSignalBatchSourceStatus(batch, {
-      source, channel: sourceChannel, candidateCount: candidates.length,
+      source, channel: sourceChannel, channels, candidateCount: candidates.length,
     }),
     candidates,
     reviewCandidates,

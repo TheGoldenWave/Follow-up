@@ -118,7 +118,7 @@ test('permits only shared-contract community evidence on candidates', () => {
 test('allows core-topic source status while candidates remain in live channels', () => {
   const fields = validFields();
   fields.registry[0] = {
-    sourceId: 'community:github', channel: 'core-topic', sourceName: 'GitHub',
+    sourceId: 'community:github', channel: null, channels: ['academic'], sourceName: 'GitHub',
     status: 'ok', candidateCount: 1,
   };
   fields.candidates[0].sourceId = 'community:github';
@@ -128,6 +128,10 @@ test('allows core-topic source status while candidates remain in live channels',
   assert.equal(validate({ schemaVersion: '1.0', ...fields }, [{
     id: 'community:github', channel: null, channel_policy: 'core-topic', name: 'GitHub',
   }]).valid, true);
+  fields.registry[0].channels = ['blogs', 'academic'];
+  assert.equal(validate({ schemaVersion: '1.0', ...fields }, [{
+    id: 'community:github', channel: null, channel_policy: 'core-topic', name: 'GitHub',
+  }]).valid, false);
 });
 
 test('validation errors are actionable without echoing secret values', () => {

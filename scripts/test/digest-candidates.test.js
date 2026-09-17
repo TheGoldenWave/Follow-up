@@ -80,6 +80,19 @@ test('missing enabledChannels defaults to all six configured channel categories'
   assert.deepEqual(result.eligibleCandidates.map(({ channel }) => channel), ENABLED_CHANNELS);
 });
 
+test('core-topic source status remains visible even when its routed channel is disabled', async () => {
+  const candidateFeed = feed([candidate('community', 'academic', 'community:github', '2026-09-09T00:00:00.000Z')]);
+  candidateFeed.registry = [{
+    sourceId: 'community:github', channel: null, channels: ['academic'], status: 'ok',
+  }];
+  const result = await resolveDigestCandidates({
+    config: { enabledChannels: ['blogs'] }, frequency: 'daily', now: '2026-09-10T08:00:00.000Z',
+    loadCandidateFeed: async () => candidateFeed,
+  });
+  assert.deepEqual(result.sourceStatuses, candidateFeed.registry);
+  assert.equal(result.eligibleCandidates.length, 0);
+});
+
 test('eligibility preserves Feed order and excludes disabled, pending, delivered, and assumed-delivered candidates', async () => {
   const candidates = [
     candidate('eligible-first', 'x', 'x:a', '2026-09-09T02:00:00.000Z'),

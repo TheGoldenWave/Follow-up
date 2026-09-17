@@ -12,6 +12,7 @@ export const CURATION_CANDIDATE_LIMIT = 1000;
 export const CURATION_TITLE_CHARACTER_LIMIT = 500;
 export const CURATION_SUMMARY_CHARACTER_LIMIT = 12_000;
 export const MISSING_SOURCE_STATUS_SUMMARY = 'Source status was not reported.';
+const CHANNELS = ['x', 'podcasts', 'blogs', 'newsletters', 'academic', 'zh-tech'];
 
 const requestSchema = JSON.parse(readFileSync(
   new URL('../contracts/digest-curation-request.schema.json', import.meta.url), 'utf8',
@@ -143,8 +144,17 @@ function requestSemanticErrors(request) {
   for (const [index, candidate] of (request?.eligibleCandidates ?? []).entries()) {
     const source = sourceById.get(candidate.sourceId);
     if (!source) errors.push(`/eligibleCandidates/${index}/sourceId is absent from /sourceStatuses`);
-    else if (source.channel !== 'core-topic' && source.channel !== candidate.channel) {
+    else if (source.channel !== null && source.channel !== candidate.channel) {
       errors.push(`/eligibleCandidates/${index}/channel must match its source status`);
+    } else if (source.channel === null && !source.channels?.includes(candidate.channel)) {
+      errors.push(`/eligibleCandidates/${index}/channel must appear in its source status channels`);
+    }
+  }
+  for (const [index, source] of (request?.sourceStatuses ?? []).entries()) {
+    if (source?.channel === null && Array.isArray(source.channels)
+      && source.channels.some((channel, channelIndex) => channelIndex > 0
+        && CHANNELS.indexOf(channel) <= CHANNELS.indexOf(source.channels[channelIndex - 1]))) {
+      errors.push(`/sourceStatuses/${index}/channels must use canonical channel order`);
     }
   }
   if (request?.contentStats) {

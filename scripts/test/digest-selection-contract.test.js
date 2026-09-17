@@ -50,6 +50,30 @@ test('curation request source completeness and candidate source coverage are int
   assert.equal(validateCurationRequest(unexplainedCompleteCoverage).valid, false);
 });
 
+test('core-topic source statuses bind candidates to canonical routed channels', async () => {
+  const request = await fixture('curation/valid-request.json');
+  const candidate = request.eligibleCandidates[0];
+  request.eligibleCandidates = [candidate];
+  candidate.sourceId = 'community:github';
+  candidate.channel = 'academic';
+  request.sourceStatuses[0] = {
+    sourceId: 'community:github', channel: null, channels: ['academic'], sourceName: 'GitHub',
+    status: 'ok', candidateCount: 1,
+  };
+  request.sourceStatuses = [request.sourceStatuses[0]];
+  request.sourceCompleteness = {
+    ...request.sourceCompleteness, expectedSourceCount: 1, reportedSourceCount: 1,
+    totalSourceCount: 1, okSourceCount: 1, noResultsSourceCount: 0,
+    partialSourceCount: 0, errorSourceCount: 0, missingSourceCount: 0,
+  };
+  request.contentStats = { ...request.contentStats, candidateCount: 1, eligibleCount: 1, excludedCount: 0 };
+  request.requestHash = createRequestHash(request);
+  assert.equal(validateCurationRequest(request).valid, true);
+  request.sourceStatuses[0].channels = ['blogs'];
+  request.requestHash = createRequestHash(request);
+  assert.equal(validateCurationRequest(request).valid, false);
+});
+
 test('request requires bound content stats, exact source aggregates, and consistent coverage', async () => {
   const request = await fixture('curation/valid-request.json');
   const missingStats = structuredClone(request);

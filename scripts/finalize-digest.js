@@ -101,9 +101,10 @@ export function finalizeDigest(request, selection) {
   const incompleteSources = request.sourceStatuses
     .filter(({ status: sourceStatus }) => sourceStatus === 'partial' || sourceStatus === 'error')
     .slice(0, 20)
-    .map(({ sourceId, channel, sourceName, status: sourceStatus }) => ({
+    .map(({ sourceId, channel, channels, sourceName, status: sourceStatus }) => ({
       sourceId,
       channel,
+      ...(channel === null ? { channels } : {}),
       sourceName: safeSourceName(sourceName, sourceId),
       status: sourceStatus,
     }));

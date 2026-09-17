@@ -185,9 +185,15 @@ export function validateFinalDigestArtifact(artifact) {
     throw new Error('Digest contentStats are inconsistent');
   }
   for (const source of artifact.incompleteSources) {
-    exactFields(source, ['sourceId', 'channel', 'sourceName', 'status'], 'Digest incomplete source');
+    exactFields(source, [
+      'sourceId', 'channel', 'sourceName', 'status',
+      ...(source.channel === null ? ['channels'] : []),
+    ], 'Digest incomplete source');
     if (typeof source.sourceId !== 'string' || typeof source.sourceName !== 'string'
-      || !['x', 'podcasts', 'blogs', 'newsletters', 'academic', 'zh-tech'].includes(source.channel)
+      || !(source.channel === null || ['x', 'podcasts', 'blogs', 'newsletters', 'academic', 'zh-tech'].includes(source.channel))
+      || (source.channel === null && (!Array.isArray(source.channels)
+        || new Set(source.channels).size !== source.channels.length
+        || source.channels.some((channel) => !['x', 'podcasts', 'blogs', 'newsletters', 'academic', 'zh-tech'].includes(channel))))
       || !['partial', 'error'].includes(source.status)) {
       throw new Error('Digest incomplete source is invalid');
     }

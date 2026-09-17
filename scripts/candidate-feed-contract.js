@@ -14,6 +14,7 @@ import {
 } from './candidate-normalization.js';
 
 export const CANDIDATE_FEED_SCHEMA_VERSION = '1.0';
+const CHANNELS = ['x', 'podcasts', 'blogs', 'newsletters', 'academic', 'zh-tech'];
 
 const schema = JSON.parse(readFileSync(
   new URL('../contracts/candidate-feed.schema.json', import.meta.url),
@@ -58,8 +59,10 @@ function uniquenessErrors(feed) {
       const source = sources.get(candidate.sourceId);
       if (!source) {
         errors.push(`/candidates/${index}/sourceId is absent from /registry`);
-      } else if (source.channel !== 'core-topic' && source.channel !== candidate.channel) {
+      } else if (source.channel !== null && source.channel !== candidate.channel) {
         errors.push(`/candidates/${index}/channel must match its /registry source channel`);
+      } else if (source.channel === null && !source.channels?.includes(candidate.channel)) {
+        errors.push(`/candidates/${index}/channel must appear in its /registry source channels`);
       }
     }
   }
@@ -87,11 +90,26 @@ function semanticErrors(feed) {
     );
   }
   for (const [index, source] of registry.entries()) {
-    if (source?.channel !== 'core-topic' && typeof source?.sourceId === 'string' && typeof source?.channel === 'string'
+    if (source?.channel === null && Array.isArray(source.channels)
+      && source.channels.some((channel, channelIndex) => channelIndex > 0
+        && CHANNELS.indexOf(channel) <= CHANNELS.indexOf(source.channels[channelIndex - 1]))) {
+      errors.push(`/registry/${index}/channels must use canonical channel order`);
+    }
+    if (source?.channel !== null && typeof source?.sourceId === 'string' && typeof source?.channel === 'string'
       && !source.sourceId.startsWith(`${expectedNamespace(source.channel)}:`)) {
       errors.push(`/registry/${index}/sourceId must use the namespace for its channel`);
     }
     const actualCandidateCount = actualCandidateCounts.get(source?.sourceId) ?? 0;
+    if (source?.channel === null && Array.isArray(source.channels)) {
+      const actualChannels = [...new Set(candidates
+        .filter((candidate) => candidate?.sourceId === source.sourceId)
+        .map((candidate) => candidate.channel))]
+        .sort((first, second) => CHANNELS.indexOf(first) - CHANNELS.indexOf(second));
+      if (actualChannels.length !== source.channels.length
+        || actualChannels.some((channel, channelIndex) => channel !== source.channels[channelIndex])) {
+        errors.push(`/registry/${index}/channels must match actual candidates for its source`);
+      }
+    }
     if (Number.isSafeInteger(source?.candidateCount)
         && source.candidateCount !== actualCandidateCount) {
       errors.push(`/registry/${index}/candidateCount must match actual candidates for its source`);
@@ -114,7 +132,7 @@ function semanticErrors(feed) {
 
   for (const [index, candidate] of candidates.entries()) {
     if (!candidate || typeof candidate !== 'object') continue;
-    if (sources.get(candidate.sourceId)?.channel !== 'core-topic'
+    if (sources.get(candidate.sourceId)?.channel !== null
       && typeof candidate.sourceId === 'string' && typeof candidate.channel === 'string'
       && !candidate.sourceId.startsWith(`${expectedNamespace(candidate.channel)}:`)) {
       errors.push(`/candidates/${index}/sourceId must use the namespace for its channel`);
@@ -225,8 +243,8 @@ function normalizedExpectedRegistry(expectedRegistry) {
   const errors = [];
   for (const [index, source] of expectedRegistry.entries()) {
     const sourceId = source?.id ?? source?.sourceId;
-    const channel = source?.channel_policy === 'core-topic' ? 'core-topic' : source?.channel;
-    if (typeof sourceId !== 'string' || typeof channel !== 'string') {
+    const channel = source?.channel;
+    if (typeof sourceId !== 'string' || (channel !== null && typeof channel !== 'string')) {
       errors.push(`/expectedRegistry/${index} requires id and channel`);
       continue;
     }
