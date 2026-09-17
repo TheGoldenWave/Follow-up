@@ -86,6 +86,10 @@ class CliTests(unittest.TestCase):
         self.assertIn("totals", summary)
         self.assertIn("channels", summary)
         self.assertGreater(summary["channels"]["core-topic"], 0)
+        self.assertEqual(summary["adapterAvailability"], {
+            "arxiv": "ok", "github": "ok", "hackernews": "ok",
+            "hugging-face-papers": "ok", "reddit": "ok", "techmeme": "ok",
+        })
 
     def test_doctor_keeps_registry_usable_when_local_state_backend_is_unsupported(self):
         stdout = io.StringIO()

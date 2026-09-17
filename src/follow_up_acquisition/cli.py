@@ -91,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
+    from .collect import build_source_pairs
     from .config import ConfigError, load_source_registry
     from .source_state import state_store_available
 
@@ -112,9 +113,21 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
         else s["channel"]
         for s in sources
     )
+    v04_adapters = {
+        "arxiv", "github", "hackernews", "hugging-face-papers", "reddit", "techmeme",
+    }
+    adapter_availability = {}
+    for adapter, _source_id in build_source_pairs(sources):
+        if adapter.adapter_id in v04_adapters:
+            adapter_availability[adapter.adapter_id] = adapter.availability_probe()
+    adapter_availability = {
+        adapter_id: adapter_availability.get(adapter_id, "unavailable")
+        for adapter_id in sorted(v04_adapters)
+    }
+    adapters_ok = all(status == "ok" for status in adapter_availability.values())
 
     summary = {
-        "ok": True,
+        "ok": adapters_ok,
         "central_registry_usable": True,
         "state_backend": "supported" if state_store_available() else "unsupported",
         "registry": str(path),
@@ -126,6 +139,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             "require_credentials": len(credentialed),
         },
         "channels": {channel: by_channel[channel] for channel in sorted(by_channel)},
+        "adapterAvailability": adapter_availability,
     }
 
     if args.json:
@@ -145,10 +159,13 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             "  channels: "
             + ", ".join(f"{channel}={count}" for channel, count in sorted(by_channel.items()))
         )
-        print("  per-source runtime health requires the acquisition adapters.")
+        print(
+            "  adapter availability: "
+            + ", ".join(f"{adapter}={status}" for adapter, status in adapter_availability.items())
+        )
         if summary["state_backend"] == "unsupported":
             print("  local source state: unsupported on this platform; central registry remains usable.")
-    return 0
+    return 0 if adapters_ok else 1
 
 
 def _default_output_dir() -> Path:
