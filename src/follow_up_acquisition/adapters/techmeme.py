@@ -421,7 +421,9 @@ class TechmemeAdapter:
             previous_cursor = previous.get("cursor") if previous else None
             previous_cursor = previous_cursor if isinstance(previous_cursor, Mapping) else {}
             processing = previous_cursor.get("current_processing_date")
-            processing = processing if type(processing) is str else _clock_date(self._clock).isoformat()
+            processing = processing if type(processing) is str else (
+                _clock_date(self._clock) - timedelta(days=1)
+            ).isoformat()
             snapshot = _date_to_snapshot(processing)
             page_url = inp["archive_url_template"].replace("{snapshot}", snapshot)
             cursor = {

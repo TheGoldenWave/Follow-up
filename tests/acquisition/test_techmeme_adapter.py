@@ -70,7 +70,7 @@ class TechmemeAdapterTests(unittest.TestCase):
             calls.append(("GET", url, copy.deepcopy(kwargs)))
             if url == FRONT_URL:
                 return response(url, fixture(front))
-            if urlsplit(url).path == "/260915/h2000":
+            if urlsplit(url).path in {"/260914/h2000", "/260915/h2000"}:
                 return response(url, fixture(archive))
             raise AssertionError(f"unexpected Techmeme URL: {url}")
 
@@ -169,7 +169,7 @@ class TechmemeAdapterTests(unittest.TestCase):
         })
         validate_checkpoint_updates(SOURCE, result.checkpoint_updates)
 
-    def test_archive_without_checkpoint_starts_from_clock_date(self):
+    def test_archive_without_checkpoint_starts_from_last_complete_date(self):
         calls = []
         result = self.collect(
             source(budget=10),
@@ -179,11 +179,11 @@ class TechmemeAdapterTests(unittest.TestCase):
             update for update in result.checkpoint_updates if update.stream_id == "archive"
         )
         self.assertEqual(archive.checkpoint["cursor"], {
-            "current_processing_date": "2026-09-16",
-            "complete_dates": ["2026-09-15"],
+            "current_processing_date": "2026-09-15",
+            "complete_dates": ["2026-09-14"],
         })
         archive_urls = [url for _method, url, _kwargs in calls if url != FRONT_URL]
-        self.assertEqual(archive_urls, ["https://www.techmeme.com/260915/h2000"])
+        self.assertEqual(archive_urls, ["https://www.techmeme.com/260914/h2000"])
 
     def test_archive_fallback_uses_deterministic_identity(self):
         result = self.collect(
