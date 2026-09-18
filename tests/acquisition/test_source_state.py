@@ -537,7 +537,7 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_commit_enforces_compare_and_swap_against_disk(self) -> None:
         with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
-                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
+                Path(temp_dir) / "state", clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
             )
             store.commit("community:github", [{
                 "stream_id": "top", "previous_checkpoint_at": None,
@@ -631,7 +631,7 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_commit_atomically_persists_query_pruning(self) -> None:
         with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
-                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+                Path(temp_dir) / "state", clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
             store.commit("community:github", [{
                 "stream_id": "query.ai", "previous_checkpoint_at": None,
@@ -644,7 +644,7 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_pruning_does_not_delete_a_concurrently_advanced_stream(self) -> None:
         with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
-                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+                Path(temp_dir) / "state", clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
             old_at = "2026-09-01T00:00:00Z"
             store.commit("community:github", [{
@@ -715,7 +715,7 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_successful_update_is_active_even_if_active_set_is_stale(self) -> None:
         with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
-                Path(temp_dir), clock=lambda: datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
+                Path(temp_dir) / "state", clock=lambda: datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
             )
             old_at = "2026-08-01T00:00:00Z"
             store.commit("community:github", [{
@@ -726,7 +726,7 @@ class SourceStateStoreTests(unittest.TestCase):
                 "community:github", [], active_stream_ids=set(), now="2026-08-02T00:00:00Z",
             )
             updater = SourceStateStore(
-                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+                Path(temp_dir) / "state", clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
             updater.commit("community:github", [{
                 "stream_id": "query.ai", "previous_checkpoint_at": old_at,
@@ -738,7 +738,7 @@ class SourceStateStoreTests(unittest.TestCase):
     def test_commit_accepts_state_at_exact_serialized_size_boundary(self) -> None:
         with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
-                Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
+                Path(temp_dir) / "state", clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
             value = checkpoint()
             value["cursor"] = ""
