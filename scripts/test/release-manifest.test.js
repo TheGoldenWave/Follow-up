@@ -313,7 +313,11 @@ test('validator permits only a beta.N version on the beta channel', async () => 
   assert.ok(validateManifest({ ...beta, channel: 'stable' }, beta.productVersion).some(
     (error) => error.includes('channel'),
   ));
-  assert.ok(validateManifest({ ...manifest, channel: 'beta' }, manifest.productVersion).some(
+  assert.ok(validateManifest({
+    ...beta,
+    productVersion: '0.4.0',
+    releaseNotesUrl: 'https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.4.0',
+  }, '0.4.0').some(
     (error) => error.includes('channel'),
   ));
 });

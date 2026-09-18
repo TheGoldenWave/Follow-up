@@ -100,7 +100,7 @@ const [mode, capability, ...args] = process.argv.slice(2);
 try {
   validateCapability(capability); await waitForStart(capability);
   if (mode === 'object') {
-    if (args.length !== 3 || !isAbsolute(args[0]) || !/^\d+\.\d+\.\d+$/u.test(args[1]) || args[2] !== capability) fail('Invalid object worker arguments');
+    if (args.length !== 3 || !isAbsolute(args[0]) || !/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-beta\.[1-9]\d*)?$/u.test(args[1]) || args[2] !== capability) fail('Invalid object worker arguments');
     await buildObject(...args);
   } else if (mode === 'publish') {
     if (args.length !== 2) fail('Invalid pointer worker arguments');
