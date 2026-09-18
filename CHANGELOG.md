@@ -2,7 +2,7 @@
 
 All notable changes to Follow-up are documented in this file.
 
-## [0.4.0-beta.1] - 2026-09-18
+## [0.4.0-beta.2] - 2026-09-18
 
 - 发布 v0.4 社区与学术来源的 beta：GitHub、Hacker News、Reddit、Techmeme、arXiv 与 Hugging Face Papers 已接入本地采集。
 - 新增逐候选 core-topic 路由、独立 review queue、community evidence、selection/artifact 1.1 与来源 checkpoint 恢复。

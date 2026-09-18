@@ -9,7 +9,7 @@
 `e7d04a8b470cbca12ffe4b11e1e6f6e5f1210413`。修复 validator 与 finalize 输出文件名
 契约不一致，Skill 明确验证后文件使用独立目录和同一 digestId 文件名。
 
-当前开发分支准备发布 `v0.4.0-beta.1` prerelease，用于本机验证。beta 不替代稳定版
+当前开发分支准备发布 `v0.4.0-beta.2` prerelease，用于本机验证。beta 不替代稳定版
 `v0.3.1`，不表示六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已通过。
 
 v0.3.1 历史发布验收：Node 24 全量 648 项通过、1 项安装 smoke 单独通过；Python 145 项通过；
