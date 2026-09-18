@@ -9,8 +9,17 @@
 `e7d04a8b470cbca12ffe4b11e1e6f6e5f1210413`。修复 validator 与 finalize 输出文件名
 契约不一致，Skill 明确验证后文件使用独立目录和同一 digestId 文件名。
 
-当前开发分支准备发布 `v0.4.0-beta.4` prerelease，用于本机验证。beta 不替代稳定版
+当前开发分支准备发布 `v0.4.0-beta.5` prerelease，用于本机验证。beta 不替代稳定版
 `v0.3.1`，不表示六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已通过。
+
+`v0.4.0-beta.1`–`v0.4.0-beta.4` 的 build 作业均在
+`Verify Python acquisition and isolated installation` 失败，未产出任何公开资产；
+beta.4 的失败记录为 GitHub run `35306338974`。失败原因是
+`tests/acquisition/test_state_store_posix.py` 的两项 inode 替换用例在 Linux 上未抛出
+`PosixBackendError`：发布身份校验只比较 `(st_dev, st_ino)`，而 state 与 temp 的描述符在
+校验前已关闭，Linux 会把刚释放的 inode 号复用给替换文件，macOS 不复用，因此本地始终通过。
+本次让两个描述符跨越发布边界保持打开，使被替换的 inode 无法被回收，并补充直接断言该不变量
+的回归用例。beta.1–beta.4 的标签与提交保持不变，修复只进入 `v0.4.0-beta.5`。
 
 v0.3.1 历史发布验收：Node 24 全量 648 项通过、1 项安装 smoke 单独通过；Python 145 项通过；
 精确归档 81 项通过、2 项 Git-only 跳过；交接 2 项及全新隔离 RSS/Blog 安装通过。
