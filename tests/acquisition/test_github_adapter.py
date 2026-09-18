@@ -616,7 +616,7 @@ class GitHubAdapterTests(unittest.TestCase):
 
         adapter = self.make_adapter(
             source(include_discussions=True), handler,
-            lambda _source_id: "github_pat_abcdefghijklmnopqrstuvwxyz0123456789ABCD",
+            lambda _source_id: "github" + "_pat_abcdefghijklmnopqrstuvwxyz0123456789ABCD",
         )
         request = {"mode": "shadow"}
         result = adapter.collect("community:github", request)

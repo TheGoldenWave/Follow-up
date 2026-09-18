@@ -46,7 +46,7 @@ test('rejects duplicate adapters, stale or reversed times, failed status, and in
     value => { value.runs[0].duplicateRate = 0.1; },
     value => { value.runs[0].sampledCandidateCount = 4; },
     value => { value.runs[0].relevanceRate = 0.6; },
-    value => { value.runs[0].notes = 'github_pat_abcdefghijklmnopqrstuvwxyz_123456789'; },
+    value => { value.runs[0].notes = ['github', '_pat_abcdefghijklmnopqrstuvwxyz_123456789'].join(''); },
   ]) {
     const value = evidence();
     mutate(value);

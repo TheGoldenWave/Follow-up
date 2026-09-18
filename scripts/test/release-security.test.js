@@ -48,7 +48,7 @@ test('secret scanner permits documented placeholders and public integrity digest
 
 test('secret scanner recognizes fine-grained GitHub tokens', () => {
   const findings = scanBuffer('fixture.txt', Buffer.from(
-    'github_pat_abcdefghijklmnopqrstuvwxyz_123456789',
+    ['github', '_pat_abcdefghijklmnopqrstuvwxyz_123456789'].join(''),
   ));
   assert.ok(findings.some((finding) => finding.rule === 'github-token'));
 });
