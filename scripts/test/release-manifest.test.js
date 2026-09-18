@@ -67,7 +67,7 @@ test('repository release identity is beta 0.4.0-beta.2 on 2026-09-18', async () 
   assert.equal(packageLock.packages[''].version, version);
   assert.equal(manifest.productVersion, version);
   assert.equal(manifest.releaseDate, '2026-09-18');
-  assert.match(changelog, /^## \[0\.4\.0-beta\.1\] - 2026-09-18$/m);
+  assert.match(changelog, new RegExp(`^## \\[${version.replaceAll('.', '\\.') }\\] - 2026-09-18$`, 'm'));
   assert.match(releaseDesign, /^Release freeze date: 2026-09-07$/m);
 });
 

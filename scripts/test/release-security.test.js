@@ -142,9 +142,10 @@ test('SKILL uses one cross-platform immutable runtime root and records exact sou
     x: 30, podcasts: 10, blogs: 17, newsletters: 4, academic: 6, 'zh-tech': 3,
   });
   assert.doesNotMatch(skill, /CLAUDE_SKILL_DIR/);
+  const version = (await readFile(new URL('../../VERSION', import.meta.url), 'utf8')).trim();
   assert.match(
     skill,
-    /FOLLOW_UP_SKILL_DIR[^\n]*\.follow-builders\/releases\/0\.4\.0-beta\.1/,
+    new RegExp(`FOLLOW_UP_SKILL_DIR[^\\n]*\\.follow-builders\\/releases\\/${version.replaceAll('.', '\\.')}`),
   );
   for (const entrypoint of [
     'collect-and-prepare.js', 'finalize-digest.js', 'validate-digest-selection.js',
