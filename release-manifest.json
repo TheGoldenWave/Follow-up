@@ -42,15 +42,15 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "d1748b5354f949cdff7747e6824b133cc3d9b62cdf75c6774e09da4db2c68b37"
+      "digest": "9c4666f7f6b9e7dd4c5cb32296cd540fec99d2ad7c65f3733b9ffd1853670007"
     },
     "criticalFiles": {
       "algorithm": "sha256",
       "files": {
         "LICENSE": "3b1d30c9384a70f0f163fec07b83b0d410b3d7ab1273f1f9dd4a060e105f4da2",
-        "SKILL.md": "4570588abf9c02282025c41979937cd1403c34d55f007465559f3afc1fab0538",
+        "SKILL.md": "ff18ef250b059882a9c9b5612576c14a0baf8bd1cb66b4e4087d507ab6fe72ae",
         "THIRD_PARTY_NOTICES.md": "b167f01a0e79c75fe212f9c07ce8b8d113db7124aa11dce40abe8bc950104d2c",
-        "VERSION": "3c59a48a0369cfbabf2ba5c5f51dde6619d9c587f15e0821549e6fc8a6ee61b0",
+        "VERSION": "57b51eb37c69ac0860d7ae2577958db681897d3a440004af9ca2df4b0bb0f0e7",
         "config/config-schema.json": "9cb1c4c8542fab3aa630f15be5a19b58bfd82fefbce0416d51de83d7068eb875",
         "config/sources.json": "065d9fce88d4cb9edd20e4713929ffbd7d7b68a65da7d9f0507ff38fc5779ea4",
         "contracts/candidate-feed.schema.json": "4cb63c9b4aa31d33d66672c334c680ca543d8921cbbeb9a6c6f640ce32c38f6c",
@@ -64,7 +64,7 @@
         "contracts/review-candidates.schema.json": "cba51dad9891eb444db9ddf46b230e51cfebd9e88a14a8081699519a4a34b06e",
         "contracts/signal-batch.schema.json": "98d1764a53ffc4241ce4972977eaf79c243580579dc696799d97c346ff0aaa45",
         "contracts/v0.4-source-smoke.schema.json": "348bc6564a9dc23eaca740cd549c749b788e7b272dde64ac52e054bf4fb96a10",
-        "docs/project-progress.md": "afaec43480c3ac865c4d591dd3e31a910387d4b116135f4bce41ccc421b1f31a",
+        "docs/project-progress.md": "1877babf324a72d19a37b9fcb68c45c873493801a6ec18a28afb091e5a3b6ee7",
         "docs/source-catalog.md": "0ea374956d3b2b79f5dc3483d3d1eade0dd349cb47d0985b3d6244d5efc4c70f",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
@@ -76,7 +76,7 @@
         "prompts/summarize-tweets.md": "e30e9f172a5673ccb9a6220d5379cdb69b42e1eb67194f9ebc493c88a5b18578",
         "prompts/summarize-zh-sources.md": "a1969b5f82b876be63f1d73100a316fc7e0b24a3eb147b9709d6da3a82192217",
         "prompts/translate.md": "96bd5896fa1792d95c0df189fbe92433f1bc50e5d7d49b71323a3afccf5f72ed",
-        "pyproject.toml": "06d0a3f41f23434643df4f9e66a1cfda6d7c5cab363bfc3c876358a4a36073fc",
+        "pyproject.toml": "c27f33c88a035f7845a1e132e0950a5768158d34b75bb7e100457bfc87293b37",
         "requirements-acquisition.lock": "7531ebd559ff17675ae1b12b55ca75098cfe08c2c20246132dcf72b77ce7a4b7",
         "requirements-build.lock": "caecbfde77fd224534cb679f5fa1a85a1b164575a384985ea7474bea34f11154",
         "scripts/bootstrap-acquisition.js": "3d5d1a4c54e29c9212b44db5dd364e75e80bfb3c0c5c50bd7d996e9990608db9",
@@ -118,8 +118,8 @@
         "scripts/lib/run-acquisition.js": "a79eb3a26af0d27dc1bd72ec2339dee3abecd18c58d144f4e3b0fd8f627a0972",
         "scripts/lib/skill-registration.js": "ca30a2fb33880c9d0cfa64d86aad1035c79883579cdea8825da4708bf92c6d94",
         "scripts/migration.js": "1ee14b57fc8f2a81d7e569d1e07f9f23b7839a0221d427336b065fa3c28beb6f",
-        "scripts/package-lock.json": "b170d7815c428b8a514bb529b3e9dfbd42070a856d811db86e6e671bcbb9ea69",
-        "scripts/package.json": "3e9e814b3b8a5aaa767458e3f6ad7adf8e3a0a330d6363cda8337c5aef66bee0",
+        "scripts/package-lock.json": "bca404c17dc30efe27dcc673752c4508410f5a78ddf8a627d609f4743fc6a72f",
+        "scripts/package.json": "63690483d1b4804e42aa90a7d5bc1e6ff5581c5f05edae7ff61f3d9d4054d289",
         "scripts/prepare-digest.js": "10ac31a7302d82ca93c0caa097bc07a8ff0569c82d37b783e854208694cc73e9",
         "scripts/release/build-release.sh": "dd7153a86876e78dcf45ffb76f82aa7a2d078a9ddfe3069a5634af33203a3c50",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
@@ -134,7 +134,7 @@
         "scripts/source-status.js": "e27d88d1ac101f6d93d0974d8c4ba6bba50ffd9fed45b0b9e9d1eb2ebccc0a23",
         "scripts/validate-digest-selection.js": "8db02fb85d39f468a873487e8f1dc13d9b030809b3f20ce57a29df282d701cdf",
         "scripts/validate-feed-artifact.js": "d765802cea5d167f6c1817599844735487e6c5ac2506d0a89f88920c5d0ff11e",
-        "src/follow_up_acquisition/__init__.py": "37185a2b687a158c0b615a5eafbe3398092a13f43dedfacb71db2678ae06405a",
+        "src/follow_up_acquisition/__init__.py": "06c3c49daf07c98c3f027105ef53538ef4283931727df578937db46cb405fb45",
         "src/follow_up_acquisition/__main__.py": "10787fec14b203e984bd77bf935c067e6c141478c6f2c8ff48da232a45fc71fb",
         "src/follow_up_acquisition/adapters/__init__.py": "425a4a51267ae45667393a53c55ff6d48740fbcdaff2c78ac6c351e08ed3dd04",
         "src/follow_up_acquisition/adapters/arxiv.py": "a678f25bd68d15b4926628068aeb6fc290d29c343af18a1a07567e0b061ed599",
