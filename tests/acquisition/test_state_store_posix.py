@@ -27,6 +27,22 @@ def private_temporary_directory():
         yield value
 
 
+def _open_file_identities() -> set[tuple[int, int]] | None:
+    """Return the identities of the files this process currently holds open."""
+    for base in ("/dev/fd", "/proc/self/fd"):
+        if not os.path.isdir(base):
+            continue
+        identities = set()
+        for entry in os.listdir(base):
+            try:
+                info = os.fstat(int(entry))
+            except (OSError, ValueError):
+                continue
+            identities.add((info.st_dev, info.st_ino))
+        return identities
+    return None
+
+
 class PosixBackendTests(unittest.TestCase):
     def test_system_alias_normalization_is_darwin_only(self) -> None:
         self.assertEqual(
@@ -485,6 +501,48 @@ class PosixBackendTests(unittest.TestCase):
                 )
             self.assertEqual(ctx.exception.code, "unsafe-state")
             self.assertEqual(target.read_bytes(), b"concurrent")
+
+    def test_pins_replaced_inodes_through_the_publish_identity_check(self) -> None:
+        """A replacement must not be able to recycle a pinned inode's identity.
+
+        Linux hands a freed inode number straight back to the next file created in the
+        same directory, so comparing ``(st_dev, st_ino)`` only detects a replacement while
+        the transaction still holds its own descriptor open. This asserts that invariant
+        directly, which is what the two adversarial replacement tests above depend on.
+        """
+        with private_temporary_directory() as temp_dir:
+            root = Path(temp_dir) / "state"
+            PosixStateBackend(root).atomic_update(
+                "source.json", ".source.lock", 100, lambda _current: (b"old", None),
+            )
+            if _open_file_identities() is None:
+                self.skipTest("this platform does not expose its open descriptors")
+            target = root / "source.json"
+            observed: dict[str, bool] = {}
+
+            def replace_state_and_temp() -> None:
+                state = os.stat(target)
+                temporary = next(root.glob(".*.tmp"))
+                temp = os.stat(temporary)
+                live = _open_file_identities() or set()
+                observed["state"] = (state.st_dev, state.st_ino) in live
+                observed["temp"] = (temp.st_dev, temp.st_ino) in live
+                target.unlink()
+                target.write_bytes(b"concurrent")
+                target.chmod(0o600)
+                temporary.unlink()
+                temporary.write_bytes(b"attacker")
+                temporary.chmod(0o600)
+
+            backend = PosixStateBackend(
+                root, hooks={"before_publish_identity_check": replace_state_and_temp},
+            )
+            with self.assertRaises(PosixBackendError) as ctx:
+                backend.atomic_update(
+                    "source.json", ".source.lock", 100, lambda _current: (b"new", None),
+                )
+            self.assertEqual(ctx.exception.code, "unsafe-state")
+            self.assertEqual(observed, {"state": True, "temp": True})
 
     def test_temp_fsync_failure_preserves_old_state_and_cleans_temp(self) -> None:
         with private_temporary_directory() as temp_dir:

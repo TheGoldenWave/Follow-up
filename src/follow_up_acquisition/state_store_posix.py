@@ -318,11 +318,20 @@ class PosixStateBackend:
 
     def _read_relative(
         self, root_fd: int, name: str, max_bytes: int,
-    ) -> tuple[bytes | None, tuple[int, int] | None]:
+    ) -> tuple[bytes | None, tuple[int, int] | None, int | None]:
+        """Read the state file and hand its descriptor to the caller.
+
+        The caller owns the returned descriptor and must keep it open for as long as the
+        recorded identity has to hold. Holding it is what makes ``(st_dev, st_ino)`` a
+        trustworthy identity: an inode that still has an open descriptor cannot be freed,
+        so a file replacing this one can never be handed the same inode number. Platforms
+        that recycle freed inode numbers eagerly (Linux) would otherwise let a replacement
+        pass the identity check uncontested.
+        """
         try:
             descriptor = self._open_relative(root_fd, name, os.O_RDONLY)
         except FileNotFoundError:
-            return None, None
+            return None, None, None
         try:
             info = os.fstat(descriptor)
             self._validate_regular(info, "state file")
@@ -339,9 +348,10 @@ class PosixStateBackend:
             if len(payload) > max_bytes:
                 raise PosixBackendError("state file exceeds its maximum size", code="invalid-state")
             self._verify_named_identity(root_fd, name, identity, "state file")
-            return payload, identity
-        finally:
+        except BaseException:
             os.close(descriptor)
+            raise
+        return payload, identity, descriptor
 
     @staticmethod
     def _verify_absent(root_fd: int, name: str, label: str) -> None:
@@ -375,9 +385,13 @@ class PosixStateBackend:
             with self._pinned_root(create=False) as (root_fd, links, init_guard):
                 self._verify_chain(links)
                 self._verify_init_guard(init_guard)
-                payload, _identity = self._read_relative(root_fd, name, max_bytes)
-                self._verify_chain(links)
-                self._verify_init_guard(init_guard)
+                payload, _identity, descriptor = self._read_relative(root_fd, name, max_bytes)
+                try:
+                    self._verify_chain(links)
+                    self._verify_init_guard(init_guard)
+                finally:
+                    if descriptor is not None:
+                        os.close(descriptor)
                 return payload
         except _RootMissing:
             return None
@@ -395,6 +409,8 @@ class PosixStateBackend:
             self._verify_chain(links)
             lock_fd = self._open_lock(root_fd, lock_name)
             locked = False
+            state_fd: int | None = None
+            temp_fd: int | None = None
             temp_name: str | None = None
             published = False
             try:
@@ -409,7 +425,7 @@ class PosixStateBackend:
                 locked = True
                 self._verify_named_identity(root_fd, lock_name, lock_identity, "state lock")
                 self._verify_chain(links)
-                current, current_identity = self._read_relative(root_fd, name, max_bytes)
+                current, current_identity, state_fd = self._read_relative(root_fd, name, max_bytes)
                 payload, result = transform(current)
                 if not isinstance(payload, bytes) or len(payload) > max_bytes:
                     raise PosixBackendError("replacement state exceeds its maximum size", code="invalid-state")
@@ -426,21 +442,21 @@ class PosixStateBackend:
                         continue
                 else:
                     raise PosixBackendError("could not allocate an exclusive state temp file")
-                try:
-                    temp_info = os.fstat(temp_fd)
-                    self._validate_regular(temp_info, "state temp file")
-                    temp_identity = self._identity(temp_info)
-                    os.fchmod(temp_fd, 0o600)
-                    view = memoryview(payload)
-                    while view:
-                        written = os.write(temp_fd, view)
-                        if written <= 0:
-                            raise OSError("short state write")
-                        view = view[written:]
-                    self._hook("before_temp_fsync")
-                    os.fsync(temp_fd)
-                finally:
-                    os.close(temp_fd)
+                # The temp descriptor stays open until the transaction finishes so the
+                # temp inode cannot be freed and recycled while the published identity is
+                # still being checked below.
+                temp_info = os.fstat(temp_fd)
+                self._validate_regular(temp_info, "state temp file")
+                temp_identity = self._identity(temp_info)
+                os.fchmod(temp_fd, 0o600)
+                view = memoryview(payload)
+                while view:
+                    written = os.write(temp_fd, view)
+                    if written <= 0:
+                        raise OSError("short state write")
+                    view = view[written:]
+                self._hook("before_temp_fsync")
+                os.fsync(temp_fd)
                 self._hook("before_publish_identity_check")
                 self._verify_chain(links)
                 self._verify_init_guard(init_guard)
@@ -479,6 +495,13 @@ class PosixStateBackend:
                     try:
                         os.unlink(temp_name, dir_fd=root_fd)
                     except FileNotFoundError:
+                        pass
+                for descriptor in (temp_fd, state_fd):
+                    if descriptor is None:
+                        continue
+                    try:
+                        os.close(descriptor)
+                    except OSError:
                         pass
                 if locked:
                     try:
