@@ -243,7 +243,8 @@ test('python staging to immutable Node run to Python CAS uses the published inte
   const root = await mkdtemp(join(tmpdir(), 'checkpoint-subprocess-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const repo = fileURLToPath(new URL('../..', import.meta.url));
-  const python = join(repo, '.venv', 'bin', 'python');
+  // Local runs use the documented `.venv`; CI passes its isolated interpreter instead.
+  const python = process.env.FOLLOW_UP_TEST_PYTHON || join(repo, '.venv', 'bin', 'python');
   const acquisition = join(root, 'acquisition');
   const outputDir = join(acquisition, 'staging', 'python-run');
   await mkdir(outputDir, { recursive: true, mode: 0o700 });

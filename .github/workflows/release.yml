@@ -54,6 +54,8 @@ jobs:
 
       - name: Validate metadata, feeds, and tests
         working-directory: scripts
+        env:
+          FOLLOW_UP_TEST_PYTHON: /tmp/follow-up-python-tests/bin/python
         run: |
           npm run validate-release
           npm run validate-feeds
