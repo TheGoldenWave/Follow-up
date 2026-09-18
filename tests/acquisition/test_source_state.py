@@ -491,7 +491,7 @@ class SourceStateStoreTests(unittest.TestCase):
 
     def test_missing_state_load_returns_initial_state(self) -> None:
         with private_temporary_directory() as temp_dir:
-            store = SourceStateStore(Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc))
+            store = SourceStateStore(Path(temp_dir) / "state", clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc))
             self.assertEqual(store.load("community:github"), {
                 "schema_version": "1.0", "source_id": "community:github",
                 "streams": {}, "updated_at": None,
@@ -552,7 +552,7 @@ class SourceStateStoreTests(unittest.TestCase):
 
     def test_two_concurrent_stale_writers_allow_exactly_one_commit(self) -> None:
         with private_temporary_directory() as temp_dir:
-            root = Path(temp_dir)
+            root = Path(temp_dir) / "state"
             first = SourceStateStore(
                 root, clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
             )
@@ -660,7 +660,7 @@ class SourceStateStoreTests(unittest.TestCase):
 
     def test_waiting_stale_prune_cannot_delete_concurrent_success(self) -> None:
         with private_temporary_directory() as temp_dir:
-            root = Path(temp_dir)
+            root = Path(temp_dir) / "state"
             setup = SourceStateStore(
                 root, clock=lambda: datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
             )
@@ -757,7 +757,8 @@ class SourceStateStoreTests(unittest.TestCase):
 
     def test_corrupt_oversized_and_symlink_state_fail_closed(self) -> None:
         with private_temporary_directory() as temp_dir:
-            root = Path(temp_dir)
+            root = Path(temp_dir) / "state"
+            root.mkdir(mode=0o700)
             target = root / "community:github.json"
             target.write_text("not json", encoding="utf-8")
             store = SourceStateStore(root)
