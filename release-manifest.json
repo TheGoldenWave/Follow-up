@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "5261cd454f641b63b2b1ab5020dcc4e278517c1121c2d3f153a64a7caffba722"
+      "digest": "2f7504a17b6006aa2f4038405d45f8d9e41fb384eb34d835a4347ab8006f72c3"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -103,7 +103,7 @@
         "scripts/install.js": "46e94583a811d4f785bbd4c79f95be5125e32a572e9dd2dce7d4b970c8aff1a6",
         "scripts/lib/acquisition-retention.js": "ac0b5878124cad96a9752ff213bcb2a32ca431b25d35b3505a35f497dfb6c2a0",
         "scripts/lib/checkpoint-intent.js": "7a30081ae45828d6f80be09c2d1643aae314d264717d70e9b9c9bdc6ad06dcad",
-        "scripts/lib/diagnostics.js": "43a99aba08474af52146b359ef1c49c42a15443615ee1e4cd8fcd2e1e6f93837",
+        "scripts/lib/diagnostics.js": "d926ae9a027f6b82ec6f88a1bac0aebc4dd653d690482d867355e2a02fc997d8",
         "scripts/lib/install-worker.js": "7a621798b4cb5ea2f756c869df746dc03bdb169b2cccdead21a151584ec9b47f",
         "scripts/lib/load-signal-batches.js": "a2b7cbd90325c232ea34989a06b4a23a0ea7ad6e7ca5a2033233f3514a8e78fa",
         "scripts/lib/local-candidate-store.js": "4c2496bbfa8a093f8c569562a3fc8661227e3bae4b92ea3973c85366363d4e97",
