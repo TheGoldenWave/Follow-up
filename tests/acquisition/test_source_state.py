@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
@@ -27,6 +28,13 @@ from follow_up_acquisition.source_state import (
 
 NOW = "2026-09-15T08:00:00Z"
 FIXTURES = Path(__file__).parent / "fixtures" / "source-state"
+
+
+@contextmanager
+def private_temporary_directory():
+    with tempfile.TemporaryDirectory() as value:
+        os.chmod(value, 0o700)
+        yield value
 
 
 def checkpoint(
@@ -477,12 +485,12 @@ class MergeAndPruneTests(unittest.TestCase):
 class SourceStateStoreTests(unittest.TestCase):
     def test_non_posix_store_is_explicitly_unsupported(self) -> None:
         self.assertFalse(state_store_available("nt"))
-        with tempfile.TemporaryDirectory() as temp_dir, self.assertRaises(SourceStateError) as ctx:
+        with private_temporary_directory() as temp_dir, self.assertRaises(SourceStateError) as ctx:
             SourceStateStore(Path(temp_dir), platform_name="nt")
         self.assertEqual(ctx.exception.code, "unsupported-platform")
 
     def test_missing_state_load_returns_initial_state(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             store = SourceStateStore(Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc))
             self.assertEqual(store.load("community:github"), {
                 "schema_version": "1.0", "source_id": "community:github",
@@ -490,7 +498,7 @@ class SourceStateStoreTests(unittest.TestCase):
             })
 
     def test_commit_writes_atomic_state_with_private_permissions(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             root = Path(temp_dir) / "source-state"
             store = SourceStateStore(root, clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc))
             written = store.commit("community:github", [{
@@ -503,7 +511,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertEqual(list(root.glob(".*.tmp")), [])
 
     def test_store_surfaces_post_replace_durability_uncertainty(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             root = Path(temp_dir) / "state"
             store = SourceStateStore(
                 root, clock=lambda: datetime(2026, 9, 15, 7, tzinfo=timezone.utc),
@@ -527,7 +535,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertEqual(store.load("community:other")["streams"]["top"]["checkpoint_at"], NOW)
 
     def test_commit_enforces_compare_and_swap_against_disk(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
                 Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
             )
@@ -543,7 +551,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertEqual(ctx.exception.code, "state-conflict")
 
     def test_two_concurrent_stale_writers_allow_exactly_one_commit(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             root = Path(temp_dir)
             first = SourceStateStore(
                 root, clock=lambda: datetime(2026, 9, 15, 10, tzinfo=timezone.utc),
@@ -579,7 +587,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertCountEqual(outcomes, ["committed", "conflict"])
 
     def test_two_concurrent_writers_safely_initialize_absent_root(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             parent = Path(temp_dir) / "acquisition"
             parent.mkdir(mode=0o700)
             root = parent / "source-state"
@@ -621,7 +629,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertCountEqual(outcomes, ["committed", "conflict"])
 
     def test_commit_atomically_persists_query_pruning(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
                 Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
@@ -634,7 +642,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertEqual(persisted["streams"]["query.ai"]["inactive_since"], NOW)
 
     def test_pruning_does_not_delete_a_concurrently_advanced_stream(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
                 Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
@@ -651,7 +659,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertIn("query.ai", store.load("community:github")["streams"])
 
     def test_waiting_stale_prune_cannot_delete_concurrent_success(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             root = Path(temp_dir)
             setup = SourceStateStore(
                 root, clock=lambda: datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
@@ -705,7 +713,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertEqual(persisted["inactive_since"], NOW)
 
     def test_successful_update_is_active_even_if_active_set_is_stale(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
                 Path(temp_dir), clock=lambda: datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
             )
@@ -728,7 +736,7 @@ class SourceStateStoreTests(unittest.TestCase):
             self.assertNotIn("inactive_since", persisted)
 
     def test_commit_accepts_state_at_exact_serialized_size_boundary(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             store = SourceStateStore(
                 Path(temp_dir), clock=lambda: datetime(2026, 9, 15, 8, tzinfo=timezone.utc),
             )
@@ -748,7 +756,7 @@ class SourceStateStoreTests(unittest.TestCase):
             )
 
     def test_corrupt_oversized_and_symlink_state_fail_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             root = Path(temp_dir)
             target = root / "community:github.json"
             target.write_text("not json", encoding="utf-8")
@@ -766,7 +774,7 @@ class SourceStateStoreTests(unittest.TestCase):
                 store.load("community:github")
 
     def test_symlink_parent_and_unsafe_source_id_fail_closed(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             base = Path(temp_dir)
             real = base / "real"
             real.mkdir()
@@ -778,7 +786,7 @@ class SourceStateStoreTests(unittest.TestCase):
                 SourceStateStore(real).load("../escape")
 
     def test_load_rejects_overly_permissive_root_and_file_modes(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with private_temporary_directory() as temp_dir:
             root = Path(temp_dir) / "state"
             root.mkdir(mode=0o700)
             store = SourceStateStore(root)
