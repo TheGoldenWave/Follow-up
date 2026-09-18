@@ -35,7 +35,7 @@ v0.3.0 及修复版 v0.3.1 已公开发布，其余按下列状态推进。
 
 前置条件：v0.3.0 的 R1–R4 通过，来源级失败不会影响其他来源。
 
-`v0.4.0-beta.2` 可作为明确标注的 prerelease 发布，用于安装验证；稳定版 `v0.4.0` 仍须满足
+`v0.4.0-beta.3` 可作为明确标注的 prerelease 发布，用于安装验证；稳定版 `v0.4.0` 仍须满足
 本节完整 smoke、人工相关性与来源级观察门禁。
 对应采集母计划 Task 9/10/13（Task 13 在本版只包含 Techmeme/arXiv）以及新增 HF-1；
 HF-1 的设计见 `superpowers/specs/2026-09-14-hugging-face-papers-source-design.md`，具体实施步骤待后续计划拆分。

@@ -22,7 +22,7 @@ Digest。项目基于 [follow-builders](https://github.com/zarazhangrui/follow-b
 `node scripts/collect-and-prepare.js --request-out <绝对路径>` 准备摘要请求。
 迁移和回滚操作见 [运行手册](docs/operations/local-acquisition-runbook.md)。
 
-`v0.4.0-beta.2` 是公开 beta，包含新的社区与学术本地来源，仅用于本机验证；它不表示
+`v0.4.0-beta.3` 是公开 beta，包含新的社区与学术本地来源，仅用于本机验证；它不表示
 来源 smoke、人工相关性或 shadow 观察门禁已经完成。
 
 当前支持的用户入口是：
@@ -57,25 +57,25 @@ node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <绝�
 node ~/.follow-builders/releases/0.3.1/scripts/doctor.js --json
 ```
 
-## 安装 v0.4.0-beta.2
+## 安装 v0.4.0-beta.3
 
 此 prerelease 仅供本机验证，会保留已有 `0.3.1` 安装和 `~/.follow-builders/` 下的可变用户状态。
 
 ```text
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.2/Follow-up-v0.4.0-beta.2.tar.gz
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.2/Follow-up-v0.4.0-beta.2-checksums.txt
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.2/release-manifest.json
-shasum -a 256 -c Follow-up-v0.4.0-beta.2-checksums.txt
-tar -xzf Follow-up-v0.4.0-beta.2.tar.gz
-cmp release-manifest.json Follow-up-v0.4.0-beta.2/release-manifest.json
-cd Follow-up-v0.4.0-beta.2
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.3/Follow-up-v0.4.0-beta.3.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.3/Follow-up-v0.4.0-beta.3-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.3/release-manifest.json
+shasum -a 256 -c Follow-up-v0.4.0-beta.3-checksums.txt
+tar -xzf Follow-up-v0.4.0-beta.3.tar.gz
+cmp release-manifest.json Follow-up-v0.4.0-beta.3/release-manifest.json
+cd Follow-up-v0.4.0-beta.3
 node scripts/release/validate-release.js --archive-critical-only
 cd scripts
 npm ci
 npm run validate-release:archive
 cd ..
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <绝对路径>] --register
-node ~/.follow-builders/releases/0.4.0-beta.2/scripts/doctor.js --json
+node ~/.follow-builders/releases/0.4.0-beta.3/scripts/doctor.js --json
 ```
 
 安装并通过 `doctor` 后，输入 `set up follow-up`，依次选择关注频道、daily 或 weekly
