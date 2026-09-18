@@ -24,7 +24,7 @@ Public installation assets are published through
 `node scripts/collect-and-prepare.js --request-out <absolute-path>` 准备摘要请求。
 四模式、复核、切换与回滚见 [运行手册](docs/operations/local-acquisition-runbook.md)。
 
-`v0.4.0-beta.3` 是公开 beta：包含新的社区与学术本地来源，供本机验证使用。它不是稳定版，
+`v0.4.0-beta.4` 是公开 beta：包含新的社区与学术本地来源，供本机验证使用。它不是稳定版，
 且不代表来源 smoke、人工相关性或 shadow 观察门禁已经完成。
 
 The supported user entry points are:
@@ -60,26 +60,26 @@ node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <abso
 node ~/.follow-builders/releases/0.3.1/scripts/doctor.js --json
 ```
 
-## Install v0.4.0-beta.3
+## Install v0.4.0-beta.4
 
 Only install this prerelease for local verification. It preserves the existing `0.3.1`
 release and mutable user state under `~/.follow-builders/`.
 
 ```text
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.3/Follow-up-v0.4.0-beta.3.tar.gz
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.3/Follow-up-v0.4.0-beta.3-checksums.txt
-curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.3/release-manifest.json
-shasum -a 256 -c Follow-up-v0.4.0-beta.3-checksums.txt
-tar -xzf Follow-up-v0.4.0-beta.3.tar.gz
-cmp release-manifest.json Follow-up-v0.4.0-beta.3/release-manifest.json
-cd Follow-up-v0.4.0-beta.3
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.4/Follow-up-v0.4.0-beta.4.tar.gz
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.4/Follow-up-v0.4.0-beta.4-checksums.txt
+curl -LO https://github.com/TheGoldenWave/Follow-up/releases/download/v0.4.0-beta.4/release-manifest.json
+shasum -a 256 -c Follow-up-v0.4.0-beta.4-checksums.txt
+tar -xzf Follow-up-v0.4.0-beta.4.tar.gz
+cmp release-manifest.json Follow-up-v0.4.0-beta.4/release-manifest.json
+cd Follow-up-v0.4.0-beta.4
 node scripts/release/validate-release.js --archive-critical-only
 cd scripts
 npm ci
 npm run validate-release:archive
 cd ..
 node scripts/install.js --platform <codex|claude-code|custom> [--skill-dir <absolute-path>] --register
-node ~/.follow-builders/releases/0.4.0-beta.3/scripts/doctor.js --json
+node ~/.follow-builders/releases/0.4.0-beta.4/scripts/doctor.js --json
 ```
 
 After installation and a successful `doctor` check, say `set up follow-up` to select
