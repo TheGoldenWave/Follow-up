@@ -12,12 +12,10 @@ if ! git -C "$ROOT" diff --quiet "$COMMIT" --; then
 fi
 
 VERSION=$(git -C "$ROOT" show "$COMMIT:VERSION" | tr -d '\r\n')
-case "$VERSION" in
-  ''|*[!0-9.]*)
-    echo "VERSION is not a plain semantic version: $VERSION" >&2
-    exit 1
-    ;;
-esac
+if ! printf '%s\n' "$VERSION" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-beta\.[1-9][0-9]*)?$'; then
+  echo "VERSION is not a stable or beta.N semantic version: $VERSION" >&2
+  exit 1
+fi
 
 mkdir -p "$OUTPUT"
 OUTPUT=$(cd "$OUTPUT" && pwd -P)

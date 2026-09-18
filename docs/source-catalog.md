@@ -1,6 +1,6 @@
 # Follow-up 信源目录
 
-更新时间：2026-09-07
+更新时间：2026-09-17
 
 本文记录 Follow-up 的信源分类、当前真实实现和候选扩展范围。它回答“系统现在实际采集什么”和“后续准备接入什么”，不以 README 中的概括性名单代替运行时事实。
 
@@ -60,12 +60,12 @@ candidate Feed 的历史，daily 与 weekly 都只选择符合资格的**未推*
 
 | 频道 | 当前有效信源 | 已配置未接入 | 待实现 | 候选 |
 |---|---|---|---|---|
-| AI 建造者 | X 上 30 个固定账号；X API 中心采集 | 无 | 本地 X Adapter；GitHub 行动证据 | 无 |
-| 播客与视频 | 10 个播客 RSS；Pod2Text 转录；YouTube 链接匹配 | 无 | YouTube 主题搜索、字幕和评论；本地 `yt-dlp` Adapter | 无 |
-| 官方博客与技术社区 | 17 个正式来源；见下方“生产 Blog 来源” | 无 | Hacker News、Techmeme 讨论层 | 本文第 3、4 节中仍标为候选的官方一手源 |
+| AI 建造者 | X 上 30 个固定账号；X API 中心采集 | 无 | 本地 X Adapter（v0.7） | GitHub 行动证据随内容主题归类 |
+| 播客与视频 | 10 个播客 RSS；Pod2Text 转录；YouTube 链接匹配 | 无 | YouTube 发现/字幕、播客本地增强（v0.6） | 无 |
+| 官方博客与技术社区 | 17 个正式来源；见下方“生产 Blog 来源” | GitHub/HN/Reddit/Techmeme Adapter 已接入本地采集；尚未通过 smoke、shadow 或 live/cutover | v0.4 来源门禁 | 本文第 3、4 节中仍标为候选的官方一手源 |
 | Newsletter | Stratechery、One Useful Thing、The Algorithmic Bridge、AI Snake Oil | The Batch、Ben's Bites、TLDR AI、Import AI、The Gradient | 用户本地授权的 Newsletter | 其他 Newsletter |
-| 学术研究 | arXiv `cs.AI`、`cs.CL`、`cs.CV`、`cs.LG`、`cs.RO`、`cs.CR`；RSS 和标题关键词过滤 | 无 | arXiv 主题与时间窗检索 | Papers With Code、Semantic Scholar、会议论文入口 |
-| 中文科技生态 | 36氪、少数派、量子位 | 机器之心、新智元 | 小红书、微信公众号指定账号订阅 | 其他中文一手源和媒体 |
+| 学术研究 | arXiv `cs.AI`、`cs.CL`、`cs.CV`、`cs.LG`、`cs.RO`、`cs.CR`；Hugging Face Papers 的 Daily、Trending、Weekly 三视图 | arXiv 与 HF Papers Adapter 已实现并接入本地采集；尚未通过真实 smoke、shadow 或 live/cutover | v0.4 社区证据与来源门禁 | Papers With Code、Semantic Scholar、会议论文入口 |
+| 中文科技生态 | 36氪、少数派、量子位 | 机器之心、新智元 | 小红书、微信公众号指定账号订阅（v0.8） | 其他中文一手源和媒体 |
 | 行业报告 | 无 | State of AI、Stanford AI Index、a16z AI Canon、CB Insights、FirstMark MAD | 报告发现、版本识别、PDF 解析和月度 Digest | 其他投行、咨询和研究机构报告 |
 
 ### 当前配置差异
@@ -73,7 +73,7 @@ candidate Feed 的历史，daily 与 weekly 都只选择符合资格的**未推*
 - `config/default-sources.json` 中保留了 8 个 Newsletter，但运行时会由 `config/feed-newsletters.json` 覆盖，因此当前有效数量是 4 个。
 - `config/default-sources.json` 中保留了 5 个中文科技源，但运行时会由 `config/feed-zh-tech.json` 覆盖，因此当前有效数量是 3 个。
 - README 与 `config/feed-blogs.json` 均以 17 个正式官网 Blog 来源为准。
-- 本目录将 Papers With Code、Semantic Scholar 和多个会议论文入口列为候选；当前学术采集实际只有 arXiv RSS。
+- 本目录将 Papers With Code、Semantic Scholar 和多个会议论文入口列为候选；当前 v0.4 本地学术采集为 arXiv 与 Hugging Face Papers，二者尚未通过来源级观察门禁。
 - 行业报告虽有默认名单，但不会生成实时 Feed。
 
 ### 生产 Blog 来源
@@ -190,19 +190,21 @@ Antigravity Blog 不应替代 Google Research 或 Google DeepMind Research。它
 
 | 来源 | 层级 | 作用 | 状态 |
 |---|---|---|---|
-| GitHub | C | Release、代码、Issue 和 Discussion，验证“实际做了什么” | 待实现 |
-| Hacker News | M | 技术社区讨论、异常反馈和开发者共识 | 待实现 |
-| Reddit | M | 用户痛点、产品比较、使用反馈和论文讨论 | 待实现 |
-| YouTube | M | 视频发现、字幕和评论 | 待实现 |
-| Techmeme | M | 科技事件聚合和媒体交叉验证 | 待实现 |
+| GitHub | C | Release、代码、Issue 和 Discussion，验证“实际做了什么” | Adapter 已实现；待集成、smoke 与来源门禁 |
+| Hacker News | M | 技术社区讨论、异常反馈和开发者共识 | Adapter 已实现；待集成、smoke 与来源门禁 |
+| Reddit | M | 用户痛点、产品比较、使用反馈和论文讨论 | 免 Key Adapter 已实现；待合规复核、集成、smoke 与来源门禁 |
+| YouTube | M | 视频发现、字幕和评论 | v0.6.0 待实现 |
+| Techmeme | M | 科技事件聚合和媒体交叉验证 | Adapter 已实现；待集成、smoke 与来源门禁 |
+| AIHOT | M/C/R2 | AI 聚合发现、中文摘要、热点事件与漏采补充；保留第三方原文链接 | v0.5 候选；先用 RSS/API shadow 评估，聚合结果不计作独立事实印证；公开内置前确认授权 |
 | Digg AI 1000 | M | 高信号账号的话题聚类和趋势发现 | 待实现 |
-| 小红书 | M | 中国 AI 产品、创作者工具和用户反馈 | 待实现，可选授权源 |
-| 微信公众号 | M/R2/P | 指定账号的公司公告、研究解读和行业观察；按账号与文章分类 | 待实现，可选授权源 |
+| 小红书 | M | 中国 AI 产品、创作者工具和用户反馈 | v0.8.0 待实现，可选授权源 |
+| 微信公众号 | M/R2/P | 指定账号的公司公告、研究解读和行业观察；按账号与文章分类 | v0.8.0 待实现，可选授权源 |
 
 ## 7. 推荐接入顺序
 
 1. **继续核验候选入口**：按具体 URL 区分研究、论文、产品、开发文档和代码入口。
-2. **扩展讨论与证据层**：接入 Hacker News、Techmeme、GitHub 等跨频道发现源。
+2. **扩展讨论与证据层**：接入 Hacker News、Techmeme、GitHub 等跨频道发现源；AIHOT
+   先作为可选聚合发现源进行 RSS/API shadow 评估，保留其站内归因与第三方原文链接。
 3. **论文和报告关联**：把 Research Blog 条目关联到论文、Technical Report、Model Card、代码和模型仓库，而不是重复生成互不相干的 Signal。
 4. **第二批扩展**：Meta、NVIDIA、Cohere、DeepSeek、Seed、Z.ai 及候选池中的专业研究机构。
 

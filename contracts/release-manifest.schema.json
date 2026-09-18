@@ -33,14 +33,14 @@
     },
     "productVersion": {
       "type": "string",
-      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-beta\\.[1-9][0-9]*)?$"
     },
     "releaseDate": {
       "type": "string",
       "format": "date"
     },
     "channel": {
-      "const": "stable"
+      "enum": ["stable", "beta"]
     },
     "minimumSupportedVersion": {
       "type": "null"
@@ -48,7 +48,7 @@
     "releaseNotesUrl": {
       "type": "string",
       "format": "uri",
-      "pattern": "^https://github\\.com/TheGoldenWave/Follow-up/releases/tag/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+      "pattern": "^https://github\\.com/TheGoldenWave/Follow-up/releases/tag/v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-beta\\.[1-9][0-9]*)?$"
     },
     "trustMode": {
       "const": "github-tag-sha256"
@@ -158,10 +158,15 @@
                 "VERSION",
                 "config/config-schema.json",
                 "contracts/candidate-feed.schema.json",
+                "contracts/checkpoint-commit-report.schema.json",
+                "contracts/checkpoint-intent.schema.json",
                 "contracts/central-feed.schema.json",
+                "contracts/community-evidence.schema.json",
                 "contracts/digest-curation-request.schema.json",
                 "contracts/digest-selection.schema.json",
                 "contracts/release-manifest.schema.json",
+                "contracts/review-candidates.schema.json",
+                "contracts/v0.4-source-smoke.schema.json",
                 "docs/source-catalog.md",
                 "docs/third-party/v0.1.0-dependencies.md",
                 "prompts/curate-digest.md",
@@ -174,6 +179,7 @@
                 "prompts/summarize-zh-sources.md",
                 "prompts/translate.md",
                 "scripts/candidate-feed-contract.js",
+                "scripts/community-evidence-contract.js",
                 "scripts/candidate-feed-store.js",
                 "scripts/candidate-identity.js",
                 "scripts/candidate-normalization.js",
@@ -193,8 +199,10 @@
                 "scripts/finalize-digest.js",
                 "scripts/install.js",
                 "scripts/lib/diagnostics.js",
+                "scripts/lib/checkpoint-intent.js",
                 "scripts/lib/install-worker.js",
                 "scripts/lib/paths.js",
+                "scripts/lib/review-queue.js",
                 "scripts/lib/skill-registration.js",
                 "scripts/package-lock.json",
                 "scripts/package.json",
@@ -204,6 +212,7 @@
                 "scripts/release/scan-secrets.js",
                 "scripts/release/validate-release.js",
                 "scripts/release/verify-dependency-licenses.js",
+                "scripts/release/verify-v0.4-source-smoke.js",
                 "scripts/resolve-delivery.js",
                 "scripts/schedule-gate.js",
                 "scripts/source-registry.js",

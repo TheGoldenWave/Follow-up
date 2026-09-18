@@ -2,6 +2,12 @@
 
 All notable changes to Follow-up are documented in this file.
 
+## [0.4.0-beta.1] - 2026-09-18
+
+- 发布 v0.4 社区与学术来源的 beta：GitHub、Hacker News、Reddit、Techmeme、arXiv 与 Hugging Face Papers 已接入本地采集。
+- 新增逐候选 core-topic 路由、独立 review queue、community evidence、selection/artifact 1.1 与来源 checkpoint 恢复。
+- 这是 prerelease，用于本机验证；不代表六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已经通过。
+
 ## [0.3.1] - 2026-09-09
 
 - 修复摘要校验与最终生成的文件名约定不一致：validator 在写入前拒绝无法被 finalize 消费的输出文件名，避免报告校验成功后才失败。

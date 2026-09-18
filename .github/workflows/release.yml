@@ -41,7 +41,8 @@ jobs:
       - name: Scan tracked release content for credentials
         run: node scripts/release/scan-secrets.js --tracked "$GITHUB_SHA"
 
-      - name: Verify v0.4 source smoke evidence
+      - name: Verify v0.4 stable source smoke evidence
+        if: ${{ !contains(github.ref_name, '-beta.') }}
         run: node scripts/release/verify-v0.4-source-smoke.js
 
       - name: Verify dependency licenses and inventory
@@ -150,6 +151,8 @@ jobs:
             echo "Tag $GITHUB_REF_NAME resolves to $OBJECT_TYPE $RESOLVED_SHA, expected commit $GITHUB_SHA." >&2
             exit 1
           fi
+          BETA_ARGS=()
+          if [[ "$GITHUB_REF_NAME" == *-beta.* ]]; then BETA_ARGS=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" \
             "dist/Follow-up-${GITHUB_REF_NAME}.tar.gz" \
             "dist/Follow-up-${GITHUB_REF_NAME}-checksums.txt" \
@@ -157,4 +160,5 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "Follow-up $GITHUB_REF_NAME" \
+            "${BETA_ARGS[@]}" \
             --notes-file dist/release-notes.md

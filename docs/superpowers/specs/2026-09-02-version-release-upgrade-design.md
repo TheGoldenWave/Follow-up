@@ -171,15 +171,17 @@ Cookie、二维码登录、权限扩大或敏感数据迁移授权。
 | `v0.1.0` | 可复现的中心化 Feed 基线与发布元数据 |
 | `v0.2.0` | 17 个官网 Blog、channel switch、candidate pool、Digest/delivery transaction、verified installer、`doctor` 与 `/follow-up` |
 | `v0.3.0` | Acquisition Runtime、Signal Batch、source registry、受控 vendoring 与 RSS/Blog shadow mode |
-| `v0.4.0` | GitHub、Hacker News、Reddit、Techmeme、arXiv 与来源级混合迁移 |
-| `v0.5.0` | YouTube、播客、Digg 与 managed local tools |
-| `v0.6.0` | 获得授权的 X Adapter 与来源级 fallback |
-| `v0.7.0` | 小红书和微信公众号本地认证 Sidecar |
-| `v0.8.0` | local-first Onboarding、跨平台诊断、rollback 与迁移闭环 |
-| `v0.9.0` | 配置、Signal Batch、Sidecar 与升级 contract 冻结 |
+| `v0.4.0` | GitHub、Hacker News、Reddit、Techmeme、arXiv、Hugging Face Papers 与来源级混合迁移 |
+| `v0.5.0` | 多个预设领域、关键词和来源可调，首批覆盖 AI、软件开发与教育 |
+| `v0.6.0` | YouTube、播客、长内容与按需 managed local tools |
+| `v0.7.0` | 获得授权的 X Adapter 与来源级 fallback |
+| `v0.8.0` | 小红书和微信公众号本地认证 Sidecar |
+| `v0.9.0` | local-first Onboarding、跨平台诊断、rollback 与迁移闭环 |
+| `v0.10.0` | 配置、DomainPreset、Signal Batch、Sidecar 与升级 contract 冻结 |
 | `v1.0.0` | 稳定 local-first 产品与兼容承诺 |
 
-中心化采集下线由质量门禁决定，不由固定版本号决定。路线图表达计划，不是已实现能力。
+本表已按 2026-09-17 的版本决策更新；本文前文仍是 v0.2.0 的历史发布设计。中心化采集
+下线由质量门禁决定，不由固定版本号决定。路线图表达计划，不是已实现能力。
 
 ## v0.2.0 验收标准
 

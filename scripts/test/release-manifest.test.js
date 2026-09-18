@@ -44,7 +44,7 @@ async function createReleaseFixture(t) {
   return root;
 }
 
-test('repository release identity is frozen at version 0.3.1 on 2026-09-09', async () => {
+test('repository release identity is beta 0.4.0-beta.1 on 2026-09-18', async () => {
   const version = (await readFile(new URL('VERSION', repositoryRoot), 'utf8')).trim();
   const packageJson = await readJson('scripts/package.json');
   const packageLock = await readJson('scripts/package-lock.json');
@@ -55,7 +55,7 @@ test('repository release identity is frozen at version 0.3.1 on 2026-09-09', asy
     'utf8',
   );
 
-  assert.equal(version, '0.3.1');
+  assert.equal(version, '0.4.0-beta.1');
   assert.equal(packageJson.name, 'follow-builders-scripts');
   assert.equal(
     packageJson.description,
@@ -66,15 +66,15 @@ test('repository release identity is frozen at version 0.3.1 on 2026-09-09', asy
   assert.equal(packageLock.version, version);
   assert.equal(packageLock.packages[''].version, version);
   assert.equal(manifest.productVersion, version);
-  assert.equal(manifest.releaseDate, '2026-09-09');
-  assert.match(changelog, /^## \[0\.3\.1\] - 2026-09-09$/m);
+  assert.equal(manifest.releaseDate, '2026-09-18');
+  assert.match(changelog, /^## \[0\.4\.0-beta\.1\] - 2026-09-18$/m);
   assert.match(releaseDesign, /^Release freeze date: 2026-09-07$/m);
 });
 
-test('manifest declares only implemented v0.3 capabilities', async () => {
+test('beta manifest declares only implemented capabilities', async () => {
   const manifest = await readJson('release-manifest.json');
 
-  assert.equal(manifest.channel, 'stable');
+  assert.equal(manifest.channel, 'beta');
   assert.equal(manifest.trustMode, 'github-tag-sha256');
   assert.equal(manifest.runtime.node, '>=20.0.0');
   assert.equal(manifest.acquisition.mode, 'centralized');
@@ -231,7 +231,7 @@ test('source catalog production Blog IDs exactly match the namespaced runtime co
   assert.doesNotMatch(catalog, /README[^\n]*Papers With Code/i);
   assert.match(
     catalog,
-    /本目录[^\n]*Papers With Code[^\n]*Semantic Scholar[^\n]*会议论文入口[^\n]*候选[^\n]*当前学术采集实际只有 arXiv RSS/,
+    /本目录[^\n]*Papers With Code[^\n]*Semantic Scholar[^\n]*会议论文入口[^\n]*候选[^\n]*当前 v0\.4 本地学术采集为 arXiv 与 Hugging Face Papers/,
   );
   const productionSection = catalog.match(
     /^### 生产 Blog 来源\n([\s\S]*?)(?=^##\s)/m,
@@ -301,6 +301,23 @@ test('validator rejects malformed and mismatched product versions', async () => 
   ));
 });
 
+test('validator permits only a beta.N version on the beta channel', async () => {
+  const manifest = await readJson('release-manifest.json');
+  const beta = {
+    ...manifest,
+    productVersion: '0.4.0-beta.1',
+    channel: 'beta',
+    releaseNotesUrl: 'https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.4.0-beta.1',
+  };
+  assert.deepEqual(validateManifest(beta, beta.productVersion), []);
+  assert.ok(validateManifest({ ...beta, channel: 'stable' }, beta.productVersion).some(
+    (error) => error.includes('channel'),
+  ));
+  assert.ok(validateManifest({ ...manifest, channel: 'beta' }, manifest.productVersion).some(
+    (error) => error.includes('channel'),
+  ));
+});
+
 test('validator and schema reject non-Gregorian release dates', async (t) => {
   const manifest = await readJson('release-manifest.json');
 
@@ -322,7 +339,7 @@ test('validator and schema reject non-Gregorian release dates', async (t) => {
 test('validator rejects unsupported channel, trust mode, runtime, and acquisition mode', async () => {
   const manifest = await readJson('release-manifest.json');
   const invalidCases = [
-    [{ ...manifest, channel: 'beta' }, 'channel'],
+    [{ ...manifest, channel: 'preview' }, 'channel'],
     [{ ...manifest, trustMode: 'unsigned' }, 'trustMode'],
     [{ ...manifest, runtime: { node: '>=18.0.0' } }, 'runtime.node'],
     [{ ...manifest, acquisition: { ...manifest.acquisition, mode: 'local' } }, 'acquisition.mode'],

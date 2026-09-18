@@ -449,6 +449,7 @@ test('release workflow separates read-only build from guarded write-only publica
   assert.match(publish, /shasum -a 256 -c/);
   assert.match(publish, /cmp .*release-manifest\.json/);
   assert.match(publish, /RELEASE_IMMUTABILITY_CONFIRMED/);
+  assert.match(publish, /--prerelease/);
   assert.match(publish, /repos\/\$GITHUB_REPOSITORY\/git\/ref\/tags/);
   assert.match(publish, /git\/tags/);
   assert.match(publish, /GITHUB_SHA/);

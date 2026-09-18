@@ -1,11 +1,11 @@
 {
   "$schema": "./contracts/release-manifest.schema.json",
   "schemaVersion": "1.0",
-  "productVersion": "0.3.1",
-  "releaseDate": "2026-09-09",
-  "channel": "stable",
+  "productVersion": "0.4.0-beta.1",
+  "releaseDate": "2026-09-18",
+  "channel": "beta",
   "minimumSupportedVersion": null,
-  "releaseNotesUrl": "https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.1",
+  "releaseNotesUrl": "https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.4.0-beta.1",
   "trustMode": "github-tag-sha256",
   "runtime": {
     "node": ">=20.0.0"

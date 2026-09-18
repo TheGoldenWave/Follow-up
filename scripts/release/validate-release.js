@@ -24,6 +24,11 @@ export const REQUIRED_CRITICAL_FILES = [
   'requirements-build.lock',
   'config/sources.json',
   'contracts/signal-batch.schema.json',
+  'contracts/checkpoint-commit-report.schema.json',
+  'contracts/checkpoint-intent.schema.json',
+  'contracts/community-evidence.schema.json',
+  'contracts/review-candidates.schema.json',
+  'contracts/v0.4-source-smoke.schema.json',
   'scripts/bootstrap-acquisition.js',
   'scripts/collect-and-prepare.js',
   'scripts/report-shadow.js',
@@ -32,6 +37,8 @@ export const REQUIRED_CRITICAL_FILES = [
   'scripts/lib/local-candidate-store.js',
   'scripts/lib/acquisition-retention.js',
   'scripts/lib/route-channels.js',
+  'scripts/lib/review-queue.js',
+  'scripts/lib/checkpoint-intent.js',
   'scripts/lib/publish-batches.js',
   'scripts/lib/load-signal-batches.js',
   'scripts/lib/run-acquisition.js',
@@ -52,6 +59,23 @@ export const REQUIRED_CRITICAL_FILES = [
   'src/follow_up_acquisition/adapters/__init__.py',
   'src/follow_up_acquisition/adapters/web_publication.py',
   'src/follow_up_acquisition/adapters/rss.py',
+  'src/follow_up_acquisition/adapters/arxiv.py',
+  'src/follow_up_acquisition/adapters/github.py',
+  'src/follow_up_acquisition/adapters/github_discussions.py',
+  'src/follow_up_acquisition/adapters/github_executor.py',
+  'src/follow_up_acquisition/adapters/github_mapping.py',
+  'src/follow_up_acquisition/adapters/github_models.py',
+  'src/follow_up_acquisition/adapters/github_queries.py',
+  'src/follow_up_acquisition/adapters/github_releases.py',
+  'src/follow_up_acquisition/adapters/github_rest.py',
+  'src/follow_up_acquisition/adapters/github_scheduler.py',
+  'src/follow_up_acquisition/adapters/hackernews.py',
+  'src/follow_up_acquisition/adapters/hugging_face_papers.py',
+  'src/follow_up_acquisition/adapters/reddit.py',
+  'src/follow_up_acquisition/adapters/techmeme.py',
+  'src/follow_up_acquisition/http_client.py',
+  'src/follow_up_acquisition/source_state.py',
+  'src/follow_up_acquisition/state_store_posix.py',
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'SKILL.md',
@@ -75,6 +99,7 @@ export const REQUIRED_CRITICAL_FILES = [
   'prompts/summarize-zh-sources.md',
   'prompts/translate.md',
   'scripts/candidate-feed-contract.js',
+  'scripts/community-evidence-contract.js',
   'scripts/candidate-feed-store.js',
   'scripts/candidate-identity.js',
   'scripts/candidate-normalization.js',
@@ -105,6 +130,7 @@ export const REQUIRED_CRITICAL_FILES = [
   'scripts/release/scan-secrets.js',
   'scripts/release/validate-release.js',
   'scripts/release/verify-dependency-licenses.js',
+  'scripts/release/verify-v0.4-source-smoke.js',
   'scripts/resolve-delivery.js',
   'scripts/schedule-gate.js',
   'scripts/source-registry.js',
@@ -113,7 +139,9 @@ export const REQUIRED_CRITICAL_FILES = [
   'scripts/validate-feed-artifact.js',
 ];
 
-const PRODUCT_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const STABLE_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const BETA_VERSION_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.[1-9]\d*$/;
+const PRODUCT_VERSION_PATTERN = new RegExp(`(?:${STABLE_VERSION_PATTERN.source})|(?:${BETA_VERSION_PATTERN.source})`);
 const TOP_LEVEL_FIELDS = [
   '$schema',
   'schemaVersion',
@@ -311,7 +339,7 @@ export function validateManifest(manifest, repositoryVersion) {
   }
   if (typeof manifest.productVersion !== 'string'
       || !PRODUCT_VERSION_PATTERN.test(manifest.productVersion)) {
-    errors.push('manifest.productVersion must be a plain semantic version');
+    errors.push('manifest.productVersion must be a stable or beta.N semantic version');
   }
   if (manifest.productVersion !== repositoryVersion) {
     errors.push(`manifest.productVersion ${manifest.productVersion} does not match VERSION ${repositoryVersion}`);
@@ -319,7 +347,10 @@ export function validateManifest(manifest, repositoryVersion) {
   if (!isGregorianDate(manifest.releaseDate)) {
     errors.push('manifest.releaseDate must be a real Gregorian date using YYYY-MM-DD');
   }
-  if (manifest.channel !== 'stable') errors.push('manifest.channel must be stable');
+  if ((manifest.channel === 'stable') !== STABLE_VERSION_PATTERN.test(manifest.productVersion)
+      || (manifest.channel === 'beta') !== BETA_VERSION_PATTERN.test(manifest.productVersion)) {
+    errors.push('manifest.channel must match the productVersion release channel');
+  }
   if (manifest.minimumSupportedVersion !== null) {
     errors.push('manifest.minimumSupportedVersion must be null for the first release');
   }
@@ -460,7 +491,7 @@ export async function validateRelease(
     errors.push(`VERSION is not readable: ${error.message}`);
     return errors;
   }
-  if (!PRODUCT_VERSION_PATTERN.test(version)) errors.push('VERSION must be a plain semantic version');
+  if (!PRODUCT_VERSION_PATTERN.test(version)) errors.push('VERSION must be a stable or beta.N semantic version');
 
   const manifest = await readJson(
     resolve(rootPath, 'release-manifest.json'),

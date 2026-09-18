@@ -44,7 +44,9 @@ node scripts/report-shadow.js
 
 1. **newsletters** 与 **zh-tech**（`rss` Adapter，免登录、契约最稳）。
 2. **blogs**（`web-publication` Adapter：RSS → sitemap → 索引页发现 + trafilatura 抽取）。
-3. 后续版本：podcasts / academic / arXiv（v0.5.0、v0.4.0）、GitHub/HN/Reddit 等。
+3. **v0.4.0**：GitHub/HN/Reddit/Techmeme、arXiv 与 Hugging Face Papers；当前仍按来源逐项验收。
+4. **v0.5.0**：领域模板与用户来源覆盖；模板上线不自动完成任何来源 cutover。
+5. **v0.6.0 及以后**：podcasts/YouTube、X、认证 Sidecar，继续沿用同一来源级门禁。
 
 同一来源先 `shadow` 观察，再 `hybrid`，最后在门禁通过后置为该来源 `local`。
 

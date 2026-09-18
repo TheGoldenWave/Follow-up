@@ -17,3 +17,8 @@ __pycache__/
 htmlcov/
 *.egg-info/
 build/
+
+# Local-only product strategy, competitive research, and private notes.
+# Keep publishable product specs and roadmaps under tracked docs/ paths.
+/docs/internal/
+/docs/private/

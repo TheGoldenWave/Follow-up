@@ -1,6 +1,6 @@
 # Follow-up 项目进度
 
-更新日期：2026-09-15
+更新日期：2026-09-17
 
 ## 当前状态
 
@@ -8,6 +8,9 @@
 已于 2026-09-09 发布，Release 为 immutable。标签提交为
 `e7d04a8b470cbca12ffe4b11e1e6f6e5f1210413`。修复 validator 与 finalize 输出文件名
 契约不一致，Skill 明确验证后文件使用独立目录和同一 digestId 文件名。
+
+当前开发分支准备发布 `v0.4.0-beta.1` prerelease，用于本机验证。beta 不替代稳定版
+`v0.3.1`，不表示六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已通过。
 
 v0.3.1 历史发布验收：Node 24 全量 648 项通过、1 项安装 smoke 单独通过；Python 145 项通过；
 精确归档 81 项通过、2 项 Git-only 跳过；交接 2 项及全新隔离 RSS/Blog 安装通过。
@@ -46,7 +49,7 @@ Skill 链接，已备份旧链接后由安装器重新注册；自动跨版本�
 central 仍为默认值；shadow 不将本地候选混入 Digest。功能实现不代表所有来源已完成
 真实观察，也不代表中心 Feed 已下线。配置、切换和回滚见 [运行手册](operations/local-acquisition-runbook.md)。
 
-## v0.4.0 采集基础检查点（2026-09-15）
+## v0.4.0 开发进度（2026-09-17）
 
 v0.4.0 Foundation Task 1–5 已完成，为后续社区与学术 Adapter 提供以下基础：
 
@@ -65,15 +68,22 @@ v0.4.0 Foundation Task 1–5 已完成，为后续社区与学术 Adapter 提供
   才调用 Python 对 intent 重算 hash 并逐 stream CAS；冲突或 durability uncertainty 保留已发布 run，
   以 partial/uncertain 报告，不自动重试。
 
-这个检查点**不代表 v0.4.0 已可用或已完成**。GitHub、Hacker News、Reddit、Techmeme、
-arXiv、Hugging Face Papers 六类 Adapter 均尚未实现；没有任何新增来源完成 live/cutover。
-central Feed 仍是默认输入，也没有任何中心来源下线。Windows 本地来源状态仍不受支持，
-但 central 模式继续可用。
+基础完成后，GitHub、Hacker News、Reddit、Techmeme、arXiv 和 Hugging Face Papers 六类
+Adapter 均已提交实现并接入采集入口；arXiv/Hugging Face 的逐 stream checkpoint 会在原子 run
+发布后才提交。社区来源按候选正文与 query provenance 逐条路由，无法分类的候选写入独立的
+review queue，不进入 Candidate Feed 或 Digest。Community evidence 已进入 curation、selection
+和最终摘要，且不会充当事实交叉印证。
 
-当前验证基线：Python 全量 364/364；Node Task 5/durable 定向套件 70/70；Registry 定向套件
-分别 107/107 与 59/59；HTTP client 定向套件 38/38；state 94/94。Node 全量并非全绿，仅剩
-release-manifest drift 导致的 3 项失败；manifest 必须在正式发布时随最终归档统一刷新，本检查点
-不得提前修改，也不得把当前状态描述为全量通过。
+没有任何 v0.4 新来源完成真实 smoke、shadow 门禁或 live/cutover。central Feed 仍是默认输入，
+也没有任何中心来源下线。Windows 本地来源状态仍不受支持，但 central 模式继续可用。
+
+隔离真实 smoke 已验证 Hacker News（10 条）和 arXiv `cs.LG`（3 条）为 `ok`；它们尚未完成
+人工相关性记录，且 GitHub、Techmeme、Reddit 和 Hugging Face 仍未通过，因此不构成六来源
+smoke 或 shadow 门禁通过。
+
+最新回归为 Python 全量 523/523 通过。Node 功能回归通过，但完整套件中的 5 项发布/归档
+用例仍按预期拒绝旧 `v0.3.1` immutable manifest 与 v0.4 源码不一致；在真实来源门禁完成前
+不得刷新为 `0.4.0`。上述测试不替代真实来源 smoke、人工相关性和来源级观察证据。
 
 ## v0.3.1 历史发布验证与既有观察项
 
@@ -92,17 +102,32 @@ release-manifest drift 导致的 3 项失败；manifest 必须在正式发布时
 
 ## 当前 v0.4.0 剩余工作
 
-- v0.4.0 仍需实现并验证六类 Adapter、community evidence、真实来源 smoke 和正式发布门禁；
-  Foundation Task 1–5 通过不替代这些工作。
+- 执行六类真实来源 smoke，并记录人工相关性、secret 检查和回滚证据。
+- 完成来源级 shadow/观察门禁；通过前不启用 live/cutover。
+- 统一版本元数据、更新公开文档与 release manifest，重新执行全量回归、精确归档安装/升级和正式发布门禁。
+- 通过来源级观察门禁前不启用 live/cutover，也不下线任何中心来源。
+
+## 已确认的后续版本调整
+
+- `v0.5.0`：多个预设领域、关键词和来源可调；首批为 AI 前沿、软件开发与开源、教育与学习。
+- `v0.6.0`：YouTube、播客、长内容与按需 managed local tools。
+- `v0.7.0`：X 来源。
+- `v0.8.0`：小红书与微信公众号认证 Sidecar，分别验收。
+- `v0.9.0`：local-first Onboarding、跨平台诊断、迁移和回滚闭环。
+- `v0.10.0`：配置与运行契约冻结，作为 v1 候选。
+
+v0.5.0 的已确认范围见
+[`预设领域与可调来源设计`](superpowers/specs/2026-09-17-v0.5.0-domain-presets-design.md)。
 
 ## 使用路径与边界
 
 公开安装请使用最新正式版 [v0.3.1 Release](https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.3.1)
 中的归档、checksum 和 manifest；仓库 README 包含对应安装步骤。
 
-v0.3.0 仅新增 RSS/官网 Blog 本地采集。GitHub/HN/Reddit/Techmeme/arXiv 属 v0.4.0，
-YouTube/播客/Digg 与 managed local tools 属 v0.5.0，X 属 v0.6.0，小红书/微信公众号
-Sidecar 属 v0.7.0。反馈学习、行业报告、分页个人 Feed、显式阅读状态和自动更新仍待规划。
+v0.3.0 仅新增 RSS/官网 Blog 本地采集。GitHub/HN/Reddit/Techmeme/arXiv/HF Papers 属
+v0.4.0；预设领域与可调关键词/来源属 v0.5.0；视频、播客与受控工具属 v0.6.0；X 属
+v0.7.0；小红书/微信公众号 Sidecar 属 v0.8.0。反馈学习、行业报告、分页个人 Feed、
+显式阅读状态和任意自建领域仍待单独冻结。
 
 后续任务与验收见 [版本开发计划](version-roadmap.md)；原始范围与历史任务见
 [v0.3.0 实施计划](superpowers/plans/2026-09-08-v0.3.0-acquisition-runtime.md)。
