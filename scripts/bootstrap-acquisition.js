@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { devNull, homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const PACKAGE_VERSION = '0.3.1';
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const WHEEL_PATTERN = /^follow_up_acquisition-(.+)-py3-none-any\.whl$/;
 
 export function parsePythonVersion(stdout) {
   const match = /Python\s+(\d+)\.(\d+)\.(\d+)/.exec(String(stdout).trim());
@@ -39,6 +39,26 @@ export function resolvePython312({
 export function resolveBootstrapPath({ home, env = process.env } = {}) {
   const homeDir = resolve(home ?? env.HOME ?? homedir());
   return join(homeDir, '.follow-builders', 'runtime.json');
+}
+
+/**
+ * Identify the wheel `pip wheel` just wrote into `buildDir`.
+ *
+ * The built filename carries the PEP 440 normalization of `pyproject.toml`'s version,
+ * which is not the same string as the product version (`0.4.0-beta.5` builds
+ * `follow_up_acquisition-0.4.0b5-py3-none-any.whl`). Predicting that filename from a
+ * constant duplicated the release version here and silently broke every bootstrap whose
+ * version differed, so read back what was actually built instead.
+ */
+export async function locateBuiltWheel(buildDir) {
+  const wheels = (await readdir(buildDir)).filter(entry => WHEEL_PATTERN.test(entry));
+  if (wheels.length !== 1) {
+    throw new Error(`expected exactly one built follow_up_acquisition wheel, found ${wheels.length}`);
+  }
+  return {
+    path: join(buildDir, wheels[0]),
+    version: WHEEL_PATTERN.exec(wheels[0])[1],
+  };
 }
 
 export async function bootstrapAcquisition({
@@ -83,8 +103,8 @@ export async function bootstrapAcquisition({
     run(interpreter, ['-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', '--require-hashes', '-r', join(packageRoot, 'requirements-build.lock')]);
     run(interpreter, ['-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', '--no-build-isolation', '--require-hashes', '-r', lockPath]);
     run(interpreter, ['-m', 'pip', 'wheel', '--disable-pip-version-check', '--no-deps', '--no-build-isolation', '--wheel-dir', buildDir, packageRoot]);
-    const wheel = join(buildDir, `follow_up_acquisition-${PACKAGE_VERSION}-py3-none-any.whl`);
-    run(interpreter, ['-m', 'pip', 'install', '--disable-pip-version-check', '--no-deps', wheel]);
+    const wheel = await locateBuiltWheel(buildDir);
+    run(interpreter, ['-m', 'pip', 'install', '--disable-pip-version-check', '--no-deps', wheel.path]);
     run(interpreter, ['-m', 'pip', 'check']);
     run(interpreter, ['-I', '-c', 'import feedparser, trafilatura; from follow_up_acquisition.adapters import rss, web_publication']);
     run(interpreter, ['-I', '-m', 'follow_up_acquisition', 'doctor', '--json']);
@@ -92,7 +112,7 @@ export async function bootstrapAcquisition({
       schemaVersion: '1.0', interpreter,
       python: `${resolved.version.major}.${resolved.version.minor}.${resolved.version.patch}`,
       dependencies: [...lock.matchAll(/^([a-zA-Z0-9_.-]+==[^\s;]+)/gm)].map(match => match[1]),
-      packageVersion: PACKAGE_VERSION,
+      packageVersion: wheel.version,
     };
     await writeFile(pendingPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
     await rename(pendingPath, path);

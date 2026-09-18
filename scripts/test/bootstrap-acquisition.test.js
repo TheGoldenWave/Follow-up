@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { devNull, tmpdir } from 'node:os';
 import { join, isAbsolute } from 'node:path';
@@ -6,10 +7,37 @@ import test from 'node:test';
 
 import {
   bootstrapAcquisition,
+  locateBuiltWheel,
   parsePythonVersion,
   resolveBootstrapPath,
   resolvePython312,
 } from '../bootstrap-acquisition.js';
+
+const STUB_WHEEL = 'follow_up_acquisition-9.9.9-py3-none-any.whl';
+
+// A stub `pip wheel` still has to leave an artifact behind, because the bootstrap
+// reads the wheel directory back instead of predicting the version in the filename.
+function stubBuiltWheel(args) {
+  const index = args.indexOf('--wheel-dir');
+  if (index >= 0) writeFileSync(join(args[index + 1], STUB_WHEEL), '');
+}
+
+test('locateBuiltWheel reads the artifact pip actually produced', async () => {
+  const buildDir = await mkdtemp(join(tmpdir(), 'follow-up-wheel-locate-'));
+  try {
+    writeFileSync(join(buildDir, STUB_WHEEL), '');
+    assert.deepEqual(await locateBuiltWheel(buildDir), {
+      path: join(buildDir, STUB_WHEEL),
+      version: '9.9.9',
+    });
+    writeFileSync(join(buildDir, 'unrelated-1.0-py3-none-any.whl'), '');
+    assert.equal((await locateBuiltWheel(buildDir)).version, '9.9.9');
+    await rm(join(buildDir, STUB_WHEEL));
+    await assert.rejects(locateBuiltWheel(buildDir), /found 0/);
+  } finally {
+    await rm(buildDir, { recursive: true, force: true });
+  }
+});
 
 test('parsePythonVersion extracts a semver triple', () => {
   assert.deepEqual(parsePythonVersion('Python 3.12.13\n'), {
@@ -47,6 +75,7 @@ test('bootstrapAcquisition writes runtime.json under an injected home', async ()
     const calls = [];
     const spawn = (cmd, args) => {
       calls.push([cmd, args]);
+      stubBuiltWheel(args);
       return { status: 0, stdout: '', stderr: '' };
     };
     const { path, payload } = await bootstrapAcquisition({ home, python, spawn });
@@ -61,7 +90,7 @@ test('bootstrapAcquisition writes runtime.json under an injected home', async ()
 
     const raw = JSON.parse(await readFile(path, 'utf8'));
     assert.equal(raw.schemaVersion, '1.0');
-    assert.equal(raw.packageVersion, '0.3.1');
+    assert.equal(raw.packageVersion, '9.9.9');
     assert.ok(raw.dependencies.includes('feedparser==6.0.14'));
   } finally {
     await rm(home, { recursive: true, force: true });
@@ -112,6 +141,7 @@ test('bootstrap ignores inherited pip destinations and config while preserving n
     await bootstrapAcquisition({ home, env,
       python: { interpreter: 'python3.12', version: { major: 3, minor: 12, patch: 13 } },
       spawn: (command, args, options) => {
+        stubBuiltWheel(args);
         for (const key of ['PIP_TARGET', 'PIP_PREFIX', 'PIP_ROOT', 'PIP_USER']) assert.equal(options.env[key], undefined);
         assert.equal(options.env.PIP_CONFIG_FILE, devNull);
         for (const key of ['PIP_INDEX_URL', 'PIP_CERT', 'HTTPS_PROXY']) assert.equal(options.env[key], env[key]);
