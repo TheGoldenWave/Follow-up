@@ -6,6 +6,9 @@ All notable changes to Follow-up are documented in this file.
 
 - 发布 v0.4 社区与学术来源的 beta：GitHub、Hacker News、Reddit、Techmeme、arXiv 与 Hugging Face Papers 已接入本地采集。
 - 新增逐候选 core-topic 路由、独立 review queue、community evidence、selection/artifact 1.1 与来源 checkpoint 恢复。
+- 修复 macOS/Linux 状态文件发布校验：被替换的 inode 在 Linux 上会被立即复用，导致发布边界校验失效；现在 state 与 temp 描述符跨越发布边界保持打开。
+- 修复本地隔离安装读取构建 wheel 名称的方式：不再预测 PEP 440 归一化后的文件名，改为读取实际构建产物，使本地采集 bootstrap 在版本变化后仍可用。
+- 隔离安装冒烟测试适配 v0.4 的公开 HTTPS 来源限制，改用运行时自签证书的 loopback HTTPS 夹具。
 - 这是 prerelease，用于本机验证；不代表六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已经通过。
 
 ## [0.3.1] - 2026-09-09

@@ -21,6 +21,22 @@ beta.4 的失败记录为 GitHub run `35306338974`。失败原因是
 本次让两个描述符跨越发布边界保持打开，使被替换的 inode 无法被回收，并补充直接断言该不变量
 的回归用例。beta.1–beta.4 的标签与提交保持不变，修复只进入 `v0.4.0-beta.5`。
 
+由于此前每次 build 都在 Python 步骤快速失败，后续门禁从未真正执行，本次全量本地回归又暴露出
+三处只在 CI 才触发的既有缺陷，一并修复：
+
+- `scripts/bootstrap-acquisition.js` 用常量预测构建 wheel 的文件名。该名字实际是
+  `pyproject.toml` 版本的 PEP 440 归一化结果（`0.4.0-beta.5` 构建出
+  `follow_up_acquisition-0.4.0b5-py3-none-any.whl`），常量在版本变化后必然失配，使
+  v0.4 的本地隔离安装完全不可用。现改为读取构建目录中实际产出的 wheel。
+- `scripts/test/collect-and-prepare.test.js` 硬编码 `.venv/bin/python`，与 CI 的
+  `/tmp/follow-up-python-tests` 不一致。现由 `FOLLOW_UP_TEST_PYTHON` 覆盖，工作流设置该变量，
+  本地仍回退到文档化的 `.venv`。
+- `scripts/test/runtime-install.integration.test.js` 沿用 v0.3.0 夹具：对 `rss` 来源传入
+  v0.4 已不再接受的 `discovery` 字段，且使用 `http://127.0.0.1`。v0.4 只接受公开 HTTPS 来源，
+  因此改为在 loopback 上以临时自签证书提供 HTTPS 夹具，并通过 `SSL_CERT_FILE` 让子进程信任
+  该一次性 CA；证书在运行时生成到临时目录，不进入版本库。覆盖范围不变，仍验证隔离安装后
+  RSS 采集与 Blog 正文抽取均成功。
+
 v0.3.1 历史发布验收：Node 24 全量 648 项通过、1 项安装 smoke 单独通过；Python 145 项通过；
 精确归档 81 项通过、2 项 Git-only 跳过；交接 2 项及全新隔离 RSS/Blog 安装通过。
 原失败请求在隔离输出目录生成成功，状态仍为 partial，未改变实际投递历史。
