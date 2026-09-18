@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "3b094a2446e9043d08383537ce5aa19e6be5867c40d841b6263f8ee939d63538"
+      "digest": "e22a93175c9432eabb9d4295481864cad56e86c87661fcf5689a9166d4da75df"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -60,7 +60,7 @@
         "contracts/community-evidence.schema.json": "9f0db3a846fd0b3f068e3a07939cbaa27738f872122218ecd1fa741aebf836bd",
         "contracts/digest-curation-request.schema.json": "af4f261adcaaa9240da70013cc869fcd81372528edcc02c15c3ed404453df7d3",
         "contracts/digest-selection.schema.json": "5e08c383fe9755975e5e661f648d5a829e72f063f6dd42a8751aa7eecb121e3c",
-        "contracts/release-manifest.schema.json": "41ae35546c982d51274696236c09e67124bd5b80985f91fcb97fd298660595b0",
+        "contracts/release-manifest.schema.json": "6208cb515d8111d023e64e6d0459eb84891a6d0728247ccf85f5a229b41fd443",
         "contracts/review-candidates.schema.json": "cba51dad9891eb444db9ddf46b230e51cfebd9e88a14a8081699519a4a34b06e",
         "contracts/signal-batch.schema.json": "98d1764a53ffc4241ce4972977eaf79c243580579dc696799d97c346ff0aaa45",
         "contracts/v0.4-source-smoke.schema.json": "348bc6564a9dc23eaca740cd549c749b788e7b272dde64ac52e054bf4fb96a10",
