@@ -205,7 +205,7 @@ function defaultOfflineChecks(options) {
   return [
     async () => {
       version = (await readFileImpl(join(releaseRoot, 'VERSION'), 'utf8')).trim();
-      if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version)) throw new Error('VERSION is invalid');
+      if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-beta\.[1-9]\d*)?$/u.test(version)) throw new Error('VERSION is invalid');
       return createFinding({ id: 'version', status: 'ok', scope: 'local', blocking: false, message: `Product version ${version}` });
     },
     async () => {
