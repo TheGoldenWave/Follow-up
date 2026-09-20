@@ -12,6 +12,11 @@ All notable changes to Follow-up are documented in this file.
 - 新增 `src/follow_up_acquisition/credentials.py` 作为引用格式与 token 形状的唯一真源：只接受
   `env.VARIABLE_NAME`，已配置但不可解析时返回 `auth-failed`，不静默降级为匿名；未配置引用时
   匿名行为逐字不变。
+- 修复中央 Feed 生成在缺少单一渠道凭据时整体中断：`scripts/generate-feed.js` 过去只要
+  `X_BEARER_TOKEN` 或 `POD2TXT_API_KEY` 任一缺失就抛错终止，使 2026-09-06 之后每日定时任务
+  连续失败、`feed-candidates.json` 长期冻结（订阅端表现为 `feedFresh=false` 与 42 个来源
+  `error`）。现在缺失凭据只降级对应渠道：该渠道发布结构合法的空 Feed，其全部来源状态记为
+  `error` 并注明缺失的变量名，其余渠道照常采集与发布；显式 `--<channel>-only` 仍按失败关闭处理。
 - 本版本用于本机安装验证，不代表六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已经通过。
 
 ## [0.4.0-beta.5] - 2026-09-18

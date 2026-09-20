@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildStatuses, fetchPodcastContent, fetchRssFeeds, main, parseRssFeed } from '../generate-feed.js';
+import {
+  applyChannelDegradation,
+  buildStatuses,
+  collectAll,
+  credentialDegradations,
+  fetchPodcastContent,
+  fetchRssFeeds,
+  main,
+  parseRssFeed,
+} from '../generate-feed.js';
 
 function memoryRuntime(initial = {}, { failRenameAt = Infinity } = {}) {
   const files = new Map(Object.entries(initial));
@@ -52,6 +61,29 @@ const sources = {
   x_accounts: [], podcasts: [], blogs: [], newsletters: [],
   academic: { sources: [], filters: {} }, zhTech: [],
 };
+
+const GENERATED_AT = '2026-09-06T08:00:00.000Z';
+
+function feedFilename(channel) {
+  return `/repo/feed-${channel === 'zh-tech' ? 'zh-tech' : channel}.json`;
+}
+
+function payloadKey(channel) {
+  if (channel === 'academic') return 'papers';
+  if (channel === 'zh-tech') return 'articles';
+  return channel;
+}
+
+function emptyFeeds() {
+  const lookbackHours = {
+    x: 24, podcasts: 336, blogs: 72, newsletters: 72, academic: 168, 'zh-tech': 72,
+  };
+  return Object.fromEntries(Object.entries(lookbackHours)
+    .map(([channel, hours]) => [channel, {
+      schemaVersion: '1.0', generatedAt: GENERATED_AT, lookbackHours: hours, stats: {},
+      [payloadKey(channel)]: [],
+    }]));
+}
 
 function rssResponse(items) {
   return {
@@ -482,4 +514,114 @@ test('buildStatuses emits exactly one current status per enabled source across a
   assert.equal(statuses.find(({ sourceId }) => sourceId === 'x:a').status, 'ok');
   assert.equal(statuses.find(({ sourceId }) => sourceId === 'podcast:a').status, 'no-results');
   assert.equal(statuses.find(({ sourceId }) => sourceId === 'blog:a').status, 'partial');
+});
+
+test('credentialDegradations only degrades requested channels with a missing credential', () => {
+  assert.deepEqual(credentialDegradations({
+    env: { X_BEARER_TOKEN: 'x', POD2TXT_API_KEY: 'p' }, requested: { x: true, podcasts: true },
+  }), []);
+  assert.deepEqual(credentialDegradations({
+    env: { X_BEARER_TOKEN: 'x' }, requested: { x: true, podcasts: true },
+  }), [{ channel: 'podcasts', variable: 'POD2TXT_API_KEY' }]);
+  assert.deepEqual(credentialDegradations({ env: {}, requested: { x: false, podcasts: false } }), []);
+});
+
+test('applyChannelDegradation reports the credential gap on every degraded source', () => {
+  const registry = [
+    { id: 'x:a', channel: 'x', name: 'X A' },
+    { id: 'blog:a', channel: 'blogs', name: 'Blog A' },
+  ];
+  const statuses = buildStatuses(registry, { x: { x: [] }, blogs: { blogs: [] } }, []);
+  const degraded = applyChannelDegradation(
+    statuses, [{ channel: 'x', variable: 'X_BEARER_TOKEN' }], registry,
+  );
+  const xStatus = degraded.find(({ sourceId }) => sourceId === 'x:a');
+  assert.equal(xStatus.status, 'error');
+  assert.equal(xStatus.candidateCount, 0);
+  assert.match(xStatus.errorSummary, /X_BEARER_TOKEN is not configured/);
+  assert.equal(degraded.find(({ sourceId }) => sourceId === 'blog:a').status, 'no-results');
+});
+
+test('collectAll skips a degraded channel instead of fetching it', async () => {
+  const requested = [];
+  const result = await collectAll({
+    channels: ['x', 'podcasts', 'blogs', 'newsletters', 'academic', 'zh-tech'],
+    sources: {
+      ...sources,
+      x_accounts: [{ id: 'x:a', channel: 'x', name: 'X A', handle: 'a' }],
+      podcasts: [{ id: 'podcast:a', channel: 'podcasts', name: 'Podcast A', rss: 'https://p.example/feed' }],
+    },
+    state: { seenTweets: {}, seenVideos: {}, seenArticles: {} },
+    fetchImpl: async (url) => {
+      requested.push(String(url));
+      throw new Error('network access is not expected for a degraded channel');
+    },
+    now: () => Date.parse(GENERATED_AT),
+    env: {},
+    stderr() {},
+    degradedChannels: [
+      { channel: 'x', variable: 'X_BEARER_TOKEN' },
+      { channel: 'podcasts', variable: 'POD2TXT_API_KEY' },
+    ],
+  });
+  assert.deepEqual(requested, []);
+  assert.deepEqual(Object.keys(result.feeds).sort(), ['academic', 'blogs', 'newsletters', 'zh-tech']);
+});
+
+test('a missing channel credential degrades only that channel on a scheduled run', async () => {
+  const legacyFeeds = emptyFeeds();
+  legacyFeeds.x.x = [{
+    source: 'x', sourceId: 'x:a', name: 'X A', handle: 'a',
+    tweets: [{ id: 't1', text: 'Tweet', createdAt: GENERATED_AT, url: 'https://x.com/a/status/t1' }],
+  }];
+  const initial = Object.fromEntries(Object.entries(legacyFeeds)
+    .map(([channel, feed]) => [feedFilename(channel), JSON.stringify(feed)]));
+  const runtime = memoryRuntime(initial);
+  const notices = [];
+  const registry = [
+    { id: 'x:a', channel: 'x', name: 'X A', handle: 'a' },
+    { id: 'podcast:a', channel: 'podcasts', name: 'Podcast A', rss: 'https://p.example/feed' },
+  ];
+
+  await main({
+    args: ['--initialize-candidate-feed'],
+    env: { X_BEARER_TOKEN: 'x' },
+    fsImpl: runtime.fs, rootDir: '/repo',
+    loadSourcesImpl: async () => ({ ...sources, x_accounts: [registry[0]], podcasts: [registry[1]] }),
+    collectAllImpl: async ({ channels, degradedChannels }) => {
+      assert.deepEqual(degradedChannels, [{ channel: 'podcasts', variable: 'POD2TXT_API_KEY' }]);
+      assert.ok(channels.includes('podcasts'));
+      const feeds = Object.fromEntries(channels
+        .filter((channel) => channel !== 'podcasts')
+        .map((channel) => [channel, legacyFeeds[channel]]));
+      return { feeds, state: { seenTweets: {}, seenVideos: {}, seenArticles: {} } };
+    },
+    now: () => Date.parse(GENERATED_AT),
+    stderr: (message) => notices.push(String(message)),
+  });
+
+  const podcastsFeed = JSON.parse(runtime.files.get('/repo/feed-podcasts.json'));
+  assert.deepEqual(podcastsFeed.podcasts, []);
+  assert.deepEqual(podcastsFeed.errors, [
+    'POD2TXT_API_KEY is not configured; podcasts collection skipped',
+  ]);
+  assert.ok(notices.some((message) => message.includes('POD2TXT_API_KEY')));
+
+  const candidateFeed = JSON.parse(runtime.files.get('/repo/feed-candidates.json'));
+  const podcastStatus = candidateFeed.registry.find(({ sourceId }) => sourceId === 'podcast:a');
+  assert.equal(podcastStatus.status, 'error');
+  assert.equal(podcastStatus.candidateCount, 0);
+  assert.match(podcastStatus.errorSummary, /POD2TXT_API_KEY is not configured/);
+  assert.equal(candidateFeed.registry.find(({ sourceId }) => sourceId === 'x:a').status, 'ok');
+});
+
+test('an explicit single-channel run still fails closed without its credential', async () => {
+  const runtime = memoryRuntime();
+  let collected = false;
+  await assert.rejects(main({
+    args: ['--podcasts-only'], env: {},
+    fsImpl: runtime.fs, rootDir: '/repo', loadSourcesImpl: async () => sources,
+    collectAllImpl: async () => { collected = true; return {}; }, stderr() {},
+  }), /POD2TXT_API_KEY not set/);
+  assert.equal(collected, false);
 });

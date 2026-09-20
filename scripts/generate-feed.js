@@ -59,6 +59,24 @@ const X_RETRY_STATUSES = new Set([500, 502, 503, 504]);
 const X_RETRY_ATTEMPTS = 3;
 const RSS_PARSE_FAILURE_COUNT = Symbol('rssParseFailureCount');
 
+// Channels whose collection needs a private credential. A scheduled run must
+// degrade only the affected channel: the other channels need no credential and
+// would otherwise stop publishing entirely. An explicit `--<channel>-only`
+// request still fails closed, because the operator asked for exactly that one.
+const CHANNEL_CREDENTIALS = Object.freeze({
+  x: 'X_BEARER_TOKEN',
+  podcasts: 'POD2TXT_API_KEY',
+});
+
+// Payload key plus lookback window for a channel that produced no candidates
+// because its credential is absent.
+const CHANNEL_EMPTY_FEED = Object.freeze({
+  x: { payloadKey: 'x', lookbackHours: TWEET_LOOKBACK_HOURS, stats: { xBuilders: 0, totalTweets: 0 } },
+  podcasts: {
+    payloadKey: 'podcasts', lookbackHours: PODCAST_LOOKBACK_HOURS, stats: { podcastEpisodes: 0 },
+  },
+});
+
 const SCRIPT_DIR = decodeURIComponent(new URL(".", import.meta.url).pathname);
 
 function normalizePublishedAt(value) {
@@ -908,6 +926,58 @@ function buildStatuses(registry, feeds, errors, structuredStatuses = []) {
   }));
 }
 
+function degradedChannelMessage({ channel, variable }) {
+  return `${variable} is not configured; ${channel} collection skipped`;
+}
+
+/**
+ * Channel-level degradations for this run. Only channels that were actually
+ * requested can degrade, and a missing credential never aborts the whole run.
+ */
+function credentialDegradations({ env, requested }) {
+  const degraded = [];
+  for (const [channel, variable] of Object.entries(CHANNEL_CREDENTIALS)) {
+    if (requested[channel] !== true || env[variable]) continue;
+    degraded.push({ channel, variable });
+  }
+  return degraded;
+}
+
+/** A structurally valid, explicitly empty Feed standing in for a skipped channel. */
+function degradedFeedEnvelope({ channel, variable, generatedAt }) {
+  const spec = CHANNEL_EMPTY_FEED[channel];
+  return createFeedEnvelope({
+    generatedAt,
+    lookbackHours: spec.lookbackHours,
+    [spec.payloadKey]: [],
+    stats: spec.stats,
+    errors: [degradedChannelMessage({ channel, variable })],
+  });
+}
+
+/**
+ * Rewrite the status of every source in a degraded channel as `error` so the
+ * candidate Feed tells subscribers why that channel is empty instead of
+ * reporting a silent gap.
+ */
+function applyChannelDegradation(statuses, degraded, registry) {
+  if (degraded.length === 0) return statuses;
+  const byChannel = new Map(degraded.map((entry) => [entry.channel, entry]));
+  const sourceById = new Map(registry.map((source) => [source.id, source]));
+  return statuses.map((status) => {
+    const source = sourceById.get(status.sourceId);
+    const entry = source ? byChannel.get(source.channel) : undefined;
+    if (!entry) return status;
+    return createSourceStatus({
+      sourceId: status.sourceId,
+      channel: source.channel,
+      sourceName: source.name ?? status.sourceName,
+      candidateCount: status.candidateCount,
+      errors: [degradedChannelMessage(entry)],
+    });
+  });
+}
+
 async function readState(path, fsImpl) {
   try {
     const state = JSON.parse(await fsImpl.readFile(path, "utf8"));
@@ -948,20 +1018,24 @@ async function validateStagedDocuments({ targets }, { channels, registry, fsImpl
   }
 }
 
-async function collectAll({ channels, sources, state, fetchImpl, now, env, stderr }) {
+async function collectAll({ channels, sources, state, fetchImpl, now, env, stderr, degradedChannels = [] }) {
   const errors = [];
   const feeds = {};
   const structuredStatuses = [];
   const generatedAt = new Date(now()).toISOString();
+  // A degraded channel is published as an explicitly empty Feed by the caller,
+  // so it must not be fetched here.
+  const skipped = new Set(degradedChannels.map(({ channel }) => channel));
+  const activeChannels = channels.filter((channel) => !skipped.has(channel));
 
-  if (channels.includes("x")) {
+  if (activeChannels.includes("x")) {
     stderr("Fetching X/Twitter content...");
     const content = await fetchXContent(sources.x_accounts ?? [], env.X_BEARER_TOKEN, state, errors, { now });
     feeds.x = createFeedEnvelope({ generatedAt, lookbackHours: TWEET_LOOKBACK_HOURS, x: content,
       stats: { xBuilders: content.length, totalTweets: content.reduce((sum, group) => sum + group.tweets.length, 0) },
       errors: errors.filter((error) => error.startsWith("X API")).length ? errors.filter((error) => error.startsWith("X API")) : undefined });
   }
-  if (channels.includes("podcasts")) {
+  if (activeChannels.includes("podcasts")) {
     stderr("Fetching podcast content (RSS + pod2txt)...");
     const content = await fetchPodcastContent(sources.podcasts ?? [], env.POD2TXT_API_KEY, state, errors, {
       now, fetchImpl, statuses: structuredStatuses,
@@ -970,7 +1044,7 @@ async function collectAll({ channels, sources, state, fetchImpl, now, env, stder
       stats: { podcastEpisodes: content.length },
       errors: errors.filter((error) => error.startsWith("Podcast")).length ? errors.filter((error) => error.startsWith("Podcast")) : undefined });
   }
-  if (channels.includes("blogs")) {
+  if (activeChannels.includes("blogs")) {
     stderr("Fetching blog content...");
     const content = await fetchBlogContent(sources.blogs ?? [], state, errors, {
       fetchImpl, now, statuses: structuredStatuses,
@@ -984,7 +1058,7 @@ async function collectAll({ channels, sources, state, fetchImpl, now, env, stder
     ["academic", sources.academic?.sources ?? [], ACADEMIC_LOOKBACK_HOURS, MAX_PAPERS_PER_SOURCE],
     ["zh-tech", sources.zhTech ?? [], ZH_TECH_LOOKBACK_HOURS, MAX_ZH_ARTICLES_PER_SOURCE],
   ]) {
-    if (!channels.includes(channel)) continue;
+    if (!activeChannels.includes(channel)) continue;
     const errorStart = errors.length;
     const content = await fetchRssFeeds(configuredSources, lookbackHours, maxPerSource, state, errors,
       channel === "academic" ? sources.academic?.filters?.minKeywords ?? [] : undefined,
@@ -1103,19 +1177,41 @@ async function runGeneration(options = {}) {
     }
   }
 
-  if (runPodcasts && !env.POD2TXT_API_KEY) throw new Error("POD2TXT_API_KEY not set");
-  if (runTweets && !env.X_BEARER_TOKEN) throw new Error("X_BEARER_TOKEN not set");
+  const degradedChannels = credentialDegradations({
+    env,
+    requested: { x: runTweets, podcasts: runPodcasts },
+  });
+  // An explicit single-channel run fails closed: the operator asked for exactly
+  // that channel, so publishing an empty Feed instead would misreport success.
+  if (anyOnly && degradedChannels.length > 0) {
+    throw new Error(`${degradedChannels[0].variable} not set`);
+  }
+  for (const entry of degradedChannels) {
+    stderr(`${entry.variable} is not configured; publishing an empty ${entry.channel} Feed`);
+  }
 
   const state = await readState(join(rootDir, "state-feed.json"), fsImpl);
   const collectionStartMs = now();
   const collectionStart = new Date(collectionStartMs).toISOString();
-  const collected = await collectAllImpl({ channels, sources, state, fetchImpl, now, env, stderr });
+  const collected = await collectAllImpl({
+    channels, sources, state, fetchImpl, now, env, stderr, degradedChannels,
+  });
   const feeds = collected.feeds ?? {};
+  for (const entry of degradedChannels) {
+    if (!channels.includes(entry.channel) || feeds[entry.channel]) continue;
+    feeds[entry.channel] = degradedFeedEnvelope({
+      channel: entry.channel, variable: entry.variable, generatedAt: collectionStart,
+    });
+  }
   const documents = channels.map((channel) => [join(rootDir, CHANNEL_FILES[channel]), feeds[channel]]);
 
   if (!anyOnly) {
-    const statuses = collected.statuses ?? buildStatuses(
-      registry, feeds, collected.errors ?? [], collected.structuredStatuses ?? [],
+    const statuses = applyChannelDegradation(
+      collected.statuses ?? buildStatuses(
+        registry, feeds, collected.errors ?? [], collected.structuredStatuses ?? [],
+      ),
+      degradedChannels,
+      registry,
     );
     const currentCandidates = collected.candidates ?? normalizeLegacyFeeds(feeds, {
       registry, seenAt: collectionStart,
@@ -1167,6 +1263,9 @@ async function main(options = {}) {
 }
 
 export {
+  applyChannelDegradation,
+  credentialDegradations,
+  degradedFeedEnvelope,
   errorsSince,
   fetchPodcastContent,
   fetchRssFeeds,

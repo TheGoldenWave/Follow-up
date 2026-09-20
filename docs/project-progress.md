@@ -158,6 +158,22 @@ smoke 或 shadow 门禁通过。
    搜索（实测数十万至数百万条），必然翻页而 `total_count` 在页间漂移，按 spec 固定
    `partial`。收窄默认查询或改以稳态有界窗口运行，需要单独决策。
 
+## 中央 Feed 冻结（2026-09-20 定位并修复）
+
+本机手动跑一次 Digest 时读到 `feedFresh=false`：`feed-candidates.json` 的 `generatedAt` 停在
+2026-09-06，70 个来源中 42 个为 `error`。根因是**中央生成流水线每日失败**——
+`.github/workflows/generate-feed.yml` 的 `Generate Feeds` 步骤自 2026-09-11 起每天 failure，
+报错为 `Feed generation failed: POD2TXT_API_KEY not set`：仓库未配置 `X_BEARER_TOKEN` 与
+`POD2TXT_API_KEY` 两个 secret。旧逻辑下任一渠道凭据缺失即整体终止，连不需要任何凭据的
+blogs / newsletters / academic / zh-tech 也一并停更，于是滚动候选 Feed 长期冻结。
+
+已改为渠道级降级（见 CHANGELOG `0.4.0-beta.6`）：缺失凭据的渠道只发布结构合法的空 Feed，
+并把该渠道全部来源状态标记为 `error` 且注明缺失变量名，其余渠道继续采集与发布；显式
+`--<channel>-only` 仍失败关闭。流水线恢复运行后，冻结的 42 个 `error` 会被下一轮真实状态覆盖。
+
+**仍需人工补配上述两个 secret** 才能恢复 X 与播客两个渠道的采集；未配置时它们会以显式
+`error` 持续披露，而不是静默缺失。
+
 ## 已确认的后续版本调整
 
 - `v0.5.0`：多个预设领域、关键词和来源可调；首批为 AI 前沿、软件开发与开源、教育与学习。
