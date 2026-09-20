@@ -1,11 +1,11 @@
 {
   "$schema": "./contracts/release-manifest.schema.json",
   "schemaVersion": "1.0",
-  "productVersion": "0.4.0-beta.5",
-  "releaseDate": "2026-09-18",
+  "productVersion": "0.4.0-beta.6",
+  "releaseDate": "2026-09-20",
   "channel": "beta",
   "minimumSupportedVersion": null,
-  "releaseNotesUrl": "https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.4.0-beta.5",
+  "releaseNotesUrl": "https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.4.0-beta.6",
   "trustMode": "github-tag-sha256",
   "runtime": {
     "node": ">=20.0.0"
@@ -42,15 +42,15 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "b432863a00e757549f3e917edd134cb69afb7c6b883b335de881272261cd2d4c"
+      "digest": "0ef73e76562f55a53a5f667dbe308a17dc5be54f590a8fcfb0887d8a0f539420"
     },
     "criticalFiles": {
       "algorithm": "sha256",
       "files": {
         "LICENSE": "3b1d30c9384a70f0f163fec07b83b0d410b3d7ab1273f1f9dd4a060e105f4da2",
-        "SKILL.md": "2d4d5fd24c63427018ec8c0a4dd3cf2c9127a89499bb6e467f26a72d1d6c72d1",
+        "SKILL.md": "765e5d4bb2a81e0441f8a99c37d69e9f9856d09f61194571a2195c1dc518a7c7",
         "THIRD_PARTY_NOTICES.md": "b167f01a0e79c75fe212f9c07ce8b8d113db7124aa11dce40abe8bc950104d2c",
-        "VERSION": "328a8d76ac2db0c8496371fd920bb7e9315ba92626d11c6d039593db833526b4",
+        "VERSION": "38ab2e99078f4c2a8fe3a81e2ce445e3f6c63cd6ac9f5e361ff8b41cd7672a8a",
         "config/config-schema.json": "4ee4077f2326978ff9a7697b5998f2725d0c41547796afb2542f8459747fbb40",
         "config/sources.json": "065d9fce88d4cb9edd20e4713929ffbd7d7b68a65da7d9f0507ff38fc5779ea4",
         "contracts/candidate-feed.schema.json": "4cb63c9b4aa31d33d66672c334c680ca543d8921cbbeb9a6c6f640ce32c38f6c",
@@ -64,7 +64,7 @@
         "contracts/review-candidates.schema.json": "cba51dad9891eb444db9ddf46b230e51cfebd9e88a14a8081699519a4a34b06e",
         "contracts/signal-batch.schema.json": "98d1764a53ffc4241ce4972977eaf79c243580579dc696799d97c346ff0aaa45",
         "contracts/v0.4-source-smoke.schema.json": "348bc6564a9dc23eaca740cd549c749b788e7b272dde64ac52e054bf4fb96a10",
-        "docs/project-progress.md": "54c2afbbd627d0a2e53676e39ebdd5b22a211ba1d1289f501dad2810d6b05e39",
+        "docs/project-progress.md": "6403168abbcd56d620ad947331f9d5c489f6367f9c95b7ea802f6e424becfad0",
         "docs/source-catalog.md": "0ea374956d3b2b79f5dc3483d3d1eade0dd349cb47d0985b3d6244d5efc4c70f",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
@@ -76,10 +76,10 @@
         "prompts/summarize-tweets.md": "e30e9f172a5673ccb9a6220d5379cdb69b42e1eb67194f9ebc493c88a5b18578",
         "prompts/summarize-zh-sources.md": "a1969b5f82b876be63f1d73100a316fc7e0b24a3eb147b9709d6da3a82192217",
         "prompts/translate.md": "96bd5896fa1792d95c0df189fbe92433f1bc50e5d7d49b71323a3afccf5f72ed",
-        "pyproject.toml": "d1b11b24d8d9e4729f8cb76ce4aa036b88ef061a815142c1cf521df7d3e9d67d",
+        "pyproject.toml": "64fe6b2e96b73236cb1146d48be2dca5aed4a7971e90f981b6d10f941fa19685",
         "requirements-acquisition.lock": "7531ebd559ff17675ae1b12b55ca75098cfe08c2c20246132dcf72b77ce7a4b7",
         "requirements-build.lock": "caecbfde77fd224534cb679f5fa1a85a1b164575a384985ea7474bea34f11154",
-        "scripts/bootstrap-acquisition.js": "aea8bfb873dc9a6dc4fac645600da01a4418f045ad6aeb5f131ac74411e6f7da",
+        "scripts/bootstrap-acquisition.js": "646915d1ceab8f2c2966d033bc34ed416309b8adb701942c75e44a561945fbc9",
         "scripts/candidate-feed-contract.js": "a1ea1c5ea157efc2a838f5edfe5168b9181bf5e33000077189f277f4edbf0e2f",
         "scripts/candidate-feed-store.js": "6c3661364c5ca0d9012890e21f640f631116314d5261ad73adca87e74c186351",
         "scripts/candidate-identity.js": "333dd5c83e6cf49256abcb4a951f7756a305dbc1016089715bf26fe1932cb388",
@@ -118,8 +118,8 @@
         "scripts/lib/run-acquisition.js": "c16bdd1a3d8eaa6576ccc49f471261b193c4f2fbb0681e500a618be687ed4229",
         "scripts/lib/skill-registration.js": "ca30a2fb33880c9d0cfa64d86aad1035c79883579cdea8825da4708bf92c6d94",
         "scripts/migration.js": "1ee14b57fc8f2a81d7e569d1e07f9f23b7839a0221d427336b065fa3c28beb6f",
-        "scripts/package-lock.json": "16312da5137691d6ae248a97ea20d2206d08557b39e828f451b1feeb72200a8d",
-        "scripts/package.json": "b82f4a8c5fa55badf1381806de55865880e5b26cbe2108d627ce8aaff50cd4c8",
+        "scripts/package-lock.json": "ad47d9ab6fd013f2e0678637635b8721b62da406aac0207126b1828e410b3200",
+        "scripts/package.json": "8d70b33b9459a5d808fcab07c54a633c92121dc4b868a9a9c987019af5a44c6c",
         "scripts/prepare-digest.js": "10ac31a7302d82ca93c0caa097bc07a8ff0569c82d37b783e854208694cc73e9",
         "scripts/release/build-release.sh": "dd7153a86876e78dcf45ffb76f82aa7a2d078a9ddfe3069a5634af33203a3c50",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
@@ -134,7 +134,7 @@
         "scripts/source-status.js": "e27d88d1ac101f6d93d0974d8c4ba6bba50ffd9fed45b0b9e9d1eb2ebccc0a23",
         "scripts/validate-digest-selection.js": "8db02fb85d39f468a873487e8f1dc13d9b030809b3f20ce57a29df282d701cdf",
         "scripts/validate-feed-artifact.js": "d765802cea5d167f6c1817599844735487e6c5ac2506d0a89f88920c5d0ff11e",
-        "src/follow_up_acquisition/__init__.py": "98f3205354a037bb48ecf21a07c2841dae6c7c005af1c499624c92dc00fca505",
+        "src/follow_up_acquisition/__init__.py": "a2de244b88fa010e288cf3db20743adef5316f9e6019bb63a8abcdbe73137259",
         "src/follow_up_acquisition/__main__.py": "10787fec14b203e984bd77bf935c067e6c141478c6f2c8ff48da232a45fc71fb",
         "src/follow_up_acquisition/adapters/__init__.py": "425a4a51267ae45667393a53c55ff6d48740fbcdaff2c78ac6c351e08ed3dd04",
         "src/follow_up_acquisition/adapters/arxiv.py": "a678f25bd68d15b4926628068aeb6fc290d29c343af18a1a07567e0b061ed599",
