@@ -67,11 +67,13 @@ def derive_active_stream_ids(source: dict[str, Any]) -> tuple[str, ...]:
 def build_source_pairs(
     sources: list[dict[str, Any]],
     checkpoint_resolver: Callable[[str], Mapping[str, Any] | None] | None = None,
+    credential_resolver: Callable[[str], Any] | None = None,
 ) -> list[tuple[Any, str]]:
     """Return ``[(adapter, source_id)]`` for every collectable source."""
     by_id = {source["id"]: source for source in sources}
     arxiv = ArxivAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
-    github = GitHubAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
+    github = GitHubAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver,
+                           credential_resolver=credential_resolver)
     hackernews = HackerNewsAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
     hugging_face = HuggingFacePapersAdapter(resolve_source=lambda source_id: by_id[source_id], checkpoint_resolver=checkpoint_resolver)
     reddit = RedditAdapter(resolve_source=lambda source_id: by_id[source_id])
@@ -93,9 +95,10 @@ def collect_sources(
     request: dict[str, Any] | None = None,
     source_ids: set[str] | None = None,
     checkpoint_resolver: Callable[[str], Mapping[str, Any] | None] | None = None,
+    credential_resolver: Callable[[str], Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Collect the given sources and return ``{source_id: batch}``."""
-    return collect_run(sources, request, source_ids, checkpoint_resolver).batches
+    return collect_run(sources, request, source_ids, checkpoint_resolver, credential_resolver).batches
 
 
 def collect_run(
@@ -103,9 +106,10 @@ def collect_run(
     request: dict[str, Any] | None = None,
     source_ids: set[str] | None = None,
     checkpoint_resolver: Callable[[str], Mapping[str, Any] | None] | None = None,
+    credential_resolver: Callable[[str], Any] | None = None,
 ) -> CollectionRun:
     """Collect batches while retaining validated immutable checkpoint updates."""
-    pairs = build_source_pairs(sources, checkpoint_resolver)
+    pairs = build_source_pairs(sources, checkpoint_resolver, credential_resolver)
     runtime = AcquisitionRuntime()
     effective_request = request if request is not None else SHADOW_REQUEST
     by_id = {source["id"]: source for source in sources}

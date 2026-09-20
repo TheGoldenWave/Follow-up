@@ -138,6 +138,34 @@ test('local mode invokes acquisition and publishes atomically', async () => {
   assert.equal(result.checkpointStatus, 'committed');
 });
 
+test('configured source credentials reach the collection process', async () => {
+  const invocations = [];
+  await collectAndPrepare({
+    config: { acquisition: { mode: 'local', sourceCredentials: { 'community:github': { ref: 'env.GITHUB_TOKEN' } } } },
+    now: '2026-09-08T10:00:00.000Z',
+    randomUUID: () => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    userDir: '/tmp/follow-builders',
+    invokeRun: async (options) => { invocations.push(options); },
+    loadBatches: async () => ({ 'blog:test': batch('blog:test') }),
+    loadIntent: async () => intentEnvelope({ run_id: 'run', sources: [] }),
+    publishRun: async () => ({ receipt: {} }),
+    publishPointers: async () => {},
+    commitCheckpoints: async () => ({ checkpointStatus: 'committed' }),
+  });
+  assert.deepEqual(invocations[0].credentialRefs, ['community:github=env.GITHUB_TOKEN']);
+});
+
+test('a malformed source credential fails the run instead of going anonymous', async () => {
+  await assert.rejects(
+    collectAndPrepare({
+      config: { acquisition: { mode: 'local', sourceCredentials: { 'community:github': { ref: 'ghp_' + 'a'.repeat(36) } } } },
+      userDir: '/tmp/follow-builders',
+      invokeRun: async () => { assert.fail('must not invoke collection'); },
+    }),
+    /sourceCredentials/,
+  );
+});
+
 test('checkpoint commit happens only after run and every pointer publish', async () => {
   const calls = [];
   const common = {

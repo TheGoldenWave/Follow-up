@@ -21,6 +21,7 @@ from follow_up_acquisition.collect import (
     collect_sources,
     derive_active_stream_ids,
 )
+from follow_up_acquisition.credentials import build_credential_resolver
 from follow_up_acquisition.runtime import CheckpointUpdate, FrozenMapping, SourceResult
 
 
@@ -89,6 +90,20 @@ class BuildSourcePairsTests(unittest.TestCase):
         self.assertIsInstance(pairs[0][0], GitHubAdapter)
         self.assertIsInstance(pairs[1][0], HackerNewsAdapter)
         self.assertIsInstance(pairs[2][0], RedditAdapter)
+
+    def test_forwards_the_credential_resolver_to_the_github_adapter(self):
+        # Pins the production wiring: without it the GitHub adapter can never
+        # leave the anonymous request budget, whatever the user configures.
+        sources = [_source("community:github", "github")]
+        resolve = build_credential_resolver(
+            {"community:github": "GITHUB_TOKEN"}, {"GITHUB_TOKEN": "gho_token"},
+        )
+        default_pairs = build_source_pairs(sources)
+        pairs = build_source_pairs(sources, None, resolve)
+        self.assertEqual(default_pairs[0][0]._credentials("community:github"),
+                         {"status": "absent"})
+        self.assertEqual(pairs[0][0]._credentials("community:github"),
+                         {"status": "resolved", "token": "gho_token"})
 
 
 class CollectSourcesTests(unittest.TestCase):

@@ -14,6 +14,38 @@ const validateReportSchema = new Ajv2020({ allErrors: true, strict: false }).com
 const MAX_PROCESS_OUTPUT = 16 * 1024;
 const MAX_BATCH_BYTES = 10 * 1024 * 1024;
 
+const SOURCE_ID_PATTERN = /^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$/;
+const CREDENTIAL_REF_PATTERN = /^env\.[A-Z_][A-Z0-9_]{0,127}$/;
+
+/**
+ * Build `SOURCE_ID=env.VARIABLE` references from the user configuration.
+ *
+ * `acquisition.sourceCredentials` is the only place a credential reference may
+ * live, and only as an `env.VARIABLE` pointer: a raw token is rejected here so
+ * it can never reach a process argument or a log line. A malformed entry is an
+ * error rather than a silent downgrade to anonymous requests.
+ */
+export function credentialRefsFromConfig(config = {}) {
+  const configured = config?.acquisition?.sourceCredentials;
+  if (configured === undefined || configured === null) return [];
+  if (typeof configured !== 'object' || Array.isArray(configured)) {
+    throw new Error('acquisition.sourceCredentials must be an object');
+  }
+  return Object.entries(configured).map(([sourceId, entry]) => {
+    if (!SOURCE_ID_PATTERN.test(sourceId)) {
+      throw new Error('acquisition.sourceCredentials must key on a source id');
+    }
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)
+        || Object.keys(entry).length !== 1 || !Object.hasOwn(entry, 'ref')) {
+      throw new Error(`acquisition.sourceCredentials["${sourceId}"] must contain exactly a ref`);
+    }
+    if (typeof entry.ref !== 'string' || !CREDENTIAL_REF_PATTERN.test(entry.ref)) {
+      throw new Error(`acquisition.sourceCredentials["${sourceId}"].ref must use env.VARIABLE_NAME`);
+    }
+    return `${sourceId}=${entry.ref}`;
+  });
+}
+
 function fallbackReport(runId, sources) {
   const ids = [...sources].sort((a, b) => Buffer.from(a).compare(Buffer.from(b)));
   return { schema_version: '1.0', run_id: runId, status: 'partial', source_count: ids.length,
@@ -103,6 +135,7 @@ export async function invokeAcquisitionRun({
   checkpointOut = join(outputDir, 'checkpoint-intent.json'),
   stateRoot,
   runId = 'manual-run',
+  credentialRefs = [],
   pythonPath,
   cwd,
   env = process.env,
@@ -129,7 +162,8 @@ export async function invokeAcquisitionRun({
         pythonPath,
         ['-I', '-m', 'follow_up_acquisition', 'run', '--run-id', runId,
           '--output', outputDir, '--checkpoint-out', checkpointOut,
-          ...(stateRoot ? ['--state-root', stateRoot] : [])],
+          ...(stateRoot ? ['--state-root', stateRoot] : []),
+          ...credentialRefs.flatMap(ref => ['--credential-ref', ref])],
         { cwd, env: runtimeEnv, stdio: ['ignore', 'pipe', 'pipe'] },
       );
     } catch {

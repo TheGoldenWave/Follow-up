@@ -22,3 +22,6 @@ build/
 # Keep publishable product specs and roadmaps under tracked docs/ paths.
 /docs/internal/
 /docs/private/
+
+# Local agent workspace: memory and diagnostics never ship with a release.
+.workbuddy/

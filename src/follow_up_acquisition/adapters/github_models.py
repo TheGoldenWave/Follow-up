@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from ..credentials import is_valid_token
 from ..runtime import AdapterError, CheckpointUpdate, SourceCandidate
 
 
@@ -42,16 +43,9 @@ class CredentialResolution:
             return cls(status)
         if status != "resolved" or set(value) != {"status", "token"}:
             raise AdapterError("GitHub credential resolution is invalid", status="auth-failed")
-        token = value["token"]
-        if type(token) is not str or not token or token != token.strip():
+        if not is_valid_token(value["token"]):
             raise AdapterError("GitHub credential resolution is invalid", status="auth-failed")
-        try:
-            encoded = token.encode("latin-1")
-        except UnicodeEncodeError as exc:
-            raise AdapterError("GitHub credential resolution is invalid", status="auth-failed") from exc
-        if len(encoded) > 4096 or any(byte < 0x20 or 0x7F <= byte <= 0x9F for byte in encoded):
-            raise AdapterError("GitHub credential resolution is invalid", status="auth-failed")
-        return cls(status, token)
+        return cls(status, value["token"])
 
 
 def _canonical_time(value: Any, label: str) -> str:

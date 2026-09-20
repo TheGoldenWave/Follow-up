@@ -22,6 +22,34 @@ test('enabledChannels accepts each stable channel exactly once', () => {
   assert.deepEqual(normalizeConfig(config), config);
 });
 
+test('acquisition.sourceCredentials accepts env pointers only', () => {
+  assert.deepEqual(
+    validateConfig({ acquisition: { mode: 'hybrid', sourceCredentials: { 'community:github': { ref: 'env.GITHUB_TOKEN' } } } }),
+    { valid: true, errors: [] },
+  );
+  assert.deepEqual(
+    validateConfig({ acquisition: { sourceCredentials: {} } }),
+    { valid: true, errors: [] },
+  );
+});
+
+test('acquisition.sourceCredentials rejects raw tokens and unknown fields', () => {
+  for (const sourceCredentials of [
+    { 'community:github': { ref: 'ghp_' + 'a'.repeat(36) } },
+    { 'community:github': { ref: 'GITHUB_TOKEN' } },
+    { 'community:github': { ref: 'env.github_token' } },
+    { 'community:github': {} },
+    { 'community:github': { ref: 'env.GITHUB_TOKEN', token: 'x' } },
+    { 'Community:Github': { ref: 'env.GITHUB_TOKEN' } },
+    { 'community:github': 'env.GITHUB_TOKEN' },
+  ]) {
+    const result = validateConfig({ acquisition: { sourceCredentials } });
+    assert.equal(result.valid, false, JSON.stringify(sourceCredentials));
+    assert.ok(result.errors.length > 0);
+  }
+  assert.equal(validateConfig({ acquisition: { unknownField: true } }).valid, false);
+});
+
 test('enabledChannels rejects duplicates, reports, and unknown values', () => {
   for (const enabledChannels of [
     ['x', 'x'],

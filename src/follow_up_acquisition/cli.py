@@ -80,6 +80,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--run-id", help="publisher-assigned immutable run ID")
     run_parser.add_argument("--checkpoint-out", help="absolute checkpoint intent path in output")
     run_parser.add_argument("--state-root", help="absolute source-state root for checkpoint reads")
+    run_parser.add_argument(
+        "--credential-ref",
+        action="append",
+        metavar="SOURCE_ID=env.VARIABLE",
+        help="user-configured credential reference; repeat once per source (never a raw token)",
+    )
 
     commit = sub.add_parser("commit-state", help="commit a previously published checkpoint intent")
     commit.add_argument("--intent", required=True, help="absolute checkpoint intent path")
@@ -366,6 +372,7 @@ def _read_intent(path: Path) -> tuple[dict, bytes, str]:
 def _cmd_run(args: argparse.Namespace) -> int:
     from .collect import collect_run
     from .config import ConfigError, load_source_registry
+    from .credentials import CredentialRefError, build_credential_resolver, parse_credential_refs
     from .source_state import SourceStateError, SourceStateStore
 
     path = Path(args.registry) if args.registry else _default_registry_path()
@@ -374,6 +381,18 @@ def _cmd_run(args: argparse.Namespace) -> int:
     except (ConfigError, OSError) as exc:
         print(f"run: failed to load registry: {exc}")
         return 1
+
+    try:
+        credential_refs = parse_credential_refs(getattr(args, "credential_ref", None))
+    except CredentialRefError as exc:
+        print(f"run: {exc}")
+        return 1
+    known_ids = {source["id"] for source in sources}
+    unknown = sorted(set(credential_refs) - known_ids)
+    if unknown:
+        print(f"run: credential reference names an unknown source_id: {unknown[0]}")
+        return 1
+    credential_resolver = build_credential_resolver(credential_refs)
 
     if args.source:
         targets = [s for s in sources if s["id"] == args.source]
@@ -409,7 +428,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         except (OSError, SourceStateError, ValueError):
             print("run: source state is unavailable")
             return 1
-    run = collect_run(targets, checkpoint_resolver=checkpoint_resolver)
+    run = collect_run(targets, checkpoint_resolver=checkpoint_resolver,
+                      credential_resolver=credential_resolver)
     batches = run.batches
     stateful_adapters = {"github", "hackernews", "techmeme", "arxiv", "hugging-face-papers"}
     stateful = any(run.active_stream_ids.values()) or any(

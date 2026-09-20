@@ -141,6 +141,46 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIsNotNone(collect.call_args.kwargs["checkpoint_resolver"])
 
+    def test_run_forwards_credential_references_to_collection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            registry = Path(tmp) / "sources.json"
+            registry.write_text(json.dumps({"schema_version": "1.0", "sources": [{
+                "id": "community:reddit-test", "name": "Test", "channel": None,
+                "channel_policy": "core-topic", "adapter": "reddit",
+                "requires_credentials": False, "default_enabled": True,
+                "cadence": "daily", "budget": 3,
+                "input": {"subreddit": "test",
+                          "rss_url": "https://www.reddit.com/r/test/.rss",
+                          "listing_url": "https://www.reddit.com/r/test/new.json"},
+                "legacy": {"feed": None},
+            }]}))
+            with patch.dict(os.environ, {"FU_TEST_TOKEN": "gho_token"}), \
+                 patch("follow_up_acquisition.collect.collect_run", return_value=CollectionRun({}, {}, {})) as collect:
+                code = main([
+                    "run", "--registry", str(registry),
+                    "--credential-ref", "community:reddit-test=env.FU_TEST_TOKEN",
+                ])
+                resolver = collect.call_args.kwargs["credential_resolver"]
+                resolved = resolver("community:reddit-test")
+                absent = resolver("community:unconfigured")
+            self.assertEqual(code, 0)
+            self.assertEqual(resolved, {"status": "resolved", "token": "gho_token"})
+            self.assertEqual(absent, {"status": "absent"})
+
+    def test_run_rejects_a_malformed_credential_reference(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["run", "--credential-ref", "community:github=GITHUB_TOKEN"])
+        self.assertEqual(code, 1)
+        self.assertIn("env.VARIABLE_NAME", stdout.getvalue())
+
+    def test_run_rejects_a_credential_reference_for_an_unknown_source(self):
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = main(["run", "--credential-ref", "bogus:nonexistent=env.GITHUB_TOKEN"])
+        self.assertEqual(code, 1)
+        self.assertIn("unknown source_id", stdout.getvalue())
+
     def test_handshake_run_with_no_batches_still_writes_empty_intent(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

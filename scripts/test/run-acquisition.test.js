@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { invokeAcquisitionRun, invokeCheckpointCommit, loadCollectedBatches } from '../lib/run-acquisition.js';
+import { invokeAcquisitionRun, invokeCheckpointCommit, loadCollectedBatches, credentialRefsFromConfig } from '../lib/run-acquisition.js';
 
 function fakeChild(code) {
   const listeners = {};
@@ -50,8 +50,58 @@ test('invokeAcquisitionRun passes the existing state root to collection', async 
   assert.deepEqual(calls[0].slice(-2), ['--state-root', '/tmp/source-state']);
 });
 
-test('invokeAcquisitionRun rejects on a non-zero exit', async () => {
-  await assert.rejects(
+test('credentialRefsFromConfig builds env references from user configuration', () => {
+  assert.deepEqual(credentialRefsFromConfig({}), []);
+  assert.deepEqual(credentialRefsFromConfig({ acquisition: {} }), []);
+  assert.deepEqual(credentialRefsFromConfig({ acquisition: { mode: 'local' } }), []);
+  assert.deepEqual(
+    credentialRefsFromConfig({ acquisition: { mode: 'hybrid',
+      sourceCredentials: { 'community:github': { ref: 'env.GITHUB_TOKEN' } } } }),
+    ['community:github=env.GITHUB_TOKEN'],
+  );
+});
+
+test('credentialRefsFromConfig rejects anything that is not an env pointer', () => {
+  for (const sourceCredentials of [
+    'env.GITHUB_TOKEN',
+    { 'community:github': 'env.GITHUB_TOKEN' },
+    { 'community:github': { ref: 'ghp_' + 'a'.repeat(36) } },
+    { 'community:github': { ref: 'GITHUB_TOKEN' } },
+    { 'community:github': { ref: 'env.github_token' } },
+    { 'community:github': {} },
+    { 'community:github': { ref: 'env.GITHUB_TOKEN', token: 'x' } },
+    { 'Community:Github': { ref: 'env.GITHUB_TOKEN' } },
+  ]) {
+    assert.throws(
+      () => credentialRefsFromConfig({ acquisition: { sourceCredentials } }),
+      /sourceCredentials/,
+      JSON.stringify(sourceCredentials),
+    );
+  }
+});
+
+test('invokeAcquisitionRun forwards credential references to the collection process', async () => {
+  const calls = [];
+  await invokeAcquisitionRun({
+    manageOutput: false, outputDir: '/tmp/acq', checkpointOut: '/tmp/acq/checkpoint-intent.json',
+    runId: 'run-1', pythonPath: 'python3.12',
+    credentialRefs: ['community:github=env.GITHUB_TOKEN'],
+    spawnImpl: (_cmd, argv) => { calls.push(argv); return fakeChild(0); },
+  });
+  assert.deepEqual(calls[0].slice(-2), ['--credential-ref', 'community:github=env.GITHUB_TOKEN']);
+});
+
+test('invokeAcquisitionRun omits credential arguments when none are configured', async () => {
+  const calls = [];
+  await invokeAcquisitionRun({
+    manageOutput: false, outputDir: '/tmp/acq', checkpointOut: '/tmp/acq/checkpoint-intent.json',
+    runId: 'run-1', pythonPath: 'python3.12',
+    spawnImpl: (_cmd, argv) => { calls.push(argv); return fakeChild(0); },
+  });
+  assert.equal(calls[0].includes('--credential-ref'), false);
+});
+
+test('invokeAcquisitionRun rejects on a non-zero exit', async () => {  await assert.rejects(
     () => invokeAcquisitionRun({ outputDir: '/tmp/acq', pythonPath: 'python3.12', manageOutput: false, spawnImpl: () => fakeChild(1) }),
     /acquisition run failed \(1\)/,
   );

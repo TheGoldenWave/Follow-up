@@ -35,6 +35,26 @@ node scripts/migration.js reset blog:anthropic-engineering
 node scripts/report-shadow.js
 ```
 
+### 1.1 来源凭据引用
+
+来源凭据是**可选**的：只提高请求上限，不改变候选语义。引用只写在用户配置
+`~/.follow-builders/config.json` 的 `acquisition.sourceCredentials`，**不进 Registry**：
+
+```json
+{ "acquisition": { "mode": "local",
+  "sourceCredentials": { "community:github": { "ref": "env.GITHUB_TOKEN" } } } }
+```
+
+采集入口读取该配置，把 `SOURCE_ID=env.VARIABLE` 逐项传给隔离运行时的
+`--credential-ref`；变量值本身只从进程环境读取，任何原始 token 都不写入配置、命令行
+输出或日志。`ref` 的合法形状只有 `env.VARIABLE_NAME`。
+
+失败语义是**失败关闭**的：未配置引用时保持匿名；配置了引用但变量缺失、为空或不是合法的
+`Authorization` 值时报 `resolution-error` 并以 `auth-failed` 结束，**不静默回退匿名**，
+以免失效凭据被误读为正常限额。GitHub 匿名上限为 total 24 / Search 9 / core 15 /
+GraphQL 0，凭据模式为 total 64 / Search 27 / core 31 / GraphQL 6；默认三组查询的 lane 集合
+在匿名上限内装不下，因此 `community:github` 只有配置凭据后才可能取得 `ok`。
+
 复核文件包含 `batchId`、`reviewer`、`reviewedAt` 与 `items`；每项为真实批次中的
 `candidateId` 和布尔 `relevant`。工具计算相关率，不能以传入 `passed` 布尔值跳过门禁。
 

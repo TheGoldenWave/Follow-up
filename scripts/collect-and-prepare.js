@@ -8,7 +8,7 @@ import lockfile from 'proper-lockfile';
 
 import { isMainModule } from './command-line.js';
 import { normalizeAcquisitionMode } from './lib/resolve-acquisition-input.js';
-import { invokeAcquisitionRun, invokeCheckpointCommit, loadCollectedBatches } from './lib/run-acquisition.js';
+import { invokeAcquisitionRun, invokeCheckpointCommit, loadCollectedBatches, credentialRefsFromConfig } from './lib/run-acquisition.js';
 import { publishBatchRun, publishLatestPointers } from './lib/publish-batches.js';
 import { loadCheckpointIntent } from './lib/checkpoint-intent.js';
 import { main as prepareMain, parseOptions, writeJsonAtomic } from './prepare-digest.js';
@@ -56,6 +56,7 @@ export async function collectAndPrepare({
     return { mode, collected: false, ...(prepare ? { prepared: await prepare({ mode, batches: {} }) } : {}) };
   }
 
+  const credentialRefs = credentialRefsFromConfig(config);
   const acquisitionDir = join(userDir, 'acquisition');
   const runsDir = join(acquisitionDir, 'runs');
   const latestDir = join(acquisitionDir, 'latest');
@@ -68,6 +69,7 @@ export async function collectAndPrepare({
   try {
     const invocation = await invokeRun({
       outputDir, checkpointOut, runId, stateRoot: join(acquisitionDir, 'source-state'),
+      credentialRefs,
       env: { ...process.env, HOME: join(userDir, '..') },
     });
     invocationCompleted = true;

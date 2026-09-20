@@ -132,6 +132,23 @@ smoke 或 shadow 门禁通过。
 - 统一版本元数据、更新公开文档与 release manifest，重新执行全量回归、精确归档安装/升级和正式发布门禁。
 - 通过来源级观察门禁前不启用 live/cutover，也不下线任何中心来源。
 
+### 六来源 smoke 的当前阻塞（2026-09-20 实测）
+
+来源凭据接线已完成（见[来源凭据接线计划](superpowers/plans/2026-09-20-v0.4.0-source-credentials.md)），
+`community:github` 的匿名请求上限阻塞已解除。六类实测状态：`techmeme` 与
+`hacker-news` 为 `ok`；`github` 为 `partial`（首次运行窗口无下界 → 搜索快照漂移）；
+`arxiv` 为 `no-results`（当日为周日，arXiv RSS 声明 `<skipDays>` 周末不发稿）；
+`reddit` 为 `timeout`、`hugging-face-papers` 为 `error`（两者在本机出口不可达）。
+剩余阻塞分两类：
+
+1. **环境**：适配器的受限 HTTP client 按设计把已验证公网 IP pin 到 TLS 直连，**不读
+   `HTTP_PROXY`/`HTTPS_PROXY`**，而本机代理是 ShadowsocksX-NG 的 PAC + SOCKS/HTTP 形态、
+   无 TUN 默认路由，因此直连 `huggingface.co` 超时。Reddit 另有独立问题：无论直连还是经
+   代理出口，`www.reddit.com` 均返回 403/429（出口 IP 被拦截或限流）。
+2. **查询口径**：GitHub 冷启动时 `Window.start` 为空，commit/issue/PR 退化为全站自由文本
+   搜索（实测数十万至数百万条），必然翻页而 `total_count` 在页间漂移，按 spec 固定
+   `partial`。收窄默认查询或改以稳态有界窗口运行，需要单独决策。
+
 ## 已确认的后续版本调整
 
 - `v0.5.0`：多个预设领域、关键词和来源可调；首批为 AI 前沿、软件开发与开源、教育与学习。

@@ -17,6 +17,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .contracts import is_credential_key
+from .credentials import CREDENTIAL_REF_RE as _CREDENTIAL_REF_RE
 from .source_state import SourceStateError, query_fingerprint
 
 CHANNEL_IDS = frozenset({
@@ -38,7 +39,6 @@ _REGISTRY_SCHEMA_VERSION = "1.0"
 
 _QUERY_ID_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 _SOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$")
-_CREDENTIAL_REF_RE = re.compile(r"^env\.[A-Z_][A-Z0-9_]{0,127}$")
 _SECRET_VALUE_PATTERNS = (
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,255}\b"),
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,255}\b"),

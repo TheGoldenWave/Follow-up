@@ -7,7 +7,20 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "mode": { "type": "string", "enum": ["central", "shadow", "hybrid", "local"], "default": "central" }
+        "mode": { "type": "string", "enum": ["central", "shadow", "hybrid", "local"], "default": "central" },
+        "sourceCredentials": {
+          "type": "object",
+          "description": "Per-source credential references. Values must point at an environment variable; raw tokens are rejected.",
+          "propertyNames": { "pattern": "^[a-z][a-z0-9-]*:[a-z0-9][a-z0-9._-]*$" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref"],
+            "properties": {
+              "ref": { "type": "string", "pattern": "^env\\.[A-Z_][A-Z0-9_]{0,127}$" }
+            }
+          }
+        }
       }
     },
     "platform": {
