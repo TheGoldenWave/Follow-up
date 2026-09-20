@@ -1,6 +1,6 @@
 # Follow-up 项目进度
 
-更新日期：2026-09-17
+更新日期：2026-09-20
 
 ## 当前状态
 
@@ -9,8 +9,17 @@
 `e7d04a8b470cbca12ffe4b11e1e6f6e5f1210413`。修复 validator 与 finalize 输出文件名
 契约不一致，Skill 明确验证后文件使用独立目录和同一 digestId 文件名。
 
-当前开发分支准备发布 `v0.4.0-beta.5` prerelease，用于本机验证。beta 不替代稳定版
+当前开发分支为 `v0.4.0-beta.6`，用于本机安装验证。beta 不替代稳定版
 `v0.3.1`，不表示六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已通过。
+
+`v0.4.0-beta.6` 相对 beta.5 只有一项实质变更：打通用户配置的采集凭据。spec 早已冻结
+凭据契约、`GitHubAdapter` 也已实现并有单测，但生产调用链从未注入
+`credential_resolver`，`community:github` 只能匿名运行，被硬上限 24/9/15/0 请求钉死在
+`partial` + `github-request-budget-exhausted`。现在新增
+`src/follow_up_acquisition/credentials.py` 作为引用格式与 token 形状的唯一真源（只接受
+`env.VARIABLE_NAME`），用户配置 `acquisition.sourceCredentials` 经
+`collect-and-prepare.js` 与 `collect run --credential-ref` 传入适配器；引用已配置但变量
+不可用时返回 `auth-failed`，不会静默降级为匿名。`v0.4.0-beta.5` 的公开资产与标签保持不变。
 
 `v0.4.0-beta.1`–`v0.4.0-beta.4` 的 build 作业均在
 `Verify Python acquisition and isolated installation` 失败，未产出任何公开资产；

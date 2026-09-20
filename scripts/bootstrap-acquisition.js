@@ -45,8 +45,8 @@ export function resolveBootstrapPath({ home, env = process.env } = {}) {
  * Identify the wheel `pip wheel` just wrote into `buildDir`.
  *
  * The built filename carries the PEP 440 normalization of `pyproject.toml`'s version,
- * which is not the same string as the product version (`0.4.0-beta.5` builds
- * `follow_up_acquisition-0.4.0b5-py3-none-any.whl`). Predicting that filename from a
+ * which is not the same string as the product version (`0.4.0-beta.6` builds
+ * `follow_up_acquisition-0.4.0b6-py3-none-any.whl`). Predicting that filename from a
  * constant duplicated the release version here and silently broke every bootstrap whose
  * version differed, so read back what was actually built instead.
  */

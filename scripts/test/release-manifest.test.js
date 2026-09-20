@@ -44,7 +44,7 @@ async function createReleaseFixture(t) {
   return root;
 }
 
-test('repository release identity is beta 0.4.0-beta.5 on 2026-09-18', async () => {
+test('repository release identity is beta 0.4.0-beta.6 on 2026-09-20', async () => {
   const version = (await readFile(new URL('VERSION', repositoryRoot), 'utf8')).trim();
   const packageJson = await readJson('scripts/package.json');
   const packageLock = await readJson('scripts/package-lock.json');
@@ -55,7 +55,7 @@ test('repository release identity is beta 0.4.0-beta.5 on 2026-09-18', async () 
     'utf8',
   );
 
-  assert.equal(version, '0.4.0-beta.5');
+  assert.equal(version, '0.4.0-beta.6');
   assert.equal(packageJson.name, 'follow-builders-scripts');
   assert.equal(
     packageJson.description,
@@ -66,8 +66,8 @@ test('repository release identity is beta 0.4.0-beta.5 on 2026-09-18', async () 
   assert.equal(packageLock.version, version);
   assert.equal(packageLock.packages[''].version, version);
   assert.equal(manifest.productVersion, version);
-  assert.equal(manifest.releaseDate, '2026-09-18');
-  assert.match(changelog, new RegExp(`^## \\[${version.replaceAll('.', '\\.') }\\] - 2026-09-18$`, 'm'));
+  assert.equal(manifest.releaseDate, '2026-09-20');
+  assert.match(changelog, new RegExp(`^## \\[${version.replaceAll('.', '\\.') }\\] - 2026-09-20$`, 'm'));
   assert.match(releaseDesign, /^Release freeze date: 2026-09-07$/m);
 });
 
@@ -305,9 +305,9 @@ test('validator permits only a beta.N version on the beta channel', async () => 
   const manifest = await readJson('release-manifest.json');
   const beta = {
     ...manifest,
-    productVersion: '0.4.0-beta.5',
+    productVersion: '0.4.0-beta.6',
     channel: 'beta',
-    releaseNotesUrl: 'https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.4.0-beta.5',
+    releaseNotesUrl: 'https://github.com/TheGoldenWave/Follow-up/releases/tag/v0.4.0-beta.6',
   };
   assert.deepEqual(validateManifest(beta, beta.productVersion), []);
   assert.ok(validateManifest({ ...beta, channel: 'stable' }, beta.productVersion).some(

@@ -2,6 +2,18 @@
 
 All notable changes to Follow-up are documented in this file.
 
+## [0.4.0-beta.6] - 2026-09-20
+
+- 打通用户配置的采集凭据。spec 已冻结凭据契约、`GitHubAdapter` 也已实现并有单测，但生产调用链从未注入
+  `credential_resolver`，`community:github` 只能匿名运行，被硬上限 24/9/15/0 请求钉死在
+  `partial` + `github-request-budget-exhausted`。新增用户配置 `acquisition.sourceCredentials`
+  （`"<source_id>": {"ref": "env.VARIABLE_NAME"}`），经 `collect-and-prepare.js` 与
+  `collect run --credential-ref` 传递到适配器。
+- 新增 `src/follow_up_acquisition/credentials.py` 作为引用格式与 token 形状的唯一真源：只接受
+  `env.VARIABLE_NAME`，已配置但不可解析时返回 `auth-failed`，不静默降级为匿名；未配置引用时
+  匿名行为逐字不变。
+- 本版本用于本机安装验证，不代表六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已经通过。
+
 ## [0.4.0-beta.5] - 2026-09-18
 
 - 发布 v0.4 社区与学术来源的 beta：GitHub、Hacker News、Reddit、Techmeme、arXiv 与 Hugging Face Papers 已接入本地采集。
