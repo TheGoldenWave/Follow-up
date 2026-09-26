@@ -50,8 +50,19 @@ jobs:
         working-directory: scripts
         run: npm ci
 
+      - name: Provision the cross-runtime test interpreter
+        # `npm test` covers the Python staging to immutable Node run to Python CAS
+        # handoff, which spawns a real interpreter. The default is the documented
+        # local `.venv`; CI never creates one, so the same isolated interpreter the
+        # release workflow uses is provisioned here and passed explicitly.
+        run: |
+          python3.12 -m venv /tmp/follow-up-python-tests
+          /tmp/follow-up-python-tests/bin/python -m pip install --no-build-isolation --require-hashes -r requirements-acquisition.lock
+
       - name: Test
         working-directory: scripts
+        env:
+          FOLLOW_UP_TEST_PYTHON: /tmp/follow-up-python-tests/bin/python
         run: npm test
 
       - name: Generate feeds
