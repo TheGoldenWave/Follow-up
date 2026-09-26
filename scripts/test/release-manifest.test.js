@@ -44,7 +44,7 @@ async function createReleaseFixture(t) {
   return root;
 }
 
-test('repository release identity is beta 0.4.0-beta.6 on 2026-09-20', async () => {
+test('repository release identity is beta 0.4.0-beta.6 on 2026-09-27', async () => {
   const version = (await readFile(new URL('VERSION', repositoryRoot), 'utf8')).trim();
   const packageJson = await readJson('scripts/package.json');
   const packageLock = await readJson('scripts/package-lock.json');
@@ -66,8 +66,8 @@ test('repository release identity is beta 0.4.0-beta.6 on 2026-09-20', async () 
   assert.equal(packageLock.version, version);
   assert.equal(packageLock.packages[''].version, version);
   assert.equal(manifest.productVersion, version);
-  assert.equal(manifest.releaseDate, '2026-09-20');
-  assert.match(changelog, new RegExp(`^## \\[${version.replaceAll('.', '\\.') }\\] - 2026-09-20$`, 'm'));
+  assert.equal(manifest.releaseDate, '2026-09-27');
+  assert.match(changelog, new RegExp(`^## \\[${version.replaceAll('.', '\\.') }\\] - 2026-09-27$`, 'm'));
   assert.match(releaseDesign, /^Release freeze date: 2026-09-07$/m);
 });
 
