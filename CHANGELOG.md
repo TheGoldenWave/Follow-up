@@ -2,7 +2,7 @@
 
 All notable changes to Follow-up are documented in this file.
 
-## [0.4.0-beta.6] - 2026-09-20
+## [0.4.0-beta.6] - 2026-09-27
 
 - 打通用户配置的采集凭据。spec 已冻结凭据契约、`GitHubAdapter` 也已实现并有单测，但生产调用链从未注入
   `credential_resolver`，`community:github` 只能匿名运行，被硬上限 24/9/15/0 请求钉死在
@@ -17,6 +17,11 @@ All notable changes to Follow-up are documented in this file.
   连续失败、`feed-candidates.json` 长期冻结（订阅端表现为 `feedFresh=false` 与 42 个来源
   `error`）。现在缺失凭据只降级对应渠道：该渠道发布结构合法的空 Feed，其全部来源状态记为
   `error` 并注明缺失的变量名，其余渠道照常采集与发布；显式 `--<channel>-only` 仍按失败关闭处理。
+- 修复 `Generate Feeds` 定时工作流：该工作流的测试步骤执行完整 Node 套件，其中
+  “Python staging → 不可变 Node run → Python CAS” 用例会真的启动解释器；CI 既不创建
+  文档化的本地 `.venv`，也没有像发布工作流那样传入 `FOLLOW_UP_TEST_PYTHON`，因此
+  2026-09-21 至 2026-09-26 每日定时任务都以 `spawn .venv/bin/python ENOENT` 失败，
+  Feed 连续 6 天没有更新。现在定时任务显式准备隔离解释器并传入该变量。
 - 本版本用于本机安装验证，不代表六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已经通过。
 
 ## [0.4.0-beta.5] - 2026-09-18

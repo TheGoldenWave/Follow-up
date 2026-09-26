@@ -1,6 +1,6 @@
 # Follow-up 项目进度
 
-更新日期：2026-09-20
+更新日期：2026-09-27
 
 ## 当前状态
 
@@ -20,6 +20,28 @@
 `env.VARIABLE_NAME`），用户配置 `acquisition.sourceCredentials` 经
 `collect-and-prepare.js` 与 `collect run --credential-ref` 传入适配器；引用已配置但变量
 不可用时返回 `auth-failed`，不会静默降级为匿名。`v0.4.0-beta.5` 的公开资产与标签保持不变。
+
+### 中央 Feed 生成中断与修复（2026-09-27）
+
+自 2026-09-18 起，`Generate Feeds` 每日定时任务连续 9 次失败，中央 Feed 与
+`feed-candidates.json` 在这段时间内没有更新。失败有两个不同根因，均已修复：
+
+- 09-18 至 09-20（run `35339118006`、`35439079750`、`35507939921`）：报
+  `Feed generation failed: POD2TXT_API_KEY not set`。`generate-feed.js` 过去只要任一渠道
+  凭据缺失就整体终止，已随 `12fd5cb` 改为只降级缺失凭据的那一个渠道。
+- 09-21 至 09-26（run `35602175848` … `36238950264`）：报
+  `spawn /home/runner/work/Follow-up/Follow-up/.venv/bin/python ENOENT`。`npm test` 包含
+  跨运行时用例“python staging to immutable Node run to Python CAS uses the published
+  intent”（`scripts/test/collect-and-prepare.test.js:270`），该用例真的启动 Python 解释器，
+  默认回退到文档化的本地 `.venv`；而 `generate-feed.yml` 既不创建 `.venv`，也没有像
+  `release.yml` 那样传入 `FOLLOW_UP_TEST_PYTHON`。现在该工作流显式用
+  `python3.12 -m venv` 准备隔离解释器、按哈希锁安装采集依赖，并把解释器路径通过
+  `FOLLOW_UP_TEST_PYTHON` 传给测试步骤，两个工作流的解释器供给方式保持一致。
+
+本地验证（提交前，工作区 `codex/v0.4.0`）：Node 全量 726 项，725 通过、0 失败、1 跳过；
+Python `unittest discover -s tests` 全量通过；跨运行时用例在全新空解释器（未安装任何第三方
+包）下同样通过，因此修复不依赖 pip 安装结果。修复提交后仍需一次定时任务或手动触发确认
+Feed 真正恢复更新，本文不把这视为已恢复的证据。
 
 `v0.4.0-beta.1`–`v0.4.0-beta.4` 的 build 作业均在
 `Verify Python acquisition and isolated installation` 失败，未产出任何公开资产；
