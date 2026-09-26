@@ -117,6 +117,19 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      # The artifact validator imports the shared feed contract, which needs the
+      # locked dependencies this job never installed. Generation had been failing
+      # for weeks, so the missing install stayed hidden behind that failure.
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci
+
       - name: Download generated feeds
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
