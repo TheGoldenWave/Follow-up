@@ -42,7 +42,7 @@
   "integrity": {
     "trackedContent": {
       "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "63fb2b386a47d90bd19cfbfae70646ef7f2beaa73eb027d4b7eed69f965ce1f3"
+      "digest": "c6d74b7ffddf7ef5ed634ff5d41ef8742b7546ce9463792b61116a3c68fb4759"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -64,7 +64,7 @@
         "contracts/review-candidates.schema.json": "cba51dad9891eb444db9ddf46b230e51cfebd9e88a14a8081699519a4a34b06e",
         "contracts/signal-batch.schema.json": "98d1764a53ffc4241ce4972977eaf79c243580579dc696799d97c346ff0aaa45",
         "contracts/v0.4-source-smoke.schema.json": "348bc6564a9dc23eaca740cd549c749b788e7b272dde64ac52e054bf4fb96a10",
-        "docs/project-progress.md": "5d665de1af357f87e3426a93b625eda6eff3bc39970bc4a2566a357d95806ea9",
+        "docs/project-progress.md": "85f04bafa9f8b53711d3ec8353926ad53f90c080686b798e7f53ddf015266a17",
         "docs/source-catalog.md": "0ea374956d3b2b79f5dc3483d3d1eade0dd349cb47d0985b3d6244d5efc4c70f",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
@@ -133,7 +133,7 @@
         "scripts/source-registry.js": "417f8125eda81fb2b3c861b03d6c99c3bfbc5604ac8cfbcc3d55064ebcd86d16",
         "scripts/source-status.js": "e27d88d1ac101f6d93d0974d8c4ba6bba50ffd9fed45b0b9e9d1eb2ebccc0a23",
         "scripts/validate-digest-selection.js": "8db02fb85d39f468a873487e8f1dc13d9b030809b3f20ce57a29df282d701cdf",
-        "scripts/validate-feed-artifact.js": "d765802cea5d167f6c1817599844735487e6c5ac2506d0a89f88920c5d0ff11e",
+        "scripts/validate-feed-artifact.js": "eb088d13e34a9e6fe8eb606f3801c68c25a1989ec06669496a9ea5f0331869f2",
         "src/follow_up_acquisition/__init__.py": "a2de244b88fa010e288cf3db20743adef5316f9e6019bb63a8abcdbe73137259",
         "src/follow_up_acquisition/__main__.py": "10787fec14b203e984bd77bf935c067e6c141478c6f2c8ff48da232a45fc71fb",
         "src/follow_up_acquisition/adapters/__init__.py": "425a4a51267ae45667393a53c55ff6d48740fbcdaff2c78ac6c351e08ed3dd04",
