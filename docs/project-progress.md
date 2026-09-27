@@ -9,8 +9,10 @@
 `e7d04a8b470cbca12ffe4b11e1e6f6e5f1210413`。修复 validator 与 finalize 输出文件名
 契约不一致，Skill 明确验证后文件使用独立目录和同一 digestId 文件名。
 
-当前开发分支为 `v0.4.0-beta.6`，用于本机安装验证。beta 不替代稳定版
+当前开发版本为 `v0.4.0-beta.6`，已于 2026-09-27 作为 prerelease 公开发布，标签提交为
+`c7fef7102993444e84557648c684400630d04afc`，Release 为 immutable。beta 不替代稳定版
 `v0.3.1`，不表示六来源真实 smoke、人工相关性、shadow 或 live/cutover 门禁已通过。
+本机已安装该版本；中央 Feed 发布链路的修复在其标签之后合入 `main`，因此只进入后续版本。
 
 `v0.4.0-beta.6` 相对 beta.5 只有一项实质变更：打通用户配置的采集凭据。spec 早已冻结
 凭据契约、`GitHubAdapter` 也已实现并有单测，但生产调用链从未注入
@@ -38,10 +40,20 @@
   `python3.12 -m venv` 准备隔离解释器、按哈希锁安装采集依赖，并把解释器路径通过
   `FOLLOW_UP_TEST_PYTHON` 传给测试步骤，两个工作流的解释器供给方式保持一致。
 
-本地验证（提交前，工作区 `codex/v0.4.0`）：Node 全量 726 项，725 通过、0 失败、1 跳过；
-Python `unittest discover -s tests` 全量通过；跨运行时用例在全新空解释器（未安装任何第三方
-包）下同样通过，因此修复不依赖 pip 安装结果。修复提交后仍需一次定时任务或手动触发确认
-Feed 真正恢复更新，本文不把这视为已恢复的证据。
+- 09-27 的手动触发（run `36279898517`）证明前两处修复生效：generate 作业产出了工件，但
+  publish 作业随即失败：`scripts/validate-feed-artifact.js` 需要 `ajv`，而 publish 作业按
+  `3295e34` 确立的设计不安装依赖、不执行测试，只做校验与提交。也就是说这个发布作业自
+  2026-09-02 改造以来从未真正可用——生成环节一直失败，把它掩盖了三周。
+
+  修复方式是让校验门只依赖标准库，而不是给 publish 作业加 `npm ci`：generate 作业保留
+  schema 与 registry 门禁（`npm run validate-feeds`），通过后写出八文件校验和；publish 作业
+  用校验和核对下载的工件，并继续拒绝多余、缺失、符号链接、非 JSON 和被替换的文件。发布内容
+  因此与 generate 已接受的内容逐字节绑定，publish 仍不安装依赖、不接触凭据、不执行测试。
+
+本地验证（提交前，工作区 `codex/v0.4.0`）：Node 全量 728 项，726 通过、0 失败、1 跳过（新增
+两项覆盖校验和绑定）；Python `unittest discover -s tests` 全量通过；跨运行时用例在全新空
+解释器（未安装任何第三方包）下同样通过。修复提交后仍需一次定时任务或手动触发确认 Feed
+真正落地，本文不把这视为已恢复的证据。
 
 `v0.4.0-beta.1`–`v0.4.0-beta.4` 的 build 作业均在
 `Verify Python acquisition and isolated installation` 失败，未产出任何公开资产；

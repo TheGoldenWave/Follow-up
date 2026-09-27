@@ -27,7 +27,12 @@ import {
   fetchJSON as fetchDigestJSON,
   loadCentralFeedData,
 } from '../prepare-digest.js';
-import { validateArtifactDirectory } from '../validate-feed-artifact.js';
+import {
+  ARTIFACT_FILES,
+  CHECKSUM_FILE,
+  validateArtifactDirectory,
+  writeArtifactChecksums,
+} from '../validate-feed-artifact.js';
 import { validateCandidateFeed } from '../candidate-feed-contract.js';
 import { loadSourceRegistry } from '../source-registry.js';
 
@@ -544,6 +549,7 @@ test('feed artifact gate accepts exactly six feeds plus candidate and state', as
   }
   await writeFile(join(directory, 'feed-candidates.json'), await readFile(new URL('feed-candidates.json', repositoryRoot)));
   await writeFile(join(directory, 'state-feed.json'), await readFile(new URL('state-feed.json', repositoryRoot)));
+  await writeArtifactChecksums(directory, join(directory, CHECKSUM_FILE));
   assert.deepEqual(await validateArtifactDirectory(directory), []);
 
   await writeFile(join(directory, 'unexpected.json'), '{}\n');
@@ -553,6 +559,36 @@ test('feed artifact gate accepts exactly six feeds plus candidate and state', as
   await rm(join(directory, 'feed-x.json'));
   await symlink(join(directory, 'feed-podcasts.json'), join(directory, 'feed-x.json'));
   assert.ok((await validateArtifactDirectory(directory)).some((error) => error.includes('symbolic link')));
+});
+
+test('feed artifact gate binds the downloaded files to the checksums of the accepted run', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'follow-up-feeds-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  for (const [, filename] of feedCases) {
+    await writeFile(join(directory, filename), await readFile(new URL(filename, repositoryRoot)));
+  }
+  await writeFile(join(directory, 'feed-candidates.json'), await readFile(new URL('feed-candidates.json', repositoryRoot)));
+  await writeFile(join(directory, 'state-feed.json'), await readFile(new URL('state-feed.json', repositoryRoot)));
+
+  assert.ok((await validateArtifactDirectory(directory)).some((error) => error.includes(CHECKSUM_FILE)));
+
+  await writeFile(join(directory, CHECKSUM_FILE), 'not-a-digest  feed-x.json\n');
+  assert.ok((await validateArtifactDirectory(directory)).some((error) => error.includes(CHECKSUM_FILE)));
+
+  await writeArtifactChecksums(directory, join(directory, CHECKSUM_FILE));
+  assert.deepEqual(await validateArtifactDirectory(directory), []);
+
+  await writeFile(join(directory, 'feed-x.json'), await readFile(new URL('feed-podcasts.json', repositoryRoot)));
+  assert.ok((await validateArtifactDirectory(directory)).some((error) => error.includes('does not match')));
+});
+
+test('feed artifact gate covers exactly the published feed set', async () => {
+  assert.deepEqual([...ARTIFACT_FILES].sort(), [
+    ...CENTRAL_FEED_FILES.map(({ filename }) => filename),
+    'feed-candidates.json',
+    'state-feed.json',
+  ].sort());
 });
 
 test('feed workflow pins actions and separates secret generation from publishing', async () => {

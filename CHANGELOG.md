@@ -2,6 +2,17 @@
 
 All notable changes to Follow-up are documented in this file.
 
+## [Unreleased]
+
+- 修复中央 Feed 发布作业从未真正可用的缺陷：`Generate Feeds` 的 publish 作业按设计不安装依赖、
+  也不执行测试，但它调用的 `scripts/validate-feed-artifact.js` 需要 `ajv`。由于生成环节自
+  2026-09-06 起一直在失败，该缺陷始终没有暴露；2026-09-27 生成第一次成功后，publish 作业以
+  `Cannot find package 'ajv'` 失败，Feed 仍然没有落地。
+- 现在工件校验门只使用标准库：generate 作业保留 schema 与 registry 门禁
+  （`npm run validate-feeds`），通过后写出八文件校验和；publish 作业用该校验和核对下载的工件，
+  并继续拒绝多余、缺失、符号链接、非 JSON 和被替换的文件。发布内容与 generate 已接受的内容
+  逐字节绑定，publish 依旧不安装依赖、不接触凭据、不执行测试。
+
 ## [0.4.0-beta.6] - 2026-09-27
 
 - 打通用户配置的采集凭据。spec 已冻结凭据契约、`GitHubAdapter` 也已实现并有单测，但生产调用链从未注入
