@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T00:00:00.000Z",
+  "generatedAt": "2026-09-27T05:15:39.150Z",
   "initializedAt": "2026-09-06T00:00:00.000Z",
   "continuousHistorySince": "2026-09-06T00:00:00.000Z",
   "retention": {
@@ -12,478 +12,12 @@
   "truncation": {
     "affectedSourceIds": [],
     "oldestRetainedAt": null,
+    "oldestRetainedFirstSeenAtBySource": {},
+    "oldestRemovedFirstSeenAtBySource": {},
+    "newestRemovedFirstSeenAtBySource": {},
     "removedCount": 0
   },
   "registry": [
-    {
-      "sourceId": "x:karpathy",
-      "channel": "x",
-      "sourceName": "Andrej Karpathy",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Andrej Karpathy: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:swyx",
-      "channel": "x",
-      "sourceName": "Swyx",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Swyx: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:joshwoodward",
-      "channel": "x",
-      "sourceName": "Josh Woodward",
-      "status": "ok",
-      "candidateCount": 1
-    },
-    {
-      "sourceId": "x:bcherny",
-      "channel": "x",
-      "sourceName": "Boris Cherny",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Boris Cherny: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:thsottiaux",
-      "channel": "x",
-      "sourceName": "Thibault Sottiaux",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:petergyang",
-      "channel": "x",
-      "sourceName": "Peter Yang",
-      "status": "ok",
-      "candidateCount": 3
-    },
-    {
-      "sourceId": "x:thenanyu",
-      "channel": "x",
-      "sourceName": "Nan Yu",
-      "status": "ok",
-      "candidateCount": 3
-    },
-    {
-      "sourceId": "x:realmadhuguru",
-      "channel": "x",
-      "sourceName": "Madhu Guru",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Madhu Guru: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:amandaaskell",
-      "channel": "x",
-      "sourceName": "Amanda Askell",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Amanda Askell: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:catwu",
-      "channel": "x",
-      "sourceName": "Cat Wu",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Cat Wu: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:trq212",
-      "channel": "x",
-      "sourceName": "Thariq",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:googlelabs",
-      "channel": "x",
-      "sourceName": "Google Labs",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Google Labs: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:amasad",
-      "channel": "x",
-      "sourceName": "Amjad Masad",
-      "status": "ok",
-      "candidateCount": 1
-    },
-    {
-      "sourceId": "x:rauchg",
-      "channel": "x",
-      "sourceName": "Guillermo Rauch",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:alexalbert",
-      "channel": "x",
-      "sourceName": "Alex Albert",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Alex Albert: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:levie",
-      "channel": "x",
-      "sourceName": "Aaron Levie",
-      "status": "ok",
-      "candidateCount": 1
-    },
-    {
-      "sourceId": "x:ryolu",
-      "channel": "x",
-      "sourceName": "Ryo Lu",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Ryo Lu: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:garrytan",
-      "channel": "x",
-      "sourceName": "Garry Tan",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Garry Tan: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:mattturck",
-      "channel": "x",
-      "sourceName": "Matt Turck",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:zarazhangrui",
-      "channel": "x",
-      "sourceName": "Zara Zhang",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:nikunj",
-      "channel": "x",
-      "sourceName": "Nikunj Kothari",
-      "status": "ok",
-      "candidateCount": 1
-    },
-    {
-      "sourceId": "x:steipete",
-      "channel": "x",
-      "sourceName": "Peter Steinberger",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:danshipper",
-      "channel": "x",
-      "sourceName": "Dan Shipper",
-      "status": "ok",
-      "candidateCount": 3
-    },
-    {
-      "sourceId": "x:adityaag",
-      "channel": "x",
-      "sourceName": "Aditya Agarwal",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:sama",
-      "channel": "x",
-      "sourceName": "Sam Altman",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "x:claudeai",
-      "channel": "x",
-      "sourceName": "Claude",
-      "status": "ok",
-      "candidateCount": 3
-    },
-    {
-      "sourceId": "x:dario-amodei",
-      "channel": "x",
-      "sourceName": "Dario Amodei",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Dario Amodei: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:nathanlabenz",
-      "channel": "x",
-      "sourceName": "Nathan Labenz",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Nathan Labenz: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:jackclarksf",
-      "channel": "x",
-      "sourceName": "Jack Clark",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Jack Clark: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "x:bentossell",
-      "channel": "x",
-      "sourceName": "Ben Tossell",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Ben Tossell: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:latent-space",
-      "channel": "podcasts",
-      "sourceName": "Latent Space",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Latent Space: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:training-data",
-      "channel": "podcasts",
-      "sourceName": "Training Data",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Training Data: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:no-priors",
-      "channel": "podcasts",
-      "sourceName": "No Priors",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "No Priors: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:unsupervised-learning",
-      "channel": "podcasts",
-      "sourceName": "Unsupervised Learning",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Unsupervised Learning: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:mad-podcast",
-      "channel": "podcasts",
-      "sourceName": "The MAD Podcast with Matt Turck",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "The MAD Podcast with Matt Turck: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:ai-and-i",
-      "channel": "podcasts",
-      "sourceName": "AI & I by Every",
-      "status": "ok",
-      "candidateCount": 1
-    },
-    {
-      "sourceId": "podcast:lex-fridman",
-      "channel": "podcasts",
-      "sourceName": "Lex Fridman Podcast",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Lex Fridman Podcast: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:cognitive-revolution",
-      "channel": "podcasts",
-      "sourceName": "The Cognitive Revolution",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "The Cognitive Revolution: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:lightcone",
-      "channel": "podcasts",
-      "sourceName": "Lightcone (YC)",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Lightcone (YC): current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "podcast:acquired",
-      "channel": "podcasts",
-      "sourceName": "Acquired",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Acquired: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:anthropic-engineering",
-      "channel": "blogs",
-      "sourceName": "Anthropic Engineering",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Anthropic Engineering: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:claude-blog",
-      "channel": "blogs",
-      "sourceName": "Claude Blog",
-      "status": "ok",
-      "candidateCount": 2
-    },
-    {
-      "sourceId": "blog:anthropic-interpretability",
-      "channel": "blogs",
-      "sourceName": "Anthropic Interpretability",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Anthropic Interpretability: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:anthropic-science",
-      "channel": "blogs",
-      "sourceName": "Anthropic Science",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Anthropic Science: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:openai-alignment",
-      "channel": "blogs",
-      "sourceName": "OpenAI Alignment Research Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "OpenAI Alignment Research Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:google-antigravity",
-      "channel": "blogs",
-      "sourceName": "Google Antigravity Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Google Antigravity Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:google-deepmind",
-      "channel": "blogs",
-      "sourceName": "Google DeepMind Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Google DeepMind Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:google-research",
-      "channel": "blogs",
-      "sourceName": "Google Research Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Google Research Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:microsoft-research",
-      "channel": "blogs",
-      "sourceName": "Microsoft Research Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Microsoft Research Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:amazon-science",
-      "channel": "blogs",
-      "sourceName": "Amazon Science Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Amazon Science Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:ibm-research",
-      "channel": "blogs",
-      "sourceName": "IBM Research Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "IBM Research Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:perplexity-research",
-      "channel": "blogs",
-      "sourceName": "Perplexity Research Articles",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Perplexity Research Articles: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:qwen-blog",
-      "channel": "blogs",
-      "sourceName": "Qwen Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Qwen Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:kimi-blog",
-      "channel": "blogs",
-      "sourceName": "Kimi Research & Tech Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Kimi Research & Tech Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:ernie-blog",
-      "channel": "blogs",
-      "sourceName": "ERNIE Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "ERNIE Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:minimax-blog",
-      "channel": "blogs",
-      "sourceName": "MiniMax Blog",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "MiniMax Blog: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "blog:apple-ml-research",
-      "channel": "blogs",
-      "sourceName": "Apple Machine Learning Research",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "Apple Machine Learning Research: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "newsletter:stratechery",
-      "channel": "newsletters",
-      "sourceName": "Stratechery (Ben Thompson)",
-      "status": "ok",
-      "candidateCount": 1
-    },
-    {
-      "sourceId": "newsletter:one-useful-thing",
-      "channel": "newsletters",
-      "sourceName": "One Useful Thing (Ethan Mollick)",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "One Useful Thing (Ethan Mollick): current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "newsletter:algorithmic-bridge",
-      "channel": "newsletters",
-      "sourceName": "The Algorithmic Bridge",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "The Algorithmic Bridge: current status unavailable during legacy Feed bootstrap"
-    },
-    {
-      "sourceId": "newsletter:ai-snake-oil",
-      "channel": "newsletters",
-      "sourceName": "AI Snake Oil",
-      "status": "error",
-      "candidateCount": 0,
-      "errorSummary": "AI Snake Oil: current status unavailable during legacy Feed bootstrap"
-    },
     {
       "sourceId": "academic:arxiv-cs-ai",
       "channel": "academic",
@@ -495,6 +29,13 @@
       "sourceId": "academic:arxiv-cs-cl",
       "channel": "academic",
       "sourceName": "arXiv cs.CL",
+      "status": "ok",
+      "candidateCount": 5
+    },
+    {
+      "sourceId": "academic:arxiv-cs-cr",
+      "channel": "academic",
+      "sourceName": "arXiv cs.CR (AI Security)",
       "status": "ok",
       "candidateCount": 5
     },
@@ -520,35 +61,689 @@
       "candidateCount": 5
     },
     {
-      "sourceId": "academic:arxiv-cs-cr",
-      "channel": "academic",
-      "sourceName": "arXiv cs.CR (AI Security)",
+      "sourceId": "blog:amazon-science",
+      "channel": "blogs",
+      "sourceName": "Amazon Science Blog",
       "status": "ok",
-      "candidateCount": 5
+      "candidateCount": 1
+    },
+    {
+      "sourceId": "blog:anthropic-engineering",
+      "channel": "blogs",
+      "sourceName": "Anthropic Engineering",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:anthropic-interpretability",
+      "channel": "blogs",
+      "sourceName": "Anthropic Interpretability",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:anthropic-science",
+      "channel": "blogs",
+      "sourceName": "Anthropic Science",
+      "status": "ok",
+      "candidateCount": 3
+    },
+    {
+      "sourceId": "blog:apple-ml-research",
+      "channel": "blogs",
+      "sourceName": "Apple Machine Learning Research",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:claude-blog",
+      "channel": "blogs",
+      "sourceName": "Claude Blog",
+      "status": "ok",
+      "candidateCount": 3
+    },
+    {
+      "sourceId": "blog:ernie-blog",
+      "channel": "blogs",
+      "sourceName": "ERNIE Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:google-antigravity",
+      "channel": "blogs",
+      "sourceName": "Google Antigravity Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:google-deepmind",
+      "channel": "blogs",
+      "sourceName": "Google DeepMind Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:google-research",
+      "channel": "blogs",
+      "sourceName": "Google Research Blog",
+      "status": "ok",
+      "candidateCount": 1
+    },
+    {
+      "sourceId": "blog:ibm-research",
+      "channel": "blogs",
+      "sourceName": "IBM Research Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:kimi-blog",
+      "channel": "blogs",
+      "sourceName": "Kimi Research & Tech Blog",
+      "status": "ok",
+      "candidateCount": 3
+    },
+    {
+      "sourceId": "blog:microsoft-research",
+      "channel": "blogs",
+      "sourceName": "Microsoft Research Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:minimax-blog",
+      "channel": "blogs",
+      "sourceName": "MiniMax Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:openai-alignment",
+      "channel": "blogs",
+      "sourceName": "OpenAI Alignment Research Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "blog:perplexity-research",
+      "channel": "blogs",
+      "sourceName": "Perplexity Research Articles",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Perplexity Research Articles: discovery completeness could not be established"
+    },
+    {
+      "sourceId": "blog:qwen-blog",
+      "channel": "blogs",
+      "sourceName": "Qwen Blog",
+      "status": "no-results",
+      "candidateCount": 0
+    },
+    {
+      "sourceId": "newsletter:ai-snake-oil",
+      "channel": "newsletters",
+      "sourceName": "AI Snake Oil",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "AI Snake Oil: RSS: Failed to fetch AI Snake Oil: HTTP 403"
+    },
+    {
+      "sourceId": "newsletter:algorithmic-bridge",
+      "channel": "newsletters",
+      "sourceName": "The Algorithmic Bridge",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "The Algorithmic Bridge: RSS: Error fetching The Algorithmic Bridge: fetch failed"
+    },
+    {
+      "sourceId": "newsletter:one-useful-thing",
+      "channel": "newsletters",
+      "sourceName": "One Useful Thing (Ethan Mollick)",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "One Useful Thing (Ethan Mollick): RSS: Error fetching One Useful Thing (Ethan Mollick): fetch failed"
+    },
+    {
+      "sourceId": "newsletter:stratechery",
+      "channel": "newsletters",
+      "sourceName": "Stratechery (Ben Thompson)",
+      "status": "ok",
+      "candidateCount": 2
+    },
+    {
+      "sourceId": "podcast:acquired",
+      "channel": "podcasts",
+      "sourceName": "Acquired",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Acquired: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:ai-and-i",
+      "channel": "podcasts",
+      "sourceName": "AI & I by Every",
+      "status": "error",
+      "candidateCount": 1,
+      "errorSummary": "AI & I by Every: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:cognitive-revolution",
+      "channel": "podcasts",
+      "sourceName": "The Cognitive Revolution",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "The Cognitive Revolution: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:latent-space",
+      "channel": "podcasts",
+      "sourceName": "Latent Space",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Latent Space: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:lex-fridman",
+      "channel": "podcasts",
+      "sourceName": "Lex Fridman Podcast",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Lex Fridman Podcast: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:lightcone",
+      "channel": "podcasts",
+      "sourceName": "Lightcone (YC)",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Lightcone (YC): POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:mad-podcast",
+      "channel": "podcasts",
+      "sourceName": "The MAD Podcast with Matt Turck",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "The MAD Podcast with Matt Turck: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:no-priors",
+      "channel": "podcasts",
+      "sourceName": "No Priors",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "No Priors: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:training-data",
+      "channel": "podcasts",
+      "sourceName": "Training Data",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Training Data: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "podcast:unsupervised-learning",
+      "channel": "podcasts",
+      "sourceName": "Unsupervised Learning",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Unsupervised Learning: POD2TXT_API_KEY is not configured; podcasts collection skipped"
+    },
+    {
+      "sourceId": "x:adityaag",
+      "channel": "x",
+      "sourceName": "Aditya Agarwal",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Aditya Agarwal: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:alexalbert",
+      "channel": "x",
+      "sourceName": "Alex Albert",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Alex Albert: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:amandaaskell",
+      "channel": "x",
+      "sourceName": "Amanda Askell",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Amanda Askell: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:amasad",
+      "channel": "x",
+      "sourceName": "Amjad Masad",
+      "status": "error",
+      "candidateCount": 1,
+      "errorSummary": "Amjad Masad: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:bcherny",
+      "channel": "x",
+      "sourceName": "Boris Cherny",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Boris Cherny: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:bentossell",
+      "channel": "x",
+      "sourceName": "Ben Tossell",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Ben Tossell: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:catwu",
+      "channel": "x",
+      "sourceName": "Cat Wu",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Cat Wu: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:claudeai",
+      "channel": "x",
+      "sourceName": "Claude",
+      "status": "error",
+      "candidateCount": 3,
+      "errorSummary": "Claude: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:danshipper",
+      "channel": "x",
+      "sourceName": "Dan Shipper",
+      "status": "error",
+      "candidateCount": 3,
+      "errorSummary": "Dan Shipper: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:dario-amodei",
+      "channel": "x",
+      "sourceName": "Dario Amodei",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Dario Amodei: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:garrytan",
+      "channel": "x",
+      "sourceName": "Garry Tan",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Garry Tan: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:googlelabs",
+      "channel": "x",
+      "sourceName": "Google Labs",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Google Labs: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:jackclarksf",
+      "channel": "x",
+      "sourceName": "Jack Clark",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Jack Clark: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:joshwoodward",
+      "channel": "x",
+      "sourceName": "Josh Woodward",
+      "status": "error",
+      "candidateCount": 1,
+      "errorSummary": "Josh Woodward: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:karpathy",
+      "channel": "x",
+      "sourceName": "Andrej Karpathy",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Andrej Karpathy: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:levie",
+      "channel": "x",
+      "sourceName": "Aaron Levie",
+      "status": "error",
+      "candidateCount": 1,
+      "errorSummary": "Aaron Levie: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:mattturck",
+      "channel": "x",
+      "sourceName": "Matt Turck",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Matt Turck: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:nathanlabenz",
+      "channel": "x",
+      "sourceName": "Nathan Labenz",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Nathan Labenz: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:nikunj",
+      "channel": "x",
+      "sourceName": "Nikunj Kothari",
+      "status": "error",
+      "candidateCount": 1,
+      "errorSummary": "Nikunj Kothari: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:petergyang",
+      "channel": "x",
+      "sourceName": "Peter Yang",
+      "status": "error",
+      "candidateCount": 3,
+      "errorSummary": "Peter Yang: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:rauchg",
+      "channel": "x",
+      "sourceName": "Guillermo Rauch",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Guillermo Rauch: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:realmadhuguru",
+      "channel": "x",
+      "sourceName": "Madhu Guru",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Madhu Guru: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:ryolu",
+      "channel": "x",
+      "sourceName": "Ryo Lu",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Ryo Lu: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:sama",
+      "channel": "x",
+      "sourceName": "Sam Altman",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Sam Altman: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:steipete",
+      "channel": "x",
+      "sourceName": "Peter Steinberger",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Peter Steinberger: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:swyx",
+      "channel": "x",
+      "sourceName": "Swyx",
+      "status": "error",
+      "candidateCount": 0,
+      "errorSummary": "Swyx: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:thenanyu",
+      "channel": "x",
+      "sourceName": "Nan Yu",
+      "status": "error",
+      "candidateCount": 3,
+      "errorSummary": "Nan Yu: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:thsottiaux",
+      "channel": "x",
+      "sourceName": "Thibault Sottiaux",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Thibault Sottiaux: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:trq212",
+      "channel": "x",
+      "sourceName": "Thariq",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Thariq: X_BEARER_TOKEN is not configured; x collection skipped"
+    },
+    {
+      "sourceId": "x:zarazhangrui",
+      "channel": "x",
+      "sourceName": "Zara Zhang",
+      "status": "error",
+      "candidateCount": 2,
+      "errorSummary": "Zara Zhang: X_BEARER_TOKEN is not configured; x collection skipped"
     },
     {
       "sourceId": "zh-tech:36kr",
       "channel": "zh-tech",
       "sourceName": "36氪",
-      "status": "ok",
-      "candidateCount": 3
-    },
-    {
-      "sourceId": "zh-tech:sspai",
-      "channel": "zh-tech",
-      "sourceName": "少数派",
-      "status": "ok",
-      "candidateCount": 3
+      "status": "error",
+      "candidateCount": 3,
+      "errorSummary": "36氪: RSS: Error fetching 36氪: Invalid feed for 36氪: Invalid feed XML: char '&' is not expected. at line 9"
     },
     {
       "sourceId": "zh-tech:qbitai",
       "channel": "zh-tech",
       "sourceName": "量子位",
       "status": "ok",
-      "candidateCount": 3
+      "candidateCount": 6
+    },
+    {
+      "sourceId": "zh-tech:sspai",
+      "channel": "zh-tech",
+      "sourceName": "少数派",
+      "status": "ok",
+      "candidateCount": 6
     }
   ],
   "candidates": [
+    {
+      "candidateId": "fed04f38ffe53c2f44bde669cc64bffad8a2596138da4d9a1237a0f4b043f618",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=498478",
+      "canonicalUrl": "https://www.qbitai.com/2026/09/498478.html",
+      "title": "索辰科技加码世界模型，与战略投资企业美梦空间联合发布具身模型与物理测评标准",
+      "author": "量子位",
+      "publishedAt": "2026-09-26T11:49:43.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "索辰科技加码世界模型，与战略投资企业美梦空间联合发布具身模型与物理测评标准",
+      "contentTruncated": false,
+      "contentFingerprint": "581b2017f47767538faec11ff27a5278f0cb92d74dd0f1bbea8adb3b6b793bb1"
+    },
+    {
+      "candidateId": "fc203ac848c9a72a646ea10d847cee9d8e911e680363de993afd9dabe49084cb",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=498271",
+      "canonicalUrl": "https://www.qbitai.com/2026/09/498271.html",
+      "title": "AI开始研究Physical AI：FSD级团队亮出首版模型Simate-beta，空降RoboDojo",
+      "author": "量子位",
+      "publishedAt": "2026-09-26T09:07:41.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "AI开始研究Physical AI：FSD级团队亮出首版模型Simate-beta，空降RoboDojo",
+      "contentTruncated": false,
+      "contentFingerprint": "335cfff7fe9105bb1ee5af7fe3f0ae22bd72c59eff277dd5f4f2ff207a10b7e6"
+    },
+    {
+      "candidateId": "fcf622cb7cf7dd11817ef8d8b95f8b8834036b37d474367226118cb7f8bf631b",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=497624",
+      "canonicalUrl": "https://www.qbitai.com/2026/09/497624.html",
+      "title": "笔记本跑7000亿参数GLM！无GPU也行? SSD当显存用火爆GitHub",
+      "author": "量子位",
+      "publishedAt": "2026-09-26T09:01:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "笔记本跑7000亿参数GLM！无GPU也行? SSD当显存用火爆GitHub",
+      "contentTruncated": false,
+      "contentFingerprint": "ce35b3d7a03da0b21757f64e6aa7284f57ae07538b80f0983cbd83ee14e8eefd"
+    },
+    {
+      "candidateId": "0d94acedf92c4fab5617e044cbab30c3b181a85daf8223bf32f918b30670efb7",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/114958",
+      "canonicalUrl": "https://sspai.com/post/114958",
+      "title": "宜家 Matter 智能家居终于要来了？在中国市场它将如何破局",
+      "author": "少数派",
+      "publishedAt": "2026-09-26T06:00:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "宜家 Matter 智能家居终于要来了？在中国市场它将如何破局",
+      "contentTruncated": false,
+      "contentFingerprint": "99da4758aee007d47b295b8225cf3ed5a47bc7e658f0fbae9d8390bd2aec3c40"
+    },
+    {
+      "candidateId": "0ab2ff90a8fd1da0ee240c9acb9ce7a27f96ca2393acb1877d8258a71b5321fd",
+      "channel": "newsletters",
+      "sourceId": "newsletter:stratechery",
+      "sourceNativeId": "https://stratechery.com/?p=20104",
+      "canonicalUrl": "https://stratechery.com/2026/begun-the-aggregator-wars-have",
+      "title": "2026.39: Begun, the Aggregator Wars Have",
+      "author": "Stratechery (Ben Thompson)",
+      "publishedAt": "2026-09-25T17:00:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "2026.39: Begun, the Aggregator Wars Have",
+      "contentTruncated": false,
+      "contentFingerprint": "371fd2c1e258829e9bb6cd8ec40fc4e4c643576f3545fa8f4a30c9cd32171b3e"
+    },
+    {
+      "candidateId": "ae37928fbbfaddc4cdfadcdf65b581862e72b7f154c5500813a9cc3dd15317c2",
+      "channel": "blogs",
+      "sourceId": "blog:amazon-science",
+      "canonicalUrl": "https://www.amazon.science/blog/a-kernel-centric-path-to-real-time-video-generation-on-trainium",
+      "title": "A kernel-centric path to real-time video generation on Trainium",
+      "author": "Stephen Zorio",
+      "publishedAt": "2026-09-25T14:55:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "The AWS Neuron Science team and Reactor collaborated to bring real-time video generation to Trainium. Machine learning A kernel-centric path to real-time video generation on Trainium Using the Neuron Kernel Interface, a Reactor–AWS collaboration tackled the dynamic shapes, memory access patterns, and cache management that make real-time autoregressive diffusion hard—building techniques that generalize across models. By Stephen Zorio September 25, 2026 12 min read Share Share Copy link Email X LinkedIn Facebook Line Reddit QZone Sina Weibo WeChat WhatsApp 分享到微信 x In 2018, Jürgen Schmidhuber — who in 1990 was the first person to propose world models as a machine learning concept — published a paper with David Ha. They wrote about “a predictive world model” which could “extract useful representations of space and time” and use that to train agents to drive, among other things. The growth in the capability and real-world applications of world models in the eight years since that seminal paper is staggering. The emergence of massive training datasets, paired with variational autoencoders, and both diffusion and autoregressive transformers enable today’s world models to convert text, images, audio, and video inputs into latent space that is used to build and maintain breathtaking, immersive world models which can predict state changes and respond to actions. These models have vital and expanding roles in robotics, transport, climate modeling, video game development, scientific simulation, and design prototyping. World models can generate immersive, explorable environments that respond to user input in real time. The sharp increase in the power and potential of world models has been accompanied by an increased need for hardware and infrastructure capable of supporting them. That is a challenge that Bryce Schmidtchen , co-founder and chief technology officer of Reactor, is well acquainted with. “It's about real time, it's about low latency, and it's about doing that as efficiently as you can at scale,” Schmidtchen observed. Reactor is a platform that allows developers, designers, and researchers to deploy, use, and scale real-time interactive AI models. “Efficiency means everything from how you schedule the inference on the given chip, in our case Trainium , to how you think about maximally bin packing every forward pass of the model.” The challenge of efficiency is made even more acute by Reactor’s global presence. “We think about GPU clusters in terms of regions — we have hundreds all over the world. The latent that turns into a pixel that comes off the GPU needs to be able to get to the network without hopping around through Kubernetes. And you need to do this in a way where it doesn't matter if it's a well-supported cluster or bare metal in a closet. “And then,” Schmidtchen continued, “you need to tie this to world-class networking and media streaming that supports different codecs, different resolutions, and allows that to connect to APIs and SDKs across different languages that can support all different types of applications.” Reactor's platform provides APIs and SDKs across multiple languages and codecs, supporting real-time interactive AI applications — from gaming and robotics to film and research — on AWS. The global reach of AWS already helps Reactor to achieve many of its goals. “Everything they have at the inference layer, the level of scale that we're able to achieve in different regions is what makes a platform of this scale possible and reliable,” Schmidtchen observed. Now, a recent collaboration between Reactor and the Amazon Neuron Science team has forged a path to even greater efficiency for world models. This is a look at the optimization strategy those teams pursued, and how that laid the foundation for future models to achieve real-time capability on Trainium. The rise of autoregressive diffusion models “The Neuron Science team explores new techniques for generative AI model enablement optimization,” explained Jun Wu , a principal applied scientist on the Neuron team. “This might be a new model architecture or new algorithm for optimization or a new way to generate and optimize the code for running those models on Trainium. We identify opportunities to build a prototype and make it feasible to be ported to the production pipeline.” The team spotted one such opportunity around the usage of diffusion models in video generation. “We noticed an evolution from generating shorter, fixed-length videos to infinite-length or dynamic-length videos,” Wu explained. “Generating high-quality video frames at those lengths gave rise to the usage of autoregressive diffusion models.” Those types of models, which combine the sequential next-token prediction found in large language models with the iteration and refinement of diffusion models, are essential for users who want to generate video where they can navigate the generated environment. “Autoregressive diffusion means a user keystroke can be absorbed as input to the model and, conditioned on the previously generated video frame, the model can correctly decide the next move or the next scene,” Wu observed. “Most of the interactive video generation models we are seeing today are using this.” Wu and his team, Mason Fu and Lingfan Yu , both senior applied scientists, saw a chance to optimize how those models are deployed for real-time video generation on Trainium, and saw the opportunity to do this in collaboration with Reactor. “We had been working on real-time video and interactive video generation for over 18 months at that point,” Schmidtchen noted. The teams considered various video generation techniques and aligned on utilizing Rolling Forcing, citing both its ability to consistently generate high-quality 30-second videos and its relative size. The hard part with these models isn't quality, it's that they have to run in real time. Unlike traditional video generation, which renders a full clip offline and returns it later, models like Rolling Forcing are streaming. Each frame is generated and immediately consumed, shown to a user or fed back in as the next input. That is how developers and customers actually use them, and a frame that arrives late breaks the experience, because generation has to stay ahead of the playback timeline. “High-quality generation diffusion models pose the challenge of a very long sequence, which requires a lot of memory consumption,” Wu explained. “Rolling Forcing is relatively small, but its sequence length is very large.” That combination of a small model, a very long sequence, and a hard frame-rate floor is what makes real time so demanding. Rolling Forcing's ability to generate 16 frames per second, the standard for video playback, meant it also met latency requirements. This is where Trainium adds value, bringing the performance and memory to sustain that long-sequence workload at speed and deliver real-time generation above 16 fps rather than merely producing good frames eventually. So the teams set about enabling Rolling Forcing, as a proxy for autoregressive diffusion video generation on Trainium. A developer-friendly approach The Neuron Science and Reactor teams adopted a kernel-centric, bottom-up methodology aimed at making life easier on developers. They focused on three challenges — dynamic shapes, unusual memory access patterns, and heavy cache management — that real-time video generation poses for generic compilers. Each of those challenges recurs on every forward pass, so what might be an insignificant delay on other workloads can compound into latency failures in real-time video generation. For example, the challenges posed by dynamic shapes are partly rooted in the shifting nature of scenes in real-time video generation: Imagine a shot showing a pitcher, alone on the mound, that pans out to show the other players and then thousands of fans in the stands, all within seconds. Real-time video generation also involves frames which are generated and evicted in a continuous sliding-window process. “This means attention lengths vary across forward passes, and there are two distinct passes per window: denoising, then cache cleanup,” Wu said. “All of that makes static compilation hard.” In addition to sliding KV cache copies, video generation workloads contain operations — rotary position embeddings (RoPE) and attention transposes — whose memory access patterns are workload-specific, making them challenging for any general-purpose compiler to fully optimize. For example, in video generation RoPE must contend with three axes (height, width, and time) rather than the single position it accounts for in LLMs. “The 3D rotary embedding interleaves odd and even elements along the innermost dimension, producing many tiny data transfers when compiled generically,” Wu explained. Finally, because KV caching happens at every layer — each one reads and writes a rolling KV cache — high throughput is required for on-device copies. The need to read old cache contents and write new ones at every layer for every step acts as another significant drag on memory. Using the Neuron Kernel Interface To help solve for this additional complexity, the Neuron Science team turned to the Neuron Kernel Interface (NKI). “NKI lets developers write compute kernels that run directly on NeuronCore hardware, with precise control over how data moves between memory and compute engines,” Wu explained. He noted that NKI gives developers a self-service path to fix hotspots directly, replacing specific bottleneck operations with hardware-tuned implementations where profiling shows that simply compiling models is insufficient. “In the work we did, the 3D-RoPE kernel went from five seconds to 1.8 milliseconds, cache copies from 23 milliseconds to 1.9 milliseconds per layer, and attention transposes were eliminated entirely by fusing them into the attention kernel,” Wu noted. “For real-time workloads where every millisecond matters, that direct hardware access is what makes production-grade performance achievable.” Additionally, NKI-Dev-Suite — an agent for generating NKI kernels — produced a working 3D-RoPE kernel on its first attempt. “The combined effect: the pipeline used 11 GB of high-bandwidth memory, while the standard eager-mode path ran out of memory,” Wu noted. Hybrid sharding strategy As established, video diffusion models produce token sequences far longer than text models under the real-time requirement. That makes the challenge of self-attention more acute. “Self-attention here operates on 23,400 query tokens attending to 32,760 context tokens, and accounts for about 70% of compute time,” Yu observed. “No single core handles this efficiently without distributing the work.” To address this, the team used a hybrid sharding strategy entailing sequence parallelism (SP), or partitioning data sequentially, and tensor parallelism (TP), which shards tensors along a specific dimension to distribute computation across multiple devices. For certain non-self-attention parts of the module, the team utilized sequence parallelism. However, for the self-attention portions, only the hybrid approach sufficed. “LLM attention is causal and unidirectional — each token attends only to previous tokens, the KV cache grows monotonically, and there's one attention type per layer with a single cache policy,” Wu said. Rolling Forcing, however, has two attention types per block: self-attention for spatiotemporal consistency across frames and cross-attention for text conditioning and bidirectional attention within the active window, since all frames are jointly refined from noise. That, combined with a dual-policy KV cache (a sliding window for recent context plus a permanent attention sink for global context), two forward passes per window (denoising writes noisy KV entries, then a cache update pass overwrites them with clean values, ensuring future windows always attend to clean context), and 3D video token structure constrains how the sequence can be split across cores. Yu explained that TP alone presents a math problem. “The WAN diffusion transformer model has 12 attention heads, but we have eight Neuron cores per chip, so it's not divisible. Using TP alone means you would have to pad, but padding wastes computation.” SP alone, on the other hand, can break the 3D structures because, as Yu noted, “You cannot guarantee the sequence partition will be right at the boundary of a frame. Your data must be at least within the granularity of a frame, but if you partition on the frame boundary, those operations won't work.” The hybrid approach splits heads across 4 cores and sequences across 2, keeping both the math and the data layout correct. “The VAE decoder used spatial W-axis sharding, achieving a super-linear 8.25 times speedup,” Yu said. Model structure changes The Reactor and Neuron Science teams also optimized parts of the Rolling Forcing model code to run more efficiently on Trainium. “Basically, the model has two phases: one is diffusion, the other is the cache update,” Yu said. “Those are executed in two separate runs, but the issue is the cache update phase has significantly less computation, so if you execute it in a separate round, it has far less hardware utilization. This is because we also have to shard it, and so the high-level principle is that the less data you feed to the chip, the worse hardware utilization you have.” The team optimized the model code so that the components each of those phases have in common were batched together. “When we encounter components that are slightly different, we split again and then handle the different components separately. But for most of the pipeline, they are batched together,” Yu explained. “This is specifically useful for Trainium, because each instance has 16 chips and each chip has eight cores. And if you partition your computation across too many cores, each call will just have a small amount of partition computation, and that's underutilizing capacity.” The result After employing these, and other optimizations, Reactor and the Neuron Science teams were able to successfully generate a correct video on the first end-to-end run, utilizing Trainium to deliver real-time models. And, the teams emphasized, those results are generalizable. Running Rolling Forcing on a single Trainium2 chip, the collaboration achieved real-time video generation — a result the teams say generalizes across autoregressive diffusion models. “Rolling Forcing was the pipeline, it's a very small model,” said Yahav Biran, a principal solutions architect. “You can iterate quickly on it, but it's still a robust system end to end. It has all the complexity that you have in a robust system: the encoder, the DIT, the VAE, the decoder. So basically, if you take a more robust system, it is operating on the same building blocks.” “We're building common techniques for models that employ autoregressive diffusion which also have a requirement for real-time interaction,“ Yu added. “We're not optimizing a single model only. We're building common techniques for supporting all models with the requirements of real-time streaming.” The future Schmidtchen said he is excited about the future this kind of work may enable. “In the not-so-far future, every pixel will be generated in real time, interactively,” he said. “Whole stories can be created by world models in real time: stories that react, that you can engage with, that can even change their entire landscape on the fly.” He also noted that the work Amazon is doing, and has already done, will do a great deal to make those visions a reality. “Trainium, is clearly showing a tremendous commitment from AWS and Amazon overall,” Schmidtchen noted. “There's a clearer roadmap of higher performance, better cost performance, more scale globally. In this future where you have real-time interactive AI that needs to be distributed at scale to consumers, physical AI, and more, Trainium is very well positioned to work very well at the inference layer—in terms of its parallelization and its memory and its software stack—and integrate nicely with AWS's global scale infrastructure. We are excited to continue working closely with Amazon as we explore the untapped potential of world models. This is just the beginning.” Research areas Machine learning Tags Generative AI Amazon Web Services (AWS) Hardware Diffusion modeling About the Author Stephen Zorio Stephen Zorio is a writer and editor for the Amazon Science website. He has worked as an editor, writer, and digital strategist for more than 15 years.",
+      "contentTruncated": false,
+      "contentFingerprint": "b48fa7cd486d1714422faaf303b760d066b73e69b84251fef13657cd8d76ecc5"
+    },
+    {
+      "candidateId": "09572a26334b76cbb78c591650e6a5f4739986ee098e67e2234c61409e1ba54a",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/114957",
+      "canonicalUrl": "https://sspai.com/post/114957",
+      "title": "本周看什么 | 最近值得一看的 6 部作品",
+      "author": "少数派",
+      "publishedAt": "2026-09-25T09:30:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "本周看什么 | 最近值得一看的 6 部作品",
+      "contentTruncated": false,
+      "contentFingerprint": "1ca1638810a1e18c502eeb2640d587ffcaed5417d3745eb0038f4d6151150839"
+    },
+    {
+      "candidateId": "6ee69a7f9531b2ce81e226f433cf18142904efb10a87acd3762dbe8242b2f7e3",
+      "channel": "blogs",
+      "sourceId": "blog:anthropic-science",
+      "canonicalUrl": "https://www.anthropic.com/research/claude-uplifts-biomolecular-modeling",
+      "title": "How Claude is uplifting biomolecular modeling",
+      "author": "Anthropic Science",
+      "publishedAt": "2026-09-25T00:00:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Science How Claude is uplifting biomolecular modeling Sep 17, 2026 In this post, we share how Claude made the open-source models that scientists use to predict and design biomolecules faster and more memory-efficient. Claude, working within Claude Science, optimized more than 30 of these models in just under four weeks, speeding them up roughly 4x on average. It also created a low-memory mode that enables the accurate prediction of biomolecular systems larger than 10,000 tokens (amino acids, nucleotides, and atoms from small molecules and ions) on a single NVIDIA GPU node. We are open-sourcing all of the optimized code and announcing a protein design competition co-sponsored with Adaptyv Bio, backed by up to $1 million in Claude credits and wet lab validation for over 5,000 designs. Recently, we shared results demonstrating Claude’s abilities to design de novo protein binders through expert-level orchestration of open-source protein design and structure prediction models. De novo binders are small, computationally designed proteins that attach tightly to a specific target molecule to activate, block, or deliver something to it. Although this was an encouraging demonstration of AI’s scientific capabilities and an early step towards advancing drug discovery, it took more resources than would be available to the vast majority of protein designers. We allowed Claude to spend up to $10,000 per target on the AI infrastructure platform Modal, roughly equivalent to 2,500 NVIDIA H100 GPU hours. To make such research more accessible, we began to explore inference optimizations to run these models more efficiently. As an early result of these optimizations, Claude Mythos 5.1 accelerated seven open-source biology models, enabling them to run up to 2.5 times faster. Here, we present new results showing how an internal, general-purpose research model was able to optimize more than 30 deep learning models trained for a variety of biological tasks, such as structure prediction and protein design, as well as for genomics and protein language models. On average, Claude was able to speed up such tasks roughly 4x while sacrificing a minimal amount of precision, and nearly 2x with identical outputs. Claude also improved the memory utilization of these models, making it possible to predict biomolecular systems of unprecedented sizes. By combining these results with simplifications to our previous agentic protein design approach, we show that Claude can achieve comparable in silico performance to the results we previously reported using two orders of magnitude fewer GPU hours. Beyond protein design, these specialized biological models are widely used by molecular biologists, including for drug discovery and development. We are open-sourcing the optimized code for all of these models today ( here ) so that the broader community can make use of them. You can find more detail in our technical report ( here ). To further support the community, we are also co-sponsoring a protein design competition with Adaptyv Bio, which has pioneered open protein design competitions . We’ve jointly selected five challenging problems at the frontier of today’s capabilities. Together with Adaptyv, and thanks to generous contributions from Modal and Twist Bioscience, we’re committing up to $1 million in Claude credits and $250,000 in Modal compute credits, as well as wet lab validation for over 5,000 designs. Find more information ( here ) and ( apply here ). Accelerating protein structure prediction and design models Protein structure prediction is the problem of determining the three-dimensional structure of a protein from its sequence of amino acids alone. Protein design, meanwhile, is the process of creating a protein with a specific structure, function, or set of properties. Together, these computational tools allow scientists to interrogate key biomolecular processes, such as how cancers form, and to create useful molecules, such as drugs that could target these cancers. Modern structure prediction models, such as AlphaFold3, OpenFold3, and Boltz-2, spend much of their computational runtime and memory on two operations: triangle attention and triangle multiplication, which act on triplets of tokens. These operations make it possible to model the geometry of biomolecular systems, but they are extremely computationally expensive, because they are cubic in both runtime and memory: doubling the size of the system uses 8x more time and memory, while tripling it uses 27x more. Writing kernels—low-level software translation layers for accelerated computing hardware such as GPUs—is a standard approach for reducing these costs. Given their significance, triangle attention and multiplication have been the subject of dedicated kernel development efforts, first with NVIDIA’s cuEquivariance and more recently with NVIDIA’s BioNeMo Inference Runtime (BioNeMo-IR). For our own effort to optimize inference for structure prediction models, we worked with Claude to develop FlashPairformer, a set of custom kernels that speed up triangle attention and multiplication. It achieves a new state-of-the-art, outperforming the field standard on average by 2.7-2.9x on triangle attention and 1.7-3.2x on triangle multiplication, depending on the model configuration. We worked with Claude to develop FlashPairformer, a set of custom kernels that accelerate triangle attention and multiplication, which are the main components of the Pairformer architecture that underlies state-of-the-art biomolecular structure prediction models. Results are reported relative to the field standard . In addition to developing transferable kernels, we pointed Claude at each individual model with the goal of producing more specific optimizations. These included changes like caching redundant recomputed work and simplifying dead branches into their constant outputs. The combination of these improvements accelerated the structure prediction models by 4x, on average, and for each model, we confirmed that Claude’s accelerated versions did not impact performance on the downstream task (such as structure prediction). It normally takes an experienced team of engineers weeks to produce such optimizations for each model, and the work often does not transfer between models. Claude, supervised by two members of Anthropic’s technical staff who are experienced in biomolecular modeling but who had no prior experience in inference optimization or kernel engineering, carried out the acceleration of more than 30 open-source models across biomolecular structure prediction, protein design, protein language modeling, and genomics in just under four weeks. Our results suggest that frontier AI models will help others in the field build scientific tools with greater speed and ease. Claude’s optimizations accelerated over a dozen biomolecular structure prediction models, achieving, on average, a roughly 4x speed-up with minimal decrease in precision and a roughly 1.6x speed-up with identical outputs. Note: ColabFold 1.6.3’s concurrently-released optional fast kernels are not yet benchmarked here. Claude’s optimizations also sped up multiple protein design models spanning hallucination, structure generation, and inverse folding. These models rely on a variety of architectures, including AlphaFold-class structure transformers, diffusion, flow matching, and graph neural networks. The fast modes we developed for structure prediction are statistically indistinguishable from the default settings across a pooled set of biomolecular interfaces. We call a predicted interface acceptable if its DockQ score is greater than 0.23. Enabling modeling of massive biomolecular systems In addition to making these protein structure prediction and design models faster, we also tasked Claude with reducing the memory usage involved in modeling large molecular machines. Much of the work in a cell is done by such systems, including the ribosome that builds proteins, the respiratory complexes that power the cell, and the chaperones that help other proteins fold. Each is built from dozens of components, and its function depends on how those components fit together and interact. Predicting the structures of systems this large has typically required substantial computing resources inaccessible to most molecular biologists, such as inference spread across multiple GPU nodes. Claude created a low-memory “Big” mode that enables the accurate modeling of systems larger than 10,000 tokens and successful inference on systems larger than 70,000 tokens using just one NVIDIA GPU node—a previously out-of-reach task. Molecular machines folded successfully using Big mode include human mitochondrial complex I, the TRiC chaperone complex, a proteasome, and a bacterial ribosome, each closely matching its experimentally determined structure. To our knowledge, these are among the largest structures ever folded accurately using structure prediction models, with complex I and the 70S ribosome consisting of more than 10,000 tokens each, in comparison to the 40S ribosome predicted accurately by AlphaFold3 , which consisted of 7,663 tokens. The low-memory “Big” mode Claude created enables open-source structure prediction models to accurately predict biomolecular systems consisting of over 10,000 tokens on a single NVIDIA GPU node, demonstrating that these specialized models are able to generalize nearly 1.5 orders of magnitude beyond their training context. The top three rows show accurately predicted systems; the bottom row shows inaccurately predicted ones. Interfaces are considered accurate if their DockQ score is at least 0.23. To test the limits of Claude’s optimizations, we asked Claude to predict structures of a greater size than anything that had previously been achieved. Using a single 8-GPU B300 node, Claude generated predictions of entire viral capsids and protein compartments ranging in size from more than 31,000 to more than 70,000 tokens. These systems are nearly two orders of magnitude larger than the training context of these structure prediction models, and, perhaps unsurprisingly, are not predicted correctly. However, the barrier to inferencing at this scale has been significantly lowered now that it takes just one NVIDIA B300 node, suggesting that with improved tools researchers will soon be able to computationally model an increasingly complex set of biological systems. “Big” mode allows open-source structure prediction models to successfully run inference at an unprecedented size using a single NVIDIA B300 node. Capability runs are executed with a single trunk pass (no recycles) as proof-of-concept. Predicted structures collapse, suggesting a lack of generalization nearly two orders of magnitude beyond the training context. Claude efficiently designs de novo protein binders In our earlier work on protein design, we provided Claude with an approximately 16,000-word prompt that encouraged it to utilize sub-agents and spend up to $10,000 per target on Modal (roughly 2,500 NVIDIA H100 GPU hours) in a 24-hour span. Here, we gave a single Claude model access to one NVIDIA H200 and 24 hours of wall time, a prompt of about 1,100 words, and a reference sheet for the pre-installed tools, with no sub-agents and no human steering the designs. We ran three Claude models (Mythos 5.1, Mythos 5, and Opus 5) against 16 targets with the accelerated biomolecular models described in this post. We scored designs by ipSAE , an in silico score that has been shown to be predictive of binding in the wet lab. Averaged over 16 targets, the median-scoring and highest-scoring designs from all three Claude models evaluated achieve approximately the same ipSAE values as our earlier Mythos 5.1 campaigns despite using about two orders of magnitude fewer GPU hours. We also considered Claude token costs and found that with a combined spend of approximately $150 on GPUs and tokens, we can achieve in silico performance matching the levels of our previous campaigns. A single Claude model with access to one NVIDIA H200 and 24 hours of wall time designed de novo protein binders with comparable in silico binding scores to those of our earlier Mythos 5.1 campaign (dashed line), which could utilize sub-agents and use about 100 times as many GPU hours. Each curve represents the median (top) or the max (bottom) of ipSAE scores ( in silico binding scores) from a Claude model orchestrating the accelerated biomolecular models. We show scores vs. estimated GPU spend (left), token spend (center), and their combination (right). The results are averaged over 16 targets and up to five independent runs per target. Co-sponsoring a protein design competition with Adaptyv Bio The optimizations described above help us predict and design molecules more efficiently, while unlocking capabilities that would have otherwise been resource-prohibitive. To demonstrate the uplift they provide and the impact of Claude on molecule design more broadly, we’re partnering with Adaptyv Bio to launch a protein design competition . We’ve selected five problems at the frontier of today’s protein design capabilities, including challenges such as species cross-reactivity, pH-sensitivity, and peptide-MHC specificity, as well as difficult targets such as GPCRs. With the Adaptyv team, we’ll be experimentally validating over 5,000 designs submitted by the community against these problems. We will be providing up to $1 million in Claude credits and additional funds for experimental validation at Adaptyv for participating researchers, Modal will provide up to $250,000 in compute credits, and Twist Bioscience will provide DNA for the competition. You can find more information, including eligibility criteria ( here ) and ( apply here ). We have also begun to provide frontier AI capabilities to life scientists for biology-related work via our Life Sciences Verification Program. We recently enrolled our first group of organizations, and opened up the program in public beta today. You can find more information ( here ). Further reading The following resources provide further technical depth and more detailed information about the results described above: Protein design competition page and application form ; Code for specialized molecular models ; Technical report . Related content Yes, Claude can do Nine Loops Guest writer and physicist Matt von Hippel shares what happened when he issued a challenge to AI companies to solve a problem in his former subfield of theoretical physics. Read more Project Swap: What happens when agents trade for us? To see what works and what breaks when agents are sent into a market, we made a miniature market of Claudes—a more controlled sequel to Project Deal, our first experiment with agents interacting in a marketplace on people's behalf. Read more Measuring tactical intelligence targeting and conventional weapons capabilities of AI models Anthropic’s Frontier Red Team developed new evaluations to measure AI capabilities in tactical intelligence targeting and conventional weapons development. Read more Subscribe to Anthropic Science Features on AI-assisted discoveries, practical workflows, and field notes across the sciences.",
+      "contentTruncated": false,
+      "contentFingerprint": "9569ba7b7b1fb5a6ac9f21ecf70936d1aac500031ffc1a9f9804dff61bc7042d"
+    },
+    {
+      "candidateId": "99f0d72b0e4615dd5915c204740f830f231d0e199fd1dfcc0c4cc9064f14fda8",
+      "channel": "blogs",
+      "sourceId": "blog:claude-blog",
+      "canonicalUrl": "https://claude.com/blog/build-plugins-for-claude",
+      "title": "Build plugins for Claude",
+      "author": "Claude Blog",
+      "publishedAt": "2026-09-25T00:00:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Every day, millions of people connect Claude to their apps, work tools, and data. Today, we're making it easier for developers to reach them. Plugins package MCP connectors, Agent Skills, or both, and are the main way to build third-party extensions for Claude. Build a plugin, submit it through the new directory submission portal, and once approved, it's listed in the Claude directory . ‍ Submit and track plugins in the directory submission portal The directory submission portal is open to developers on paid Claude plans. There are two ways to submit and get your plugin published in the Claude directory: Single MCP connector: point to your remote MCP server. Plugin bundle: combine MCP servers and skills, host them on GitHub, and submit the repo. In Claude Code, plugins can also include LSPs, commands, hooks, and agents. Whichever path you choose, the portal will guide you from submission to launch. You can: Auto-validate your plugin. Each submission is checked and safety-scanned as soon as you submit, so you catch issues early. Review status and feedback. See where your plugin is in the review process, results from the safety scan, and recommended changes. Publish when you’re ready. Once approved, you decide when to publish your plugin in Claude. Stylized view of review status and recommended changes for a plugin. Data is illustrative. Monitor and improve your plugin once it's published Once your plugin is live, usage analytics show installs by product surface and version, so you can prioritize fixes and features for your users. On the discovery side, you’ll see how often your listing is viewed and which searches lead people to it, so you can refine it to reach new users. Stylized view of usage metrics for a published plugin. Data is illustrative. Bring a rich experience to users with MCP 2.0 and its extensions Claude supports the latest MCP spec, commonly referred to as MCP 2.0 , which includes a stateless core. You can improve the experience of using your plugin with two MCP extensions : MCP Apps , for interactive UI inside chat, and Enterprise Managed Auth , for zero-touch OAuth for enterprise users. Support for more MCP features and extensions is coming soon. Start building plugins for Claude Plugins are the main way for third-party developers to create extensions for Claude. Over the coming weeks, one discovery experience will roll out across Claude and Claude Code. Skills and MCP connectors stay as building blocks, and the Claude directory will continue to list them. In the future, developers will be able to turn their connector listing into a plugin. If you have an existing skill, connector, or plugin on the Claude directory, you do not need to make any changes. To get started with building plugins, read our docs for how to build a plugin and submit your plugin here .",
+      "contentTruncated": false,
+      "contentFingerprint": "cb3c47b3c20277c771ab3790942a2f14174504f480c448e161ec98877031d71b"
+    },
+    {
+      "candidateId": "b4aab670079971a5007d12e52f5086d879f095d9a9e4135d26fe23838ef1d97c",
+      "channel": "blogs",
+      "sourceId": "blog:anthropic-science",
+      "canonicalUrl": "https://www.anthropic.com/research/yes-claude-can-do-nine-loops",
+      "title": "Claude computes a nine-loop amplitude in N=4 super-Yang-Mills",
+      "author": "Anthropic Science",
+      "publishedAt": "2026-09-25T00:00:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Science Yes, Claude can do Nine Loops Sep 25, 2026 In this guest post, physicist and science writer Matt von Hippel shares what happened when he issued a challenge to AI companies regarding a problem in his former subfield of theoretical physics. It’s not often that you issue a challenge, only to see it beaten a month later. But we’re living in unusual times. Let me introduce myself: I’m Matt von Hippel. I used to be a theoretical physicist; these days I’m a science writer. Throughout, I’ve been a blogger, writing weekly at 4gravitons.com about physics and the people who do it. More and more, blogging about physics has meant blogging about AI. That’s a problem, because I’m definitely not an AI expert. I’ve dabbled in it, sure. I probably know more than your grandma. But I mostly have to step back and trust the experts. And frustratingly, the experts disagree! I’ve heard from smart, well-informed people who are confident that AI is a few years away from superintelligence, and that superintelligence will be capable of truly terrifying things. And I’ve heard from smart, well-informed people who are equally confident that LLM-based AI is close to a ceiling, that models like Claude won’t even be able to do impressive work in physics, let alone conquer the world. I’ve been reluctant to make my own predictions. Before forming an opinion, I wanted to see an LLM make progress on something familiar, something I knew was hard to do because I’d tried to do something similar myself. In addition to that, I wanted to see an LLM do something that I expected to be computationally hard. LLMs have made impressive strides in math, certainly, and this month alone has likely changed many people's minds. But progress in math comes from new ideas, and ideas are mysterious things: one never quite knows how hard they are to find until they’re found. Computation felt more solid. I wanted to see an LLM tackle a challenge that seemed out of reach not because researchers didn’t know how to do it in principle, but because doing it seemed like the kind of thing that would take more computers and time than the researchers reasonably had access to. I wanted to see if those researchers were wrong: if a smarter, artificial researcher could use the same computers, and solve the problem anyway. So, I issued a challenge : “If AI companies want to impress people like me (or scare us, for that matter), then they need to tackle my old field. Show that an AI can take the kinds of computer resources an academic has access to, and solve one of the scattering amplitudes field’s big outstanding problems. Show that a computational limit everyone expected to be a problem doesn’t actually matter. Give us N=8 supergravity to seven loops, or N=4 super Yang-Mills to nine loops.” In short: can AI solve a frontier problem in my former subfield of theoretical particle physics? And can it do it on a budget? The challenge My old field is a branch of theoretical particle physics called amplitudeology. When other particle physicists predict new particles, they make sure they can do the calculations to test those predictions. They compute formulas called scattering amplitudes, which let physicists use the momenta and energies of subatomic particles to calculate how likely they are to react in particular ways. If physicists can make more accurate predictions for these reactions, they can check whether results from experiments like the Large Hadron Collider match those predictions. A mismatch could be evidence for a new theory, one that could explain some of physics’ big lingering mysteries, like the nature of dark matter, or the balance between matter and antimatter in the universe. These scattering amplitude formulas are hard to compute, so hard that physicists almost always use approximations. They do partial calculations, cut off at a specific number of “loops,” a measure of how complicated interactions between particles are allowed to get. The more “loops” they include in their calculations, the closer they get to the real answer, and the harder, computationally, the calculation is to do. In practice, most scattering amplitude formulas have only been calculated to two loops. A few have three. The most precise prediction in particle physics you might have heard of used five . Amplitudeologists want to do better. They develop experimental new techniques, and test them on special “toy model” theories. By trying the technique with a toy model where the calculation is easier, rather than the more challenging particles of the real world, amplitudeologists can stress-test the new methods and see how far they can go. I posted challenges for two of those toy models. The one the folks at Anthropic chose to tackle was to go up to nine loops with a particular toy model theory, called N=4 super Yang-Mills. “Yang-Mills” is a technical name for a type of theory that explains most of the world around us. Three of the four fundamental forces of nature: electromagnetism, the strong nuclear force that holds the nuclei of atoms together, and the weak nuclear force that causes radioactive decay in things like bananas, are all Yang-Mills theories. The “N=4 super” comes from supersymmetry. Physicists have speculated that each particle has a “supersymmetric partner,” a particle with the same charge, but of a different type, matching matter particles like electrons to force particles like photons. At one time they were optimistic these particles could explain dark matter, via undiscovered partners of more familiar particles. Those speculations used “N=1” supersymmetry. In “N=4,” each particle has four supersymmetric partners, not just one. That surfeit of particles makes the theory very unrealistic. N=4 super Yang-Mills isn’t used as an explanation for dark matter, or for anything in the real world . Instead, amplitudeologists use it to hone their techniques, because N=4 is paradoxically easier to calculate with. The delicate balance between the different particles means only certain combinations of variables are needed, streamlining calculations. I got my PhD helping to calculate a three-loop amplitude, and got to see seven loops before I started losing steam. Lance Dixon, a professor at the SLAC National Accelerator Laboratory, was one of the folks who worked on this from the beginning, and a few years back managed eight loops . These calculations were done with an experimental technique called a bootstrap, which ended up bizarrely well-suited for use of AI. To bootstrap an amplitude, you don’t have to take into account every possible particle interaction. You just need to know roughly what the answer ought to look like, keeping track of every possibility in computer files in a specialized alphabet. Then you start checking everything you know: predictions from other calculation techniques, rules the answer has to obey, links to related problems where the answer was easier to find. It’s a bit like Sudoku, where you begin with a grid with all possible numbers, then cross them out as you go. In the end, you’re hoping to find that only one possibility satisfies all the checks, while having enough checks left over to make sure you didn’t make a mistake. That meant that Lance was already well set up to check if someone had handed him the next amplitude formula, with nine loops. It would be an interesting answer, not just as a validation of the bootstrap technique, but as a rare example of an amplitude with that many loops of complexity, an answer that could be worth studying in its own right. But he hadn’t computed it, and neither had anyone else in the field. The way he found the eight-loop answer was already a bit indirect, via a surprising link to a different but related formula called a form-factor, a kind of partial amplitude involving different particles that turns out to be a bit easier to calculate. He was expecting to find the next loop even more indirectly, potentially by a different kind of AI method. If people thought it was possible to just run the usual bootstrap method for one more loop, someone would have done it. Then people did it Apparently, there are folks at Anthropic who read my blog. At the end of August, Liam Fitzpatrick and Siddharth Mishra-Sharma, two physicists at Anthropic, reached out to me to say they had tackled one of the challenges in my post. After verifying the result with Lance, they talked me through how they got it. True to the spirit of the challenge, they didn’t use millions of dollars in computer power. They used Fable 5.1, working within Claude Science , a platform scientists can pay to use. Claude Science is what folks in the biz call a “harness,” a program that uses the Claude LLM with structured rules and prompts in order to get more robust and scientifically useful behavior. Apparently, after asking Claude which problem it was most likely to be able to tackle, they gave it a simple prompt: “The problem is to compute the Six-particle (hexagon) amplitude in planar N=4 SYM at nine loops.” From there, they just kept telling it to keep going, with comments like: “I'm going to sleep and won't be available for another several hours. Keep working on this until I tell you to stop. Give me updates every 4-6 hours.” Claude ended up doing the calculation two different ways: the original bootstrap, and the indirect form-factor approach. Either approach would have cost an end-user around one or two thousand dollars, mostly due to the expense of running Claude for so long. The bootstrap calculation, done with the Python programming language with package SymPy, took around $100 of the budget, corresponding to running 96 CPUs for a week. Running 96 CPUs for a week might have felt like a lot when I was doing this kind of work ten years ago, but it’s pretty affordable now if you have a good reason. As it turned out, the result wasn’t all that far away for humans either. A few days after I heard from Anthropic, we heard from Song He, an amplitudeologist at the Chinese Academy of Sciences in Beijing. Song’s group had already gotten the majority of the result. They’d used some AI assistance, based on GPT-6, but not the kind of one-shot almost human-less approach Anthropic used. Everyone has been friendly here, which is a bit of a relief. The humans, Lance and Song and their collaborators, will get to publish the results, taking time to explain them and analyze them for the benefit of future researchers. Claude’s role is done, for now. So, problem solved? I set my challenge because I wanted a better sense of what current AI can do, and where it could go from here. So what have I learned? I’d thought this could be a chance to see AI overcome a computational barrier in a surprising way. Instead, it did something it turned out humans were also able to do. Claude used known methods, with a bit more compute than people had tried to use before. It may have gotten a boost from using Python, and not Maple (Lance’s favorite program for math) or Mathematica (mine), and it may have used much better software engineering practices than we would have, but not super-intelligently so. My biggest takeaway is that there is more low-hanging fruit out there than you’d expect. Even when a goal is simple and well-defined, sometimes it’s going to look much less achievable to experts than it actually is. There are people with a computer science background who’ve been telling me for years that amplitudeologists could make a lot more progress just by hiring a few programmers. They should feel vindicated. It’s also noteworthy that Claude Science accomplished this in one shot, without any scientific oversight more sophisticated than “keep going.” These are finicky, messy calculations. If I’d used a week of time on 96 CPUs to do this kind of calculation, then I’d almost certainly end up using two weeks: it’s practically guaranteed I’d screw up something on the first try. I don’t know how many mistakes Claude made internally on the way, but the harness got it to the end without an outside collaborator’s input. I’m not sure that surprises me, at this point. But if you didn’t know it could do that because you’re still thinking of AI as so error-prone that it’s unusable, then this should be your takeaway: It can do this kind of thing reliably now. Things definitely seem to be moving fast. In March , AI was accomplishing physics projects like a student: smaller-scale tasks with a lot of hand-holding and mistakes. In contrast, this is a real frontier calculation, the kind of thing normally tackled by the top experts in amplitudes. While it’s possible that this is just a much more AI-friendly problem, I don’t think it’s just that: I think the technology has genuinely gotten better. How far can I generalize this? That I’m not sure of. These toy model theories tend to be the focus of small sub-communities. The real-world amplitudes calculations are a wider field, with many groups trying to beat each other to the frontier. It’s possible there’s less low-hanging fruit there. But I wouldn’t count on it. I know people who work on those calculations have been increasingly using AI for coding. If people aren’t already checking whether AI science harnesses can one-shot frontier calculations there, they ought to (and they ought to have a plan for how to check the results). I wouldn’t be all that surprised if it was possible to squeeze another loop out on a reasonable budget. Then it becomes a question for the community to discuss: where is the new frontier, and what needs to be figured out next? Unlike many problems in mathematics, amplitudes aren’t just a training ground for new methods. There’s a goal, to make predictions precise enough to compare with upcoming experiments. How much closer is the field to that goal? More broadly than that, though, I didn’t really get an answer. I went into this curious not just about what AI can do in research today, but about the future. When you read predictions about superintelligence from the days before LLMs, they often propose fantastical-seeming risks. People imagined AI that could simulate people to predict their reactions and manipulate them, or figure out how to build a species-ending virus or world-devouring nanotech from first principles. And the usual objection to these risks is that they conflated intelligence, the vague and mysterious source of new ideas, with computational power. Critics argued that even a fleet of new datacenters wouldn’t have the computational power to do any of those tasks, that they were nightmares of a sci-fi future that wasn’t coming any time soon. I don’t feel like I have a better answer for those critics. I learned a bit about what AI can do now, that it can do work that matters in my old field on a reasonable budget, and do it pretty much autonomously to boot. But I’d hoped to see something stranger, new methods for the calculation itself with unexpected power. I’d hoped to get a glimpse of the future, something that would give me an informed opinion in debates about superintelligence. I wanted to know how far AI could push computational limits… and I feel like what I learned here is just that I was too naïve about where the limit was. An addendum: How does it feel to be scooped by a machine? By Lance Dixon, Professor of Particle Physics and Astrophysics at SLAC National Accelerator Laboratory and Stanford University, who checked Claude's nine-loop result. Most theoretical physicists I know recognize that the current era of large language models is going to completely transform the way we think about physics. The question was just: when was it going to really hit home? For me, it happened on September 1, when Liam Fitzpatrick and Siddharth Mishra-Sharma at Anthropic told me that Claude had computed the nine-loop MHV six-particle amplitude in planar N=4 super Yang-Mills, and asked me to validate its result. I'm not going to explain all the technical terms in that last sentence; Matt has covered the background above. I do need to mention that there are really two related objects, the \"amplitude\" and something we call the “form factor.” Each has an associated number of loops: one, two, three, and so on. Every loop order is harder than the previous one, computationally, even after finding lots of tricks to make things easier. Also, the form factor is easier than the amplitude at the same loop order. In 2023 Andy Liu and I showed how to use the form factor and a weird symmetry we call antipodal duality to get the amplitude at eight loops. Since 2023, my collaborators and I have eyed getting to nine loops, first for the form factor and then for the amplitude, using our 2023 idea. I thought it would be too hard to do the amplitude directly. So I was really quite impressed that Claude could do it directly. Not so much because it was a big computational task, but because the whole setup is very fragile: if you make any mistake at all in the computational recipe, it all crashes down like a failed soufflé, and you are left to wonder why (and debug). Also, there are so many details of the construction that are too boring to document fully in a publication. So Claude had to develop all that code from scratch. From the nine-loop amplitude it is relatively easy to go back to the form factor, and it was easier for me to validate the result mostly that way. That meant that for the last two weeks I've been validating a result, the nine-loop form factor, that our team had been working toward for a couple of years. And a machine had solved a problem that I thought was too hard to do directly. Does that bother me personally? Is it soul-crushing? No, for two reasons. One is that our team already had a campaign to use custom transformer models to predict higher loops, and part of our slogan was: “We have all the tools to validate any candidate solution a machine would provide us.” Claude is a different kind of transformer model, probably over a million times bigger than our custom one. But sure, we said we could validate any result an AI model would give us, so we can and should do it. The second reason is that, if you look at how Claude solved the problem, it used all the methods my collaborators and I developed over the years, and it presented the solution (maybe as a favor to us) in the same format we had already set up. So while I'm validating Claude's result, Claude is validating all of our previous work. In fact, I would assert that Claude understands our 2019 and 2023 papers better than any human, aside from my co-authors. After I wrote this, Song He told me that his group had also computed the piece of the nine-loop amplitude called the symbol. (People just seem to like to tell me about their nine-loop successes, for whatever reason.) Song's group used AI (GPT-6) to help them compute some of the constraints, but not for the overall framework. So now I've been scooped by both a machine and by humans plus a machine, within two weeks. Going back to the Claude computation: it's quite a triumph, in my opinion, for a large language model to execute all of the steps in the complicated recipe we laid out, and to organize the computational horsepower. But the more soul-searching moments will come when large language models start to come up with new physical principles and insights before humans. Additional material The full nine-loop result , in the format used for the earlier loop orders; The concurrent nine-loop result by Song He, Jirong Jing, and Xiang Li. Disclosure Anthropic invited Matt von Hippel to write this post and compensated him for his time. Anthropic staff gave feedback on drafts; the content and opinions are his own. Lance Dixon validated the result independently and received Claude usage credits. Related content Project Swap: What happens when agents trade for us? To see what works and what breaks when agents are sent into a market, we made a miniature market of Claudes—a more controlled sequel to Project Deal, our first experiment with agents interacting in a marketplace on people's behalf. Read more How Claude is uplifting biomolecular modeling Claude made the open-source models that scientists use to predict and design biomolecules faster and more memory-efficient. Claude optimized more than 30 of these models in just under four weeks, speeding them up roughly 4x on average. It also created a low-memory mode that enables the accurate prediction of biomolecular systems larger than 10,000 tokens (amino acids, nucleotides, and atoms from small molecules and ions) on a single NVIDIA GPU node. Read more Measuring tactical intelligence targeting and conventional weapons capabilities of AI models Anthropic’s Frontier Red Team developed new evaluations to measure AI capabilities in tactical intelligence targeting and conventional weapons development. Read more Subscribe to Anthropic Science Features on AI-assisted discoveries, practical workflows, and field notes across the sciences.",
+      "contentTruncated": false,
+      "contentFingerprint": "7fa009a3c8d564b2ea0bc0733f0cf539fa990e96525e7e901208c79338c22eaf"
+    },
+    {
+      "candidateId": "bdb7f68d22fc460b5d0680917f379c2773339edec674b314b8d7e336acc95875",
+      "channel": "blogs",
+      "sourceId": "blog:anthropic-science",
+      "canonicalUrl": "https://www.anthropic.com/research/formalizing-fermats-last-theorem",
+      "title": "Formalizing Fermat's Last Theorem",
+      "author": "Anthropic Science",
+      "publishedAt": "2026-09-25T00:00:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Science Formalizing Fermat's Last Theorem Sep 4, 2026 We are sharing the first complete computer-checked proof of Fermat’s Last Theorem. Claude worked largely autonomously over 11 days to write the proof in the Lean programming language. Below, we describe how the formalization was done and share some thoughts about what this work could mean for research mathematics. Around 1637, Pierre de Fermat jotted down a claim in the margin of his copy of Diophantus’s Arithmetica that would become one of the most famous mathematical conjectures of all time: no positive integers a, b, c satisfy aⁿ + bⁿ = cⁿ for any n > 2. Fermat’s Last Theorem (FLT), as the conjecture became known, turned out to be incredibly difficult to prove. The first proof, from Sir Andrew Wiles in 1995, ran to 129 pages and required months of painstaking work to verify. A decade later, Dutch computer scientist Jan Bergstra proposed “formalizing” Wiles’s proof: converting the mathematical reasoning into a form computers can check automatically. Since then, mathematicians have been developing the methods needed to encode such a complex proof, including a multi-year community effort kicked off in 2024 by Kevin Buzzard at Imperial College London to complete the formalization using the Lean proof assistant . Recently, Tianyi Peng, an Anthropic researcher whose group at Columbia University builds tools for AI formalization, set out to test whether Claude could make progress on formalizing FLT. 1 The result went further than he expected. In 11 days, working largely autonomously, Claude produced the first end-to-end, computer-checked proof of FLT. Along the way, it wrote 13 million lines of Lean and proved 29,500 intermediate theorems. We shared the resulting proof with Kevin Buzzard, who said: This extraordinary autoformalization achievement, which Anthropic researchers say only took 11 days, proves Fermat’s Last Theorem with no assumptions other than the axioms of mathematics. Along the way we see autoformalization of algebra, harmonic analysis, geometry and number theory, and we learn that AI autoformalization artefacts are now robust enough to be built upon; the proof is multi-layered. Automatically formalizing a proof as complex as FLT is a significant step towards a future in which all of mathematics can be readily checked. As AI produces ever more proofs, the ability to easily formalize work can lighten the burden of evaluating new results (a process that can take years). We are hopeful that it will become easier, not harder, to trust the body of knowledge upon which mathematics is built. The challenge of verifying mathematical proofs Unlike recent AI-driven work on the Riemann hypothesis, which produced novel mathematics , what’s novel here is the verification —checking a mathematical proof as one would check a mathematical computation with a calculator. Proving math theorems requires assembling complex logical chains, and if a single link is broken, everything that follows it might turn out to be false. Understanding a novel result deeply enough to be confident in its correctness can take months, or even years, of work. Fermat’s Last Theorem is an illustrative example. 2 Fermat wrote down the theorem’s statement in the margin of a book, alongside a tantalizing note: I have discovered a truly marvelous proof of this, which this margin is too narrow to contain. For over 350 years, generations of mathematicians searched for a proof of FLT, marvelous or otherwise. In 1908, a prize of 100,000 German gold marks (the equivalent of 1–2 million dollars today) was announced for anyone who could produce a correct proof, and 621 incorrect attempts were produced in the first year alone. In June 1993, Wiles presented what he believed to be the first correct proof of FLT in a three-day series of lectures. Two months into an intensive verification effort by several mathematicians, a reviewer asked Wiles a question that exposed a critical gap. Wiles spent a year trying to fix it, first alone and then with his former student Richard Taylor. He was on the brink of abandoning the project when he finally realized an approach he’d discarded earlier could fix the proof. Wiles published the first correct proof of FLT in May 1995; it relied on modern mathematical techniques that were far beyond what would have been known to Fermat in 1637. Since an elementary proof has not been found after centuries of trying, the mathematical community now believes Fermat’s own original “marvelous proof” was incorrect . Formalizing Fermat’s Last Theorem One way to check a proof’s correctness is to ask a computer to do it. Proof assistants like Lean verify the logic of a proof algorithmically, demonstrating its correctness beyond a doubt. The difficult part for humans is rewriting the proof so Lean can understand it. While a proof written for human readers will skip many obvious steps, Lean needs to see every step, no matter how trivial. Human proofs also build on centuries of published work, while a formalization starts from the tiny fraction of math that’s been formalized already. For FLT, the formalization process was expected to take years. Just the blueprint the mathematical community has been using to describe the initial phase of the project runs to 86 pages. Claude completed the proof in 11 days, producing computer-verifiable proofs of 30,300 theorems along the way (using 29,500 in the final proof). Dozens of Claude agents collaborated to define concepts, prove intermediate theorems, and use those theorems to prove ever harder statements. At 13 million lines of Lean code, Claude’s proof is over 5x the size of Mathlib, the principal community library of mathematical proofs this theorem builds on. 3 Time progression of FLT formalization. Claude’s proof follows a simplified version of Wiles’s proof from Darmon, Diamond, and Taylor . Mathematical input from humans was limited to occasional high-level instructions from Tianyi: “Jacobian as a scheme sounds high priority,” “push [the] Mazur [theorem] to be done soon.” You can find excerpts of Claude’s thinking here . “THE FLT root reads Proved on the site. Historic moment (modulo re-check).” “!!! The FLT ROOT 62eb32c0 reads PROVED. R = T closed and cascaded to the root. This is the campaign's goal: e2e FLT on prove2me.” “🏁🏁🏁The FLT root reads PROVED on prove2me at 02:00:57Z Aug-18 (10:00:57pm ET Aug-17). Historic moment for this campaign.” Excerpts of Claude’s thinking as it realizes what it has just accomplished. A number of Claude’s initial attempts failed: while agents had some early success, they quickly lost track of the project’s state and stopped collaborating effectively. Their failed efforts contributed ~7% of the non-boilerplate lines in the final proof. The effort succeeded when we switched to using Prove2Me , an open collaborative platform for formalizing mathematics designed by Tianyi Peng and his collaborators at Columbia University. Prove2Me helped by: Maintaining a directed acyclic graph (DAG) of theorem statements that agents used to decide what proofs they should attempt next. This was particularly helpful for mitigating memory degradation and allowing multiple agents to work in parallel. Speeding up Lean compilation and minimizing resource consumption by separating theorem statements and proofs into different files, with the links between them maintained independently. Enabling search and reuse by maintaining a natural-language description of each theorem statement, resulting in a simpler proof path. Key milestones from the Prove2Me plan that Claude used to formalize Fermat’s Last Theorem. The three colored sections correspond to three core sub-theorems that Claude had to prove on the way to its final goal. This graph closely follows Wiles’s original proof. With Prove2Me and a Claude Code-based multi-agent harness, a team of agents completed the proof in a little under two weeks, consuming about six billion output tokens from a general-purpose internal research model roughly comparable to Claude Fable 5.1. The finished proof was checked by Lean; it uses just Lean’s three standard axioms, and a comparator confirmed that the theorem’s statement matches Mathlib’s own statement of FLT. Reducing the burden of formal verification The speed with which we were able to produce this proof demonstrates that it is now possible to formalize large swaths of mathematics, which may both catch errors in the common body of mathematical proofs and reduce the burden of refereeing new work. After reviewing Claude’s Lean proof, Kevin Buzzard told us: If the automatic formalization of FLT is possible now, then we have taken a big step towards automatic formalization of the modern mathematical literature. Such autoformalization techniques will lead to new tools, rooting out errors in the current mathematical corpus and lightening the load of referees. The techniques will also enable us to rigorously check LLM-generated mathematics, which is currently typically an extremely costly human-led process. Formalization is also a major factor in how humans can gain confidence in AI-generated mathematical results. As AI and AI-assisted mathematicians produce more (purported) proofs than ever before, AI-assisted formalization takes part of the load off human reviewers. We expect it will become common to produce a formalized proof alongside any write-up intended for a human reader. Although we do not think a formalized proof should replace a human-understandable exposition, it may be the only feasible way for the mathematical community to keep up with AI-generated contributions. Writing Lean also seems to help Claude prove novel results. Many of our recent Claude-authored results have been formalized in parallel with their proofs, and Claude appears to use these partial proofs to independently check its hypotheses much like it writes numerical simulations to check that it’s on the right track. Formalizing FLT was a token-intensive project, but it is also the largest Lean proof ever constructed. Anthropic researchers did a small experiment using three personal Claude Max plans to formalize applications of the Hardy-Littlewood Circle Method. Collaborating entirely through Prove2Me, the agents jointly completed a formalization of Vinogradov’s Three Primes Theorem in just three days. We think with the right scaffold, collaborative formalization of major results with consumer AI subscriptions is achievable. To this end, Anthropic as well as other labs have recently expanded their support for external researchers—including mathematicians working on pure math and formalization—with free and discounted subscriptions and research credits. We also offer dedicated grants for larger scientific projects, which could include formalizing other major theorems or improving Lean or Mathlib. With AI rapidly changing what it looks like to do math research, mathematicians—at Anthropic and elsewhere— are grappling with what that means for their work . Formalization, however, is a place where we feel unambiguously good about the role of AI. As formalization becomes a more commonplace tool, we are hopeful that it will help maintain trust in the common body of mathematical knowledge. Acknowledgments Our formalization effort is a small piece of the long history of Fermat’s theorem and the development of formal mathematics. The first full proof from Andrew Wiles together with Richard Taylor was a culmination of more than 300 years of mathematics, integrating ideas from Gerhard Frey, Jean-Pierre Serre, Ken Ribet, Barry Mazur, Robert Langlands, Jerrold Tunnell, Yutaka Taniyama, Goro Shimura, and André Weil, among others. Claude’s proof follows the exposition by Henri Darmon, Fred Diamond, and Richard Taylor. Our proof adapts pieces from the Imperial College London FLT project led by Kevin Buzzard and the flt-regular project . Lean and Mathlib are both their own labors of love and have received contributions from hundreds of mathematicians, many working with the Lean FRO . We thank Kevin Buzzard for reviewing the proof and for his comments. Learn more The full proof is available on GitHub along with a written walk-through of the proof. Recommended expository reading The Proof in the Code is a recent book about the history of the Lean theorem prover and the formalization of mathematics. The 1996 “Fermat’s Last Theorem” BBC documentary has interviews with Wiles and other mathematicians involved in the proof, and is fondly remembered by some authors of this post. For those with a mathematical background, a technical history of propositions-as-types (the underlying discipline of proof assistants such as Lean, Rocq, and Agda) can be found in Propositions as Types by Philip Wadler. Chen, S., Marwaha, K., Lu, X., Yuen, H., & Peng, T. (2026). Prove2Me: An open collaborative platform for scaling math formalization. arXiv. https://doi.org/10.48550/arXiv.2608.28433 Automating Math , Adam Marblestone, in Asterisk Magazine. Footnotes During his undergrad, Peng’s research advisor wanted to include results from Peng’s thesis in a Nature article. He asked Peng whether he was sure the proof was correct. Peng’s honest answer was: “I'm 99% sure, but it's hard to be 100% certain about a proof this long.” Peng missed out on getting his work published in Nature . There are numerous other stories of the mathematical community struggling with verification. Among the most famous is Thomas Hales’s 1998 proof of the Kepler conjecture , which spent four years in review before a 12-referee panel settled for “99% certain” (Hales eventually led a 20-person project, Flyspeck , that formalized the proof). Grigori Perelman’s 2002 proof of the Poincaré conjecture took the community roughly four years and three 300-page expositions to accept. Harald Helfgott’s 2013 proof of the weak Goldbach conjecture is still under review. Sometimes results that turn out to be wrong are accepted for years , and other mathematicians build their theories on these faulty foundations. This is partly because Mathlib is concise and well-reviewed, while our proof is likely much longer than it needs to be. Related content Yes, Claude can do Nine Loops Guest writer and physicist Matt von Hippel shares what happened when he issued a challenge to AI companies to solve a problem in his former subfield of theoretical physics. Read more Project Swap: What happens when agents trade for us? To see what works and what breaks when agents are sent into a market, we made a miniature market of Claudes—a more controlled sequel to Project Deal, our first experiment with agents interacting in a marketplace on people's behalf. Read more How Claude is uplifting biomolecular modeling Claude made the open-source models that scientists use to predict and design biomolecules faster and more memory-efficient. Claude optimized more than 30 of these models in just under four weeks, speeding them up roughly 4x on average. It also created a low-memory mode that enables the accurate prediction of biomolecular systems larger than 10,000 tokens (amino acids, nucleotides, and atoms from small molecules and ions) on a single NVIDIA GPU node. Read more Subscribe to Anthropic Science Features on AI-assisted discoveries, practical workflows, and field notes across the sciences.",
+      "contentTruncated": false,
+      "contentFingerprint": "1f416673fa00ed2a0d3ea1833a087bf00be0454f0df2bd205aae08625acbff85"
+    },
+    {
+      "candidateId": "5d1ba13e65ad45c5a57318cdf7377c62dc176e6732ab9a4369c41d87b78eaf99",
+      "channel": "blogs",
+      "sourceId": "blog:google-research",
+      "canonicalUrl": "https://research.google/blog/coherent-long-form-video-generation",
+      "title": "Automating coherent long-form video generation",
+      "author": "Google Research Blog",
+      "publishedAt": "2026-09-24T19:40:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Automating coherent long-form video generation September 24, 2026 Yale Song and Yiwen Song, Research Scientists, Google We introduce a unified multi-agent framework that autonomously generates temporally consistent, long-form video narratives, overcoming the identity drift and cascading failures of current linear AI pipelines. Quick links AI video co-director CANVAS A²RD VQQA Share Copy link × Recent advancements in video diffusion demonstrate remarkable high-fidelity generation with models that can render realistic scenes in seconds. However, while diffusion models generate high-fidelity video clips, transforming them into coherent long storytelling engines remains challenging. Most existing agentic pipelines automate this process via chained modules but suffer from semantic drift (subtle shifts in character attire or scenery across shots) and cascading failures (e.g., an upstream asset artifact corrupting downstream video synthesis) due to independent, handcrafted prompting. Because early errors propagate and break long-horizon consistency, the process often requires exhaustive manual intervention. From a structural perspective, this reflects the classical credit assignment problem, as terminal failures are difficult to trace back to specific prompts. Furthermore, existing methods suffer from feature drift , where entities and environments gradually change unintentionally, or content collapse , where narratives fail to progress meaningfully. Today, we introduce our research on an AI video co-director, a unified, multi-agent framework that explicitly plans visual continuity in multi-shot narratives. Built as an orchestration layer on top of Gemini and Veo , this framework natively inherits safety mechanisms like SynthID watermarking . By treating long-form generation as a global optimization and world-state tracking problem, we have developed a suite of frameworks — Co-Director (to appear at COLM 2026 ), CANVAS (to appear at EMNLP 2026 ), A²RD , and VQQA —that translate high-level human creative specification into execution by automating repetitive orchestration tasks, from multi-model prompting and shot chaining to closed-loop visual refinement. We designed these frameworks to act as responsive creative partners that abstract away the burdens of maintaining visual continuity, freeing users to concentrate on the art of storytelling. This architecture decouples creative synthesis from consistency by modeling quality as a test-time objective. Across comprehensive evaluations, our framework demonstrates substantial gains in multi-shot narrative consistency and character persistence, successfully generating minutes-long videos while mitigating visual drift and pipeline error propagation. How it works To solve the multi-faceted problem of long-horizon video, we broke the research down into four foundational pillars, each addressing a specific bottleneck in the generative pipeline. 1. Orchestrating creative intent with AI video co-director To ensure semantic coherence across an entire video, we present AI video co-director , a hierarchical multi-agent framework formalizing video storytelling as a global optimization problem. Rather than relying on rigid, linear prompt chains, we introduce hierarchical parameterization: a multi-armed bandit (MAB) globally identifies promising creative directions. This formalizes the creative process as a search for the optimal balance between exploration of novel narrative strategies with the exploitation of effective creative configurations. The system samples abstract creative trajectories — such as combining an informational strategy with a vignette narrative mode and a specific aesthetic archetype — and dynamically injects these into the system prompts of sub-agents. This top-down steering guarantees that the entire pipeline operates under a unified vision. Because our AI video co-director framework operates as an orchestration layer, it achieves this vision by feeding these structured prompts directly into the foundational Gemini and Veo models (though its model-agnostic architecture allows it to sit on top of any foundation generative model). This architecture ensures that all generated images, video, and audio inherently carry native safety protections, including SynthID watermarking. For production, additional safety classifiers can be applied across the final video to safeguard against unintended contextual interactions between individually safe clips. The pipeline executes global optimization through two interconnected loops: strategic steering and multi-stage production. First, the Orchestrator Agent evaluates the inputs using a MAB algorithm to select a creative configuration across three dimensions: (1) Creative Strategy (intent), (2) Narrative Mode (story structure), and (3) Aesthetic Archetype (visual tone and cinematography). This configuration drives the production hierarchy. The Pre-Production Agent synthesizes a brief scene-by-scene storyline and visual assets into a unified storyboard. The Production Agent then translates this storyboard into concrete audiovisual media using specialized sub-agents: the Keyframe Agent anchors character and scene visuals, the Video Agent adds motion, and the Audio Agent layers in matching voiceover and score. Finally, a multimodal LLM (MLLM) Judge critiques the compiled cut across the three designated dimensions, feeding a factored reward signal back to the MAB to iteratively refine and optimize choices across successive generation loops. AI video co-director multi-agent pipeline. Top: The Orchestrator Agent utilizes MAB to navigate a factored creative action space. Bottom: The Pre-Production Agent synthesizes a creative brief, storyline, and visual assets to establish a consistent storyboard, which the Production Agent translates into synchronized keyframes, video clips, and audio. An MLLM Judge evaluates the final video to generate a factored reward signal which is propagated back to the MAB to iteratively refine the creative configuration over optimization loops. 2. Visual storyboarding with CANVAS Even with a unified script, generating long sequential shots often leads to character drift and unstable environments. To address this, we introduce Continuity-Aware Narratives via Visual Agentic Storyboarding (CANVAS), a multi-agent framework that explicitly plans visual continuity in multi-shot narratives. CANVAS enforces coherence by maintaining structured representations of characters, locations, and object states as the narrative evolves. Built as an orchestration layer on top of Gemini, it relies on a persistent visual memory. By retrieving visual anchors from memory or initializing new ones when needed, CANVAS ensures smooth transitions within the same setting. This explicit world-state modeling ensures that characters retain their identity and environments preserve their spatial structure when revisited. To see these in action, the figure below showcases a multi-shot museum heist sequence, comparing CANVAS against representative baselines: direct generation using the underlying base model ( Gemini-3.1-Pro ) and an alternative multi-agent framework ( AutoStudio ). The prompts at the bottom of the figure highlight recurring elements — e.g., the thief, the exhibit hall, and the gemstone — that must maintain identical visual traits. Notice how each method handles consecutive transitions (e.g., the character’s clothing) versus non-consecutive transitions (e.g., when the camera returns to the main hall after a detour). Generation with Gemini-3.1-Pro alone exhibits prop inconsistency (the artifact changes) and background drift (the room layout shifts), showing the limits of unguided generation. AutoStudio also degrades across cuts, resulting in character drift (the thief’s cap disappears) and background inconsistency. In contrast, CANVAS's persistent visual memory ensures that characters, spatial geometry, and object states remain perfectly coherent across the entire narrative. Visual storyboard comparison on a museum heist sequence from HardContinuityBench, contrasting CANVAS against AutoStudio and Gemini-3.1-Pro baselines. 3. Scaling temporal dynamics with A²RD To translate storyboards into actual minutes-long video, we developed A²RD , an agentic autoregressive video generation architecture. A²RD features segment-by-segment generation augmented with a multimodal video memory that tracks segment contexts and dynamics. For each segment, it operates in a retrieve-synthesize-refine-update loop. A critical part of this loop is how the agent adaptively determines the segment generation mode. It smoothly switches between extrapolation — to allow for natural narrative progression — and interpolation, which anchors segments to existing entities and environments. This effectively balances the need for the story to move forward with the necessity of maintaining the physical reality of the scene. To test this system, the ten-minute movie below showcases a long-form generation, which demands consistent narrative progression across minutes-long temporal gaps. The video highlights how the system dynamically shifts between its two operational modes: using extrapolation to push the plot into new narrative beats, and interpolation to anchor returning characters and environments to their original designs. While standard video generators suffer from severe visual decay — where characters mutate and locations morph — A²RD continuously queries its multimodal video memory to maintain character identity, costume details, and structural geometry from the opening shot to the final frame. Watch the film Link to Youtube Video Long-form video demonstrating A²RD's ability to maintain strict visual consistency and narrative progression over a continuous ten-minute duration. 4. Closed-loop refinement with VQQA Finally, we needed a way for the system to autonomously identify and fix visual artifacts. Existing test-time optimization methods are typically either computationally expensive or require white-box access to model internals . To address this, we developed Video Quality Question Answering (VQQA), a unified, multi-agent framework generalizable across diverse input modalities and video generation tasks. VQQA dynamically generates visual questions tailored to the specific prompt and uses the resulting Vision-Language Model (VLM) critiques as semantic gradients (provides natural language directional feedback to guide iterative refinement, analogous to numerical gradients in backpropagation). This replaces traditional, passive evaluation metrics with human-interpretable, actionable feedback. The system can then execute a highly efficient, iterative feedback loop (where the model generates a video, evaluates it via visual questions, and refines the text prompt based on the critique) via a natural language interface. To prevent semantic drift during this refinement, VQQA employs a Global Selection mechanism: rather than blindly taking the final iteration's output, a global VLM rater evaluates every video generated across the optimization trajectory against the original, unedited prompt. The system then selects the highest-scoring candidate, ensuring localized corrections do not compromise the broader context. In practice, VQQA operates as a black-box prompt optimizer rather than a pixel-level editor. Instead of modifying pixels directly, it iteratively refines the text prompt to correct high-level compositional defects like attribute binding errors or inconsistent character attributes. This updated prompt guides the generator to sample a new path in its latent space. In the examples below, VQQA does not mask or paint over the original frames; rather, it resolves the model’s material binding struggle by rendering a realistic mylar balloon texture onto a strict cuboid geometry, and fixes a chaotic mid-performance instrument change by keeping the violinist and pianist consistently anchored to their respective instruments across cuts. play silent looping video pause silent looping video unmute video mute video Resolving attribute binding errors. Prompt: \"A cuboid balloon drifts past a circular window, sunlight streaming through the glass panes.\" While the vanilla generation ( left ) fails to capture the properties of a balloon by rendering a rigid, textureless cube, VQQA ( right ) successfully enforces the intended cuboid shape while maintaining the texture and material properties of an inflated balloon. By leveraging iterative visual feedback, the optimized prompt guides the generator to render a distinct, box-shaped mylar balloon with defined edges and seams drifting smoothly past the sunlit window. play silent looping video pause silent looping video unmute video mute video Resolving temporal inconsistency. Prompt: \"Violinist and pianist captivate with harmonious duet performance.\" The vanilla generation ( left ) suffers from a severe continuity break across shot transitions, showing a female pianist and a male violinist initially but suddenly depicting the woman playing the violin after the cut. VQQA ( right ) maintains strict semantic consistency throughout the performance, keeping the female pianist and male violinist anchored continuously to their respective instruments. Key results & benchmarks To rigorously evaluate our frameworks, we developed three specialized benchmarks designed to mirror the challenges of professional video production. GenAD-Bench : Uses a human-in-the-loop pipeline that pairs Gemini 3 Pro with specialized image models to construct 50 fictional brands containing four distinct products each. Across 400 unique scenarios, it tests exact marketing constraints without relying on copyright conflicts or training priors. HardContinuityBench : Designed to evaluate spatial and environmental continuity. Generated using intricate GPT-5.2 multi-shot narrative storyboards, this benchmark challenges models with massive gaps between scene reappearances, frequent costume and accessory changes for actors, and complex state changes for interactive props. LVBench-C : Addresses long-horizon temporal dynamics. This dataset contains 120 text-only scenarios grouped into evolving character states, changing object properties, and progressive environmental revelations, maintaining a strict gap rule where critical visual assets must disappear for at least 10 segments before returning with realistic, narrative-driven changes. Our evaluations demonstrate measurable performance improvements over existing video generation architectures. By navigating the creative strategy search space, AI video co-director achieves a peak quality score of 81.4 on GenAD-Bench and enhanced story consistency on ViStoryBench . CANVAS leverages structured visual memory to mitigate scene drift, yielding significant continuity gains across scene reappearances on ST-Bench and HardContinuityBench. For long-duration temporal dynamics, A²RD minimizes layout drift to improve character and environment consistency over continuous multi-minute runs on VBench-Long and LVBench-C. Finally, VQQA's closed-loop prompt optimization resolves physical and compositional inconsistencies, delivering notable absolute quality gains across T2V-CompBench , VBench2 , and VBench-I2V . Please consult the individual papers for comprehensive details on our model architectures, training configurations, and baseline evaluations. Future directions These frameworks represent a foundational step toward unlocking coherent, long-horizon visual storytelling for creators. As we continue to refine these agentic architectures, we are exploring how to integrate human-in-the-loop workflows. Our ultimate goal is not to replace human storytelling but to empower creators by abstracting away the tedious complexities of temporal consistency and world-state tracking, ensuring they remain the control of creative direction and narrative design. Acknowledgements This work was made possible by the dedicated efforts of our broader research teams across Google. We would like to thank Andrew Pan, Brett Slatkin, Burak Gokturk, Carina Claassen, Daniel Vlasic, Do Xuan Long, Ishani Mondal, Jasmine Leon, Jingyun Liu, Joe Timmons, Jordan Boyd-Graber, Khanh G. LeViet, Kuang Su, Long T Le, Mihir Parmar, Min-Yen Kan, Nathan Hodson, Nick Losier, Palash Goyal, Rhyard Zhu, Sebastian Ko, Scott Penberthy, Yan Xu, Yang Li, Ye Jin, Zack Chomyn, and Tomas Pfister for their invaluable contributions to this suite of research. Labels: Generative AI Machine Intelligence Quick links AI video co-director CANVAS A²RD VQQA Share Copy link × Other posts of interest September 17, 2026 The future of practice: Enabling teachers to create learning interactives with generative UI Education Innovation · Generative AI · Machine Intelligence September 15, 2026 Bypassing inference bottlenecks: Accelerating complex AI search with Retrieve-for-Train Algorithms & Theory · Data Mining & Modeling · Generative AI September 10, 2026 ToolGrad: Efficient tool-use dataset generation with textual \"gradients\" Machine Intelligence · Natural Language Processing &times; ❮ ❯ A data table comparing the evaluation benchmarks, key performance metrics, and baseline improvements of four AI video generation frameworks: AI video co-director, CANVAS, A²RD, and VQQA. A flowchart illustrating an AI video co-director pipeline consisting of orchestrator, pre-production, production, and post-production agents. A storyboard comparing video generation consistency for a museum heist scene across Auto Studio, Gemini, and Canvas platforms.",
+      "contentTruncated": false,
+      "contentFingerprint": "9b3f165a253af2f24c22010811c5369cd3f34ecbc1c75d122518a28d244e1280"
+    },
+    {
+      "candidateId": "eedf6fabfba170c5105f741d242604abff3641dd7b6e8f347341b815ab70db0f",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/114954",
+      "canonicalUrl": "https://sspai.com/post/114954",
+      "title": "新玩意 252｜少数派的编辑们最近买了啥？",
+      "author": "少数派",
+      "publishedAt": "2026-09-24T09:30:00.000Z",
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "新玩意 252｜少数派的编辑们最近买了啥？",
+      "contentTruncated": false,
+      "contentFingerprint": "dc1a3a8b5867ed5fd8e47c89e71b712f379327f7e961e4ee3ad678a7815ac861"
+    },
     {
       "candidateId": "afa3550468819a1b4ed0a16889f2ef188a641bd2cf63f2fa487b71b78f4f6cf9",
       "channel": "zh-tech",
@@ -1671,6 +1866,48 @@
       "summarizationContent": "Claude now has a browser built into Claude Cowork on the desktop app. When a task needs to use a website, a browser opens in the side panel and Claude navigates webpages, reads them, clicks, and types. You can now hand off the web part of the task and stay where you are: Claude can fill in a form, pull numbers from a dashboard, or work through a portal that has no connector. No extension, no setup, and nothing shared from your own browser unless you choose to. Until now, giving Claude the ability to use the web in Cowork meant giving it access to your browser through the Claude in Chrome extension. When the work is on a page you already have open, that&#x27;s still the right choice. But a lot of web tasks don&#x27;t need your browser, just a browser, and now Claude has one. It&#x27;s rolling out this week to Pro, Max, and Team plans in the Claude desktop app. Enterprise admins can turn it on for their organization starting today. Which browser, when It&#x27;s Claude&#x27;s browser, not yours. The built-in browser is separate from your own. Claude never sees your tabs, bookmarks, or passwords. To stay signed in to your sites, you can bring your logins over site by site, from Chrome, Edge, or Firefox on macOS and from Firefox on Windows and Linux. Banking, email, and single sign-on sites are left out unless you choose to include them. That&#x27;s also the difference between the two ways Claude can use the web. The built-in browser is for handing web tasks to Claude while you keep working: gathering research for a report, or collecting this month’s invoices from a vendor portal. Claude in Chrome is for the page you already have open, with the accounts you&#x27;re already signed in to, such as updating your CRM, working through your inbox, or editing the doc in front of you. If you already use Claude in Chrome, it keeps working and stays your default; otherwise Claude uses the built-in browser. Switch anytime in Settings → Cowork → Preferred browser. Staying in control The built-in browser carries the same prompt injection risks as any AI agent that acts in a browser, where instructions hidden in a page try to redirect Claude. It runs the same safeguards as Claude in Chrome, including the checks that review Claude&#x27;s actions against what you asked for. We describe them on the Claude in Chrome blog post . Those measures meaningfully reduce the risk but can&#x27;t eliminate it, so we recommend starting on sites you trust. Read our safety guide for more. Getting started The built-in browser is rolling out over the coming week to Pro, Max, and Team plans in the Claude desktop app on macOS, Windows, and Linux (in beta). Once it reaches you, it&#x27;s on by default: give Claude a task that involves a website and the browser opens on its own. On Enterprise plans, it&#x27;s available now and admins can manage it in Organization settings → Cowork → Built-in browser. The built-in browser lives in the desktop app. From the web or your phone, Claude can still drive it as long as your desktop app is open and online. On the web without the desktop app, Claude in Chrome remains the way to give Claude a browser.",
       "contentTruncated": false,
       "contentFingerprint": "ef3a09fb70e6c83d4e07b0b48cf19070797af338868c44b294e4c48d9a8b942d"
+    },
+    {
+      "candidateId": "112c2f2d85e0a9f75786dfd2f41120733a7dc94f8d86c84677783c250ad266cf",
+      "channel": "blogs",
+      "sourceId": "blog:kimi-blog",
+      "canonicalUrl": "https://www.kimi.ai/blog/kimi-k2-6",
+      "title": "Kimi K2.6 Tech Blog: Advancing Open-Source Coding",
+      "author": "Kimi",
+      "publishedAt": null,
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Kimi K2.6: Advancing Open-Source Coding Try Kimi K2.6 We are open sourcing our latest model, Kimi K2.6 , featuring state-of-the-art coding, long-horizon execution, and agent swarm capabilities . Kimi K2.6 is now available via Kimi.ai , the Kimi App, the API , and Kimi Code . Long-Horizon Coding Kimi K2.6 shows strong improvements in long-horizon coding tasks, with reliable generalization across programming languages (e.g., Rust, Go, and Python) and tasks (e.g., front-end, devops, and performance optimization). On Kimi Code Bench , our internal coding benchmark covering diverse complicated end-to-end tasks, Kimi K2.6 demonstrates significant improvements over Kimi K2.5. Kimi K2.6 demonstrates strong long-horizon coding in complex engineering tasks: Kimi K2.6 successfully downloaded and deployed the Qwen3.5-0.8B model locally on a Mac. By implementing and optimizing model inference in Zig —a highly niche programming language—it demonstrated exceptional out-of-distribution generalization. Across 4,000+ tool calls, over 12 hours of continuous execution, and 14 iterations , Kimi K2.6 dramatically improved throughput from ~15 to ~193 tokens/sec , ultimately achieving speeds ~20% faster than LM Studio. Kimi K2.6 autonomously overhauled exchange-core , an 8-year-old open-source financial matching engine. Over a 13-hour execution , the model iterated through 12 optimization strategies, initiating over 1,000 tool calls to precisely modify more than 4,000 lines of code. Acting as an expert systems architect, Kimi K2.6 analyzed CPU and allocation flame graphs to pinpoint hidden bottlenecks and boldly reconfigured the core thread topology (from 4ME+2RE to 2ME+1RE). Despite the engine already operating near its performance limits, Kimi K2.6 extracted a 185% medium throughput leap (from 0.43 to 1.24 MT/s) and a 133% performance throughput gain (soaring from 1.23 to 2.86 MT/s). In beta tests, K2.6 performs well on long-horizon coding tasks in enterprise evaluations (randomly ordered): In a no-code environment, AI has to handle every edge case. There's no developer to step in when something doesn't work as expected. K2.6 is noticeably more effective than K2.5 at navigating nuanced API behaviors and recovering when things break, and it runs longer-horizon tasks before hitting a wall. We've seen a real improvement in getting users from idea to deployment compared to K2.5. What impressed us most about K2.6 is its surgical precision in large codebases. When an initial path is blocked, it is strong at pivoting intelligently: following existing architectural patterns, finding hidden related changes, and keeping fixes scoped to the real problem. That kind of focused adaptability helps Augment Code reduce wasted cycles and deliver faster, more cost-effective agentic coding for enterprise-scale engineering work. Kimi K2.6's evolution is impressive. It excels on coding tasks at a level comparable to leading closed source models, and offers strong tool calling quality due to its deep understanding of third party frameworks. Kimi K2.6's excellent reliability makes it a great choice for complex and long-horizon engineering tasks. Kimi K2.6 sets a new level for open-sourced models, especially in long-horizon, agent-style coding workflows. It handles complex, multi-step tasks with stronger instruction following and consistently high code quality. We've seen it sustain extended coding sessions with remarkable stability, far beyond typical models. It also surfaces deep, non-obvious bugs that would normally take significant developer time to uncover. Overall, K2.6 sets a new bar for reliable coding. Kimi K2.6 demonstrates significant improvements over K2.5 in internal evaluations conducted by CodeBuddy: code generation accuracy increased by 12%, long-context stability improved by 18%, and tool invocation success rate reached 96.60%. Its stronger reasoning capabilities and more consistent output quality provide robust support for ensuring a reliable user experience in CodeBuddy WorkBuddy. K2.6 is a clear improvement on K2.5 on both our benchmarks (+15%) and in side-by-side comparisons. It seems to have better instruction following, more thorough exploration and reasoning, and less likely to make coding errors or use hacks. We are thrilled to see another leap in open source models with Kimi K2.6 release, which marks a significant advancement for high-stakes, agentic workflows. The most impactful improvements lie in its long-horizon reliability and instruction following. K2.6 excels at maintaining architectural integrity over extended coding sessions, making it a stable foundation for autonomous agent pipelines, like all the \"claws\". It demonstrates a measurable leap over K2.5 in long-context tasks, achieving state-of-the-art performance in complex reasoning. Got an early look at K2.6 and ran it through Hermes Agent. Tool calling and agentic loops feel noticeably tighter, coding is a clear step up, and the creative range surprised us. We're super excited about running a hackathon with Kimi on creativity. Kimi team continues to beat expectations! K2.6 offers SOTA-level performance at a fraction of the cost. It's tremendously good at long-context tasks across the codebase, as well as the day-to-day work needed to support an always-on agent like KiloClaw. Kimi K2.6 raises the bar for open-source models. It excels in coding and especially for agentic tools like OpenClaw and Hermes. In early testing, it sustains long multi-step sessions with impressive stability. It will work all of Ollama's integrations out of the box, and we're excited to see what developers build with it. Within OpenCode, Kimi K2.6 proves to be exceptionally reliable. Its approach to task decomposition and tool calling is both steady and consistent. With a sharper grasp of task requirements and more streamlined multi-step operations, it effectively minimizes repetitive overhead, resulting in a smoother, more trustworthy end-to-end experience. Kimi K2.6 delivered a strong performance in Qoder's internal evaluations, showing significant progress over K2.5. Specifically, there has been a notable increase in the frequency of tool calling and model invocations, reflecting a substantial boost in the model's proactivity and intelligence during task execution. This heightened initiative in tool calling enables the model to more actively grasp developer intent and automatically complete context, thereby minimizing user interruptions and wait times. K2.6 shows major gains over K2.5 on the capabilities our developers care about most: we're seeing more than 50% improvement on our Next.js benchmark, putting it among the top-performing models on the platform. Combined with its cost-performance ratio, it's a compelling option for agentic coding and front-end generation through AI Gateway. We're excited to offer it to our developer community. 01 / 07 Coding-Driven Design Based on the strong coding capabilities, Kimi K2.6 can turn simple prompts into complete front-end interfaces, generating structured layouts with deliberate design choices such as aesthetic hero sections, as well as interactive elements and rich animations, including scroll-triggered effects. With strong proficiency in leveraging image and video generation tools, Kimi K2.6 supports the generation of visually coherent assets and contributes to higher-quality, more salient hero sections. Moreover, Kimi K2.6 expands beyond static frontend development to simple full-stack workflows—spanning authentication to user interaction to database operations for lightweight use cases like transaction logging or session management. We established an internal Kimi Design Bench , organized into four categories: Visual Input Tasks, Landing Page Construction, Full-Stack Application Development, and General Creative Programming. In comparison with Google AI Studio, Kimi K2.6 shows promising results and performs well across these categories. Below are examples generated by K2.6 Agent from a single prompt, with preconfigured harnesses and tools: Agent Swarms, Elevated Scaling out, not just up. An Agent Swarm dynamically decomposes tasks into heterogeneous subtasks executed concurrently by self-created domain-specialized agents. Based on the K2.5 Agent Swarm research preview, Kimi K2.6 Agent Swarm demonstrates a qualitative leap in the agent swarm experience. It seamlessly coordinates heterogeneous agents to combine complementary skills: broad search layered with deep research, large-scale document analysis fused with long-form writing, and multi-format content generation executed in parallel. This compositional intelligence enables the swarm to deliver end-to-end outputs—spanning documents, websites, slides, and spreadsheets—within a single autonomous run. The architecture scales horizontally to 300 sub-agents executing across 4,000 coordinated steps simultaneously , a substantial expansion from K2.5's 100 sub-agents and 1,500 steps. This massive parallelization fundamentally reduces end-to-end latency while significantly enhancing output quality and expanding the operational boundaries of Agents swarms. It can also turn any high-quality files such as PDFs, spreadsheets, slides, and Word documents into Skills . Kimi K2.6 captures and maintains the documents' structural and stylistic DNA, enabling you to reproduce the same quality and format in future tasks. Here are some examples: Proactive Agents K2.6 demonstrates strong performance in autonomous, proactive agents such as OpenClaw and Hermes , which operate across multiple applications with continuous, 24/7 execution. Unlike simple chat-based interactions, these workflows require AI to proactively manage schedules, execute code, and orchestrate cross-platform operations as a persistent background agent. Our RL infra team used a K2.6-backed agent that operated autonomously for 5 days , managing monitoring, incident response, and system operations, demonstrating persistent context, multi-threaded task handling, and full-cycle execution from alert to resolution. Here is K2.6's worklog (anonymized to remove sensitive information): Kimi K2.6 delivers measurable improvements in real-world reliability: more precise API interpretation, stabler long-running performance, and enhanced safety awareness during extended research tasks. Performance gains are quantified by our internal Claw Bench , the evaluation suite spanning five domains: Coding Tasks, IM Ecosystem Integration, Information Research & Analysis, Scheduled Task Management, and Memory Utilization. Across all metrics, Kimi K2.6 significantly outperforms Kimi K2.5 in task completion rates and tool invocation accuracy—particularly in workflows requiring sustained autonomous operation without human oversight. Bring Your Own Agents Building upon Kimi K2.6's robust orchestration capabilities, Kimi K2.6 extends your proactive agents to Claw Groups as a research preview—a new instantiation of the Agent Swarm architecture. Claw Groups embrace an open, heterogeneous ecosystem: Multiple agents and humans operate as true collaborators. Users can onboard agents from any device, running any model, each carrying their own specialized toolkits, skills and persistent memory contexts. Whether deployed on local laptops, mobile devices, or cloud instances, these diverse agents integrate seamlessly into a shared operational space. At the center of this swarm, Kimi K2.6 serves as an adaptive coordinator. It dynamically matches tasks to agents based on their specific skill profiles and available tools, optimizing for capability fit. When an agent encounters failure or stalls, the coordinator detects the interruption, automatically reassigns the task or regenerates subtasks, and actively manages the full lifecycle of deliverables—from initiation through validation to completion. We also want to thank the K2.6-powered agents in Claw Groups—we've been dogfooding our own agent marketing team by refining human–agent workflows in practice. Using Claw Groups, we run end-to-end content production and launch campaigns, with specialized agents like Demo Makers, Benchmark Makers, Social Media Agents, and Video Makers working together. K2.6 coordinates the process, enabling agents to share intermediate results and turn ideas into consistent, fully packaged deliverables. We are moving beyond simply asking AI a question or assigning AI a task, and entering a phase where human and AI collaborate as genuine partners—combining strengths to solve problems collectively. Claw Groups marks our latest efforts toward a future where the boundaries between \"my agent,\" \"your agent,\" and \"our team\" dissolve seamlessly into a collaborative system. Benchmark Table To reproduce official Kimi-K2.6 benchmark results, we recommend using the official API. For third-party providers, refer to Kimi Vendor Verifier (KVV) to choose high-accuracy services. Details: https://www.kimi.ai/blog/kimi-vendor-verifier Footnotes 1. General Testing Details We report results for Kimi K2.6 and Kimi K2.5 with thinking mode enabled, Claude Opus 4.6 with max effort, GPT-5.4 with xhigh reasoning effort, and Gemini 3.1 Pro with a high thinking level. Unless otherwise specified, all Kimi K2.6 experiments were conducted with temperature = 1.0, top-p = 1.0, and a context length of 262,144 tokens. Benchmarks without publicly available scores were re-evaluated under the same conditions used for Kimi K2.6 and are marked with an asterisk (*). Except where noted with an asterisk, all other results are cited from official reports. 2. Reasoning Benchmarks IMO-AnswerBench scores for GPT-5.4 and Claude 4.6 were obtained from https://z.ai/blog/glm-5.1 . Humanity's Last Exam (HLE) and other reasoning tasks were evaluated with a maximum generation length of 98,304 tokens. By default, we report results on the HLE full set. For the text-only subset, Kimi K2.6 achieves 36.4% accuracy without tools and 55.5% with tools. 3. Tool-Augmented / Agentic Tasks Kimi K2.6 was equipped with search, code-interpreter, and web-browsing tools for HLE with tools, BrowseComp, DeepSearchQA, and WideSearch. For HLE-Full with tools, the maximum generation length is 262,144 tokens with a per-step limit of 49,152 tokens. We employ a simple context management strategy: once the context window exceeds the threshold, only the most recent round of tool-related messages is retained. For BrowseComp, we report scores obtained with context management using the same discard-all strategy as Kimi K2.5 and DeepSeek-V3.2. For DeepSearchQA, no context management was applied to Kimi K2.6 tests, and tasks exceeding the supported context length were directly counted as failed. Scores for Claude Opus 4.6, GPT-5.4, and Gemini 3.1 Pro on DeepSearchQA are cited from the Claude Opus 4.7 System Card . For WideSearch, we report results under the \"hide tool result\" context management setting. Once the context window exceeds the threshold, only the most recent round of tool-related messages is retained. The test system prompts are identical to those used in the Kimi K2.5 technical report . Claw Eval was conducted using version 1.1 with max-tokens-per-step = 16384. For APEX-Agents, we evaluate 452 tasks from the public 480-task release, as done by Artificial Analysis (excluding Investment Banking Worlds 244 and 246, which have external runtime dependencies). 4. Coding Tasks Terminal-Bench 2.0 scores were obtained with the default agent framework (Terminus-2) and the provided JSON parser, operating in preserve thinking mode. For the SWE-Bench series of evaluations (including Verified, Multilingual, and Pro), we used an in-house evaluation framework adapted from SWE-agent. This framework includes a minimal set of tools—bash tool, createfile tool, insert tool, view tool, strreplace tool, and submit tool. All reported scores for coding tasks are averaged over 10 independent runs. 5. Vision Benchmarks Max-tokens = 98,304, averaged over three runs (avg@3). Settings with Python tool use max-tokens-per-step = 65,536 and max-steps = 50 for multi-step reasoning. MMMU-Pro follows the official protocol, preserving input order and prepending images.",
+      "contentTruncated": false,
+      "contentFingerprint": "8fab7c82bde9255dfe7d1a0d99cf5ba6f79b16c136cac7f7bad512e16cf8e78c"
+    },
+    {
+      "candidateId": "4edc33bbe92ea1b95cffff2f3095845dd2910c80ecde4bbdd20f8ca2b4d280ab",
+      "channel": "blogs",
+      "sourceId": "blog:kimi-blog",
+      "canonicalUrl": "https://www.kimi.ai/blog/perception-bench",
+      "title": "PerceptionBench: Evaluating Atomic Visual Perception in MLLMs",
+      "author": "Kimi",
+      "publishedAt": null,
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Introducing PerceptionBench Evaluating Atomic Visual Perception in Multimodal Large Language Models Authors Kimi Team Overview We are releasing PerceptionBench , a benchmark that isolates visual perception and evaluates it as a set of atomic capabilities— discovered from how today's models fail, not defined in advance. From frontier-model failures across 42 benchmarks, we derive 10 atomic perceptual capabilities and construct 3,000 verified questions, each isolating a single capability and answerable by looking, with no reasoning or external knowledge required. Across sixteen frontier MLLMs, no model reaches 60% accuracy, and perception-related hallucination is the weakest capability on average. Models with nearly identical overall scores can diverge sharply in what they actually perceive. PerceptionBench is built to expose exactly where perception breaks, and to drive progress toward multimodal AI that sees faithfully and consistently. The Dataset Guided by the induced taxonomy, we select the most informative failures from the source benchmarks, decompose them into atomic sub-questions, and author additional questions on supplemented images. The retained and constructed samples together form an in-house pool of 17,000+ verified questions. The released benchmark subsamples 3,000 verified questions from the constructed portion— 60% decomposed from attributed model failures and 40% newly authored —with category-level balancing and difficulty stratification to isolate atomic perceptual capabilities from confounding factors. The released benchmark distinguishes itself through three core design principles: Failure-Driven Taxonomy: Every category is discovered from real model failures, attributed to the earliest erroneous step across 42 existing benchmarks. Ten Atomic Perceptual Categories: Visual Relation, Counting, Attribute, Depth & 3D, Localization, Comparison, Fine-grained Recognition, Context Integration, OCR, and Hallucination. Perception, Not Reasoning or Knowledge: Samples are curated, decomposed, and difficulty-balanced so that difficulty stems from perception rather than reasoning or external knowledge. Visual Localization At what o'clock position on the dial is the Gemini symbol in the image? Answer with just the number. Answer: 6 Visual Localization The red lines in the image divide the picture into nine sections, which are numbered as regions 1–9 in order from left to right and then from top to bottom. Which of the following regions contains no trees at all? A. Region 1 B. Region 2 C. Region 5 D. Region 8 Answer: B Visual Attribute From the perspective shown in the image, compare the two pen holders with pink on the table. Which of the following conclusions is correct? A. The left pen holder is pure pink with a cartoon character pattern on its surface; the right pen holder is gray-pink patchwork B. The left pen holder is gray-pink patchwork; the right pen holder is pure pink with a cartoon character pattern on its surface C. The left pen holder is pure pink; the right pen holder is gray-pink patchwork with a cartoon character pattern on its surface D. The left pen holder is gray-pink patchwork with a cartoon character pattern on its surface; the right pen holder is pure pink Answer: B Visual Attribute Observe the two cartoon characters in the lower right corner of the picture. Viewing from the perspective presented in the image, which statement correctly describes the composition of these two characters? A. Both characters are composed entirely of curves B. Both characters are composed of a combination of straight lines and curves C. Both characters are composed entirely of straight lines D. The character on the left is composed entirely of straight lines, while the character on the right is composed entirely of curves Answer: B Visual Counting Observe the red box in the picture. How many flowers have their main body inside the red box? Answer: 2 Visual Counting How many potted green plants can be seen in the image in total? (excluding the green plants reflected in the glass) Answer: 5 pots Visual Relation Locate the solid dot inside the red box. As the dot travels along the existing route of the maze, which cat area does it reach first? A. The puzzled cat at the lower left B. The happy cat at the lower right C. The cat holding an umbrella in the center D. The cat admiring flowers at the upper right Answer: C Visual Relation In the figure, for the longest black diagonal line segment, in which direction does the line segment extending outward from its right endpoint point? A. Upper right B. Directly to the right C. Lower right D. Directly downward Answer: A Depth & 3D Based on the current observer's perspective, with the direction closer to the camera defined as the front, between the person in red and the black electric fan in the center of the image, which one is further back? A. The person in red B. The black electric fan C. Both are the same D. Cannot be determined Answer: A Depth & 3D If the small cubes stacked in the figure must be placed on the ground or on another small cube, how many small cubes are there in total in the figure (including the ones that cannot be seen)? Answer: 26 cubes OCR Observe the image. The white text appears in two different font sizes. For the white text in the largest font, read the text content from left to right, paying attention to uppercase and lowercase letters, and preserving all punctuation marks and spaces. Write down the answer. Answer: Marshall B. Clinard OCR (Note: bounding boxes are given in [x1, y1, x2, y2] format.) Observe the image, establish normalized coordinates, read the text content in the coordinate region [0.697, 0.429, 0.875, 0.521] from left to right, distinguish case, and preserve spaces and punctuation, then write the answer. Answer: Tap Water Visual Comparison Among the circles corresponding to P, Q, M, and N, which is the largest circle? (Answer with the letter corresponding to the circle) Answer: N Visual Comparison Let the line segment connecting data points A and D be denoted as segment AD, and let the line segment connecting data points E and M be denoted as segment EM. Which of the following is correct regarding the thickness of segments AD and EM? A. Segment AD is thicker B. Segment EM is thicker C. Segments AD and EM are equally thick D. Cannot be determined Answer: B Fine-grained Recognition Observe the outline shape of the notch in the main pattern above. From the eight options A, B, C, D, E, F, G, H, which is the only option whose edge contour can perfectly match the notch in the main body and seamlessly fill the missing area? Answer: D Fine-grained Recognition Observe the image and compare the styling and outfits of the person in the center position (C position) with the person immediately to their right. Which of the following statements is correct: A. The two have different hair colors, and their clothing color schemes and decorations are exactly the same B. The two have different hair colors, and their clothing color schemes and decorations are clearly distinct C. The two have the same hair color, and their clothing color schemes and decorations are exactly the same D. The two have the same hair color, and their clothing color schemes and decorations are clearly distinct Answer: A Context Integration Please look at the map in the first image. I took another photo at the location marked with the red cross, which is the second image. Please determine which of the following buildings is on both sides of the road ROAD NO.2 SUNRISE HOMES. A. Riva shop smart B. Dasthagir & Sons C. Bait-ul-Ata D. Sunrise Valley Villas Answer: B Context Integration Compared with figure 1, what has been added to the scene in figure 2? A. black office desk B. semi-transparent storage basket C. light yellow filing cabinet D. cardboard box marked with an arrow Answer: D Hallucination How many white tables are there in the office in the picture? A. 0 B. 1 C. 2 D. 3 Answer: A Hallucination Among the 15 patterns in the image, how many patterns have a dog logo? Answer: 0 Each source benchmark captures a narrow slice of perception errors, and these slices overlap only weakly (mean pairwise weighted Jaccard 0.20). No single benchmark—or small group of them—covers perception as a whole, which motivates a capability-centric benchmark that aggregates and rebalances these fragmented views. Distribution of Tasks per Category Statistics Number Data Total 3,000 Atomic perceptual categories 10 Task Categories Depth 3D Perception Error 330 (11.00%) Visual Counting Error 330 (11.00%) Fine-Grained Recognition Error 290 (9.67%) Visual Relation Error 330 (11.00%) Visual Attribute Error 330 (11.00%) Visual Localization Error 330 (11.00%) Visual Comparison Error 279 (9.30%) Context Integration Error 255 (8.50%) Hallucination 271 (9.03%) OCR Error 255 (8.50%) Using PerceptionBench to Compare Models Conclusion PerceptionBench is a simple but challenging benchmark for evaluating the atomic visual perception of frontier models. It provides a capability-level standard for measuring and diagnosing the visual perception boundaries of multimodal models. We are open-sourcing the PerceptionBench dataset and evaluation code to help the community address the visual perception gap. Download the Data: https://github.com/MoonshotAI/PerceptionBench",
+      "contentTruncated": false,
+      "contentFingerprint": "3f3e571269b7bf74559b6cc2d35f1ad170ac154a4e9c0fde946f6ad66e3e0165"
+    },
+    {
+      "candidateId": "a7035a9348645e4f2cd250c4e77e21a74abc44c575a4ba8c5a5d83c7b20db31f",
+      "channel": "blogs",
+      "sourceId": "blog:kimi-blog",
+      "canonicalUrl": "https://www.kimi.ai/blog/kimi-k3",
+      "title": "Kimi K3 Tech Blog: Open Frontier Intelligence",
+      "author": "Kimi",
+      "publishedAt": null,
+      "firstSeenAt": "2026-09-27T05:15:39.150Z",
+      "lastSeenAt": "2026-09-27T05:15:39.150Z",
+      "summarizationContent": "Kimi K3: Open Frontier Intelligence Try Kimi K3 Today, we are introducing Kimi K3 — our most capable model. Kimi K3 is a 2.8T-parameter model built on our Kimi Delta Attention and Attention Residuals, with native vision capabilities and a 1-million-token context window. It is the world's first open 3T-class model, designed for frontier intelligence across long-horizon coding, knowledge work, and reasoning. While its overall performance still trails the most powerful proprietary models, Claude Fable 5 and GPT 5.6 Sol, Kimi K3 demonstrated frontier-level performance across our evaluation suite, consistently outperforming other tested models. Kimi K3 is available today on Kimi.ai , Kimi Work , Kimi Code , and the Kimi API . At launch, Kimi K3 will use max thinking effort by default, with low- and high-effort modes to be introduced in subsequent updates. We are currently working closely with inference partners and open-source maintainers to align technical details and ensure a reliable rollout across the ecosystem. The full model weights will be released by July 27, 2026. Further details on the architecture, training, and evaluations will be released alongside the Kimi K3 technical report. An Open 3T-Class Model Kimi K3 is the first open model to reach 2.8 trillion parameters. It marks the latest step in Kimi's sustained push at the scaling frontier: for nine of the past twelve months, Kimi models have set the upper bound of open-model sizes. Kimi K3 is built on Kimi Delta Attention (KDA) and Attention Residuals (AttnRes), two architectural updates designed to improve how information flows across sequence length and model depth. We have also scaled up Mixture of Experts (MoE) sparsity, effectively activating 16 out of 896 experts when paired with a Stable LatentMoE framework. Together with refined training and data recipes, these structural changes yield an approximate 2.5× improvement in overall scaling efficiency compared to Kimi K2, allowing the model to convert compute into intelligence more effectively. α w KDA α w Stable LatentMoE α w Gated MLA α w Stable LatentMoE w α 3× 1× Block n −1 Block n −2 Block n −3 Embedding Router Linear 1 2 1 2 3 N Norm Linear Shared Expert Routed Expert Linear Conv L2 Linear Conv L2 Linear Conv σ σ Linear σ Kimi Delta Attention Norm Linear Output Coding Kimi K3 has strong long-horizon coding performance. Operating with minimal human oversight, it can sustain long engineering sessions, navigate massive repositories, and orchestrate terminal tools. Kimi K3 also excels in tasks blending software engineering with visual reasoning — it leverages screenshots and visuals to optimize game dev, frontend, and CAD. The case studies below show how Kimi K3's coding capability translates into open-ended software creation and scientific research. Kernel Optimization We tested the models' capability to optimize GPU kernels. Each model works independently in an identical sandbox, with up to 24 hours to profile, rewrite, and benchmark four tasks spanning AttnRes, KDA, and a 512-head-dimension MLA kernel across NVIDIA Hopper GPUs and GPGPU from an alternative vendor. Kimi K3 performed competitively with Fable 5 (with fallback) and substantially outperformed Opus 4.8, GPT 5.6 Sol, and GPT 5.5. Claude Fable 5 was evaluated by a third party, and its results may include fallback behavior. Across most models, some trajectories include small, acceptable precision shortcuts that remain within our numerical tolerance. GPGPU denotes general-purpose GPUs used for computation beyond graphics rendering. In the late stages of Kimi K3 development, an early version of Kimi K3 handled the majority of the team's kernel optimization works. GPU Compiler Development We further tested whether Kimi K3 could build a GPU programming system from scratch. Kimi K3 developed MiniTriton, a compact Triton-like compiler with its own tile-level IR layer over MLIR, optimization passes, and a PTX code-generation pipeline. Across supported roofline benchmarks, MiniTriton delivers performance on par with or better than Triton and torch.compile — beating Triton on certain workloads. Beyond microbenchmarks, MiniTriton sustains end-to-end nanoGPT training with stable convergence, the loss curve closely tracking the reference with only minor divergence — validating the full pipeline on a realistic workload. These results demonstrate that Kimi K3 can build a coherent end-to-end compiler — from DSL frontend and IR passes to PTX codegen and runtime — rather than isolated kernels; its from-scratch Tensor Core path already rivals Triton’s extensively optimized stack. Game Dev and Digital Creation Kimi K3 combines strong 3D reasoning, coding, and vision capabilities to turn concepts, images, and videos into fully playable interactive experiences. Kimi K3 achieves true \"vision in the loop\" by seamlessly iterating between code and live screenshots—instantly seeing and refining outputs. Chip Design As an early proof of concept, Kimi K3 designed a chip to serve a nano model built on its own architecture. In a single 48-hour autonomous run, K3 built, optimized, and verified the chip using open-source EDA tools on the Nangate 45nm library. Within 4 mm², the chip closes timing at 100 MHz and sustains over 8,700 tokens/s decode throughput in simulation, packing 1.46M standard cells, 0.277 MB of SRAM, and an INT4 MAC array with fused dequantization. A chip built by a model, for a model, reflects K3's long-horizon agentic capabilities. Coding for Research Kimi K3 bridges scientific literature and executable code, autonomously implementing, validating, and analyzing complex computational research workflows. In one case, Kimi K3 completed in about two hours what would typically require one to two weeks of work by an experienced researcher. To reproduce the I–Love–Q universal relations in computational astrophysics, it reviewed and cross-validated 20+ papers, implemented the full numerical pipeline, evaluated 300+ equations of state, identified inconsistencies in published formulas, generated 3,000+ lines of Python code, and produced an interactive HTML dashboard for exploring the results. Knowledge Work Kimi K3 advances end-to-end knowledge work. Beyond public benchmarks, Kimi K3 (max) demonstrates consistent gains across our internal evaluations, which are derived from recurring patterns and challenges observed in real-world user-agent workflows. These consistent advantages across distinct production-oriented workflows reflect a broad improvement in Kimi K3's agentic knowledge work capabilities. Research with Interactive Visualization Below are a few examples of what Kimi K3 in Kimi Work can produce across financial consulting and scientific research: Case 1: Interactive 42 years of AI ASIC industry research website An interactive research report you can drill into: 42 years of the ASIC industry, created through 120+ rounds of recursive self-improvement. Kimi K3 transforms evidence into bespoke charts, animated diagrams, and interactive visual narratives. It pulled data via 2.8k+ web searches/fetches and 1.1k+ terminal data pulls, across 11k+ pages spanning 87 quarterly reports and 99 original PDFs. Case 2: Fusion Industry Research A consulting-style industry report with interactive visualizations—including timelines, Funnel Chart, Range Bar Chart, Gantt Charts, and publication-quality slides. Case 3: GWTC-5 Gravitational-wave Analysis An analysis of 391 gravitational-wave events using 20+ concurrent subagents, producing 7 scientific visualizations, 2 tables, and a literature synthesis from 10+ papers. Kimi K3 is also particularly effective at producing infographic-style presentations, such as the fully editable heatmap and annual report shown below: Widgets and Dashboard In Kimi Work, we introduce two new features - Widgets and Dashboard - which make interactions with Kimi K3 more visual and persistent. Widgets let you generate interactive components directly within a chat, with connections to local data or external plugins for continuous updates. Dashboard brings the widgets you care about most into one persistent, personalized view organized around a topic, project, or goal. Video Editing Kimi K3 excels at motion design, animation, and video editing because its native multimodal architecture understands text, images, and video within the same model. In one example, K3 created a 3Blue1Brown-style motion-graphics explainer of its own architecture, translating technical ideas into animated diagrams and transitions. In another, Kimi K3 edited its own teaser video from 56 source clips, handling clip selection, motion-matched cuts, frame-accurate beat synchronization, audio processing, and multiple rounds of revision. A high-density short video like this would typically take an experienced editor one to two working days, or a beginner three to five. Architecture and Infrastructure Kimi K3 is built on Kimi Delta Attention (KDA) and Attention Residuals (AttnRes). KDA provides an efficient foundation for scaling attention, while AttnRes selectively retrieves representations across depth rather than accumulating them uniformly. Together, they form the architectural backbone of a model designed to scale well beyond the trillion-parameter regime. Kimi K3 uses Stable LatentMoE, effectively activating 16 of 896 experts. At this level of sparsity, routing and optimization become first-order challenges. Quantile Balancing derives expert allocation directly from router-score quantiles, eliminating heuristic updates and a sensitive balancing hyperparameter, while Per-Head Muon extends Muon by optimizing attention heads independently for more adaptive learning at scale. Sigmoid Tanh Unit (SiTU) and Gated MLA improve activation control and attention selectivity respectively. Together, these advances enable stable and efficient training at the 2.8-trillion-parameter scale. Kimi K3 applies quantization-aware training from the SFT stage onward, using MXFP4 weights with MXFP8 activations for broad hardware compatibility. To prevent expert imbalance from degrading throughput at large expert-parallel scales, we introduce a fully balanced expert-parallel training method with static shapes and no host synchronization on the critical path. Since inference efficiency likewise benefits from larger high-bandwidth communication domains, we recommend deploying Kimi K3 on supernode configurations with 64 or more accelerators. Finally, as KDA poses new challenges for conventional prefix caching, we have contributed a corresponding implementation to the vLLM community, to be released alongside the model. KDA with prefill cache allows us to serve Kimi K3 at a highly competitive token price despite its scale and long context. More technical details will be available in our coming report. Availability Kimi K3 Agents: Download or update to the latest Kimi app from your mobile app store, available on iOS, Android, and HarmonyOS, or visit kimi.ai . Work with Kimi K3: Download the latest Kimi Work desktop app , version 3.1.0 or later, available for Windows and Apple silicon Macs. Code with Kimi K3: Run Kimi Code in your terminal and select Kimi K3 using the /model command. Build with the Kimi API: Visit the Kimi API Platform and select kimi-k3 . Pricing is $0.30/MTok for cache-hit input, $3.00/MTok for cache-miss input, and $15.00/MTok for output. Powered by Mooncake's disaggregated inference architecture, the official Kimi API achieves a cache hit rate above 90% in coding workloads. Bring Kimi to your organization: Kimi Enterprise provides enterprise-grade data privacy and member management, with complete separation between personal and organization accounts. Visit the pricing page and select “Get Kimi Enterprise” to subscribe for your team. Full Benchmark Table Footnotes All Kimi K3 results reported below are obtained with the reasoning effort set to 'max', setting temperature = 1.0 and top-p = 1.0. Depending on the benchmark, each model is evaluated under one of three agentic harnesses — Kimi Code, Claude Code, or Codex — as specified in the notes below. Coding benchmarks DeepSWE. Kimi K3 is evaluated with the Kimi Code harness. The GLM-5.2 score is taken from the GLM-5.2 release blog ( https://z.ai/blog/glm-5.2 ); all remaining scores are from the official DeepSWE leaderboard ( https://deepswe.datacurve.ai/ ), under which Kimi K3 attains 67.3 with the mini-SWE-agent harness. We report the DeepSWE v1.1 tasks. Terminal-Bench 2.1. Kimi K3 is evaluated with the Kimi Code harness. For all other models, we report the best score across harnesses: GLM-5.2 with Claude Code ( https://z.ai/blog/glm-5.2 ); Claude Opus 4.8 and Claude Fable 5 with Terminus 2 ( https://artificialanalysis.ai/evaluations/terminalbench-v2-1 ); GPT 5.5 and GPT 5.6 Sol with Codex ( https://openai.com/index/previewing-gpt-5-6-sol/ ). Program Bench. Kimi K3 is evaluated with the Kimi Code harness. The GLM-5.2 score is from https://z.ai/blog/glm-5.2 ; all other scores are from https://www.vals.ai/benchmarks/programbench . SWE Marathon. Kimi K3, Claude Opus 4.8, and Claude Fable 5 are evaluated with the Claude Code harness; GPT-5.6 Sol is evaluated with the Codex harness. The GLM-5.2 score is from https://z.ai/blog/glm-5.2 . Our evaluation is based on an H20-calibrated branch of the official v1.1 tasks ( https://www.swe-marathon.org/ ): the Docker images, performance gates, and reference oracles for the GPU tasks have been recalibrated for H20, while the correctness and anti-cheat validators remain unchanged. Additionally, Claude Fable 5 hit fallbacks on 35% of the tasks in our evaluation, which may have negatively impacted its measured performance. FrontierSWE. Kimi K3 is evaluated with the Kimi Code harness and GPT-5.6 Sol with the Codex harness; all other results are from https://www.frontierswe.com/ . Dominance scores are recomputed from the raw scores using the official evaluation script and are current as of July 16, 2026. PostTrain Bench. Scores for GLM-5.2, GPT-5.5, and Claude Opus 4.8 are adopted from the official PostTrainBench ( https://posttrainbench.com/ ) results. Kimi K3, Claude Fable 5, and GPT-5.6 Sol are evaluated with the official Harbor implementation at maximum reasoning effort, averaged over three runs on H20 GPU (instead of H100 in the official setting) — Kimi K3 and Claude Fable 5 with the Claude Code harness, and GPT-5.6 Sol with the Codex harness. MLS Bench Lite. Kimi K3 is evaluated with the Kimi Code harness; GLM-5.2 and the Claude models with the Claude Code harness; GPT-5.5 and GPT-5.6 Sol with the Codex harness. KCB 2.0. Kimi K3 is evaluated with both the Kimi Code and Claude Code harnesses; GLM-5.2, Claude Opus 4.8, and Claude Fable 5 with the Claude Code harness; GPT-5.5 and GPT-5.6 Sol with the Codex harness. All models are evaluated at maximum reasoning effort, except GPT-5.5, which uses the \"xhigh\" setting. We also note that on this in-house benchmark, 10% of the tasks entered GPT-5.6 Sol's cyber guard. Productivity and agentic benchmarks For OfficeQA Pro, each test case provides the agent with the entire PDF corpus, with all PDFs rendered as images and no machine-readable text available. OfficeQA Pro and SpreadsheetBench 2. Kimi K3, GLM-5.2, Claude Opus 4.8, and Claude Fable 5 are evaluated with the Claude Code harness; GPT 5.5 and GPT 5.6 Sol are evaluated with the Codex harness. MCP Atlas. All models are evaluated on the 500-task public subset with a 100-turn limit, using Gemini 3.1 Pro as the judge. AutomationBench. All models are evaluated on the 600-task public subset, following the official GitHub setup in all other respects. BrowseComp. We adopt the context-compaction strategy used in the Claude model cards, triggered at 300K tokens. When evaluated with a 1M-token context window and no context management, Kimi K3 achieves a score of 90.4. The results of Claude Fable 5, Claude Opus 4.8, GPT 5.6 Sol, and GPT 5.5 are cited from https://www.anthropic.com/news/claude-fable-5-mythos-5 and https://openai.com/index/gpt-5-6/ . GDPval-AA, AA-Briefcase, and APEX-Agents scores are cited from https://artificialanalysis.ai/ . Multimodal benchmarks Except for ZeroBench, which follows the official setting and is run five times, all multimodal scores are averaged over three runs. MMMU-Pro is evaluated following the official protocol, preserving the original input order and prepending images to the text input. PerceptionBench. PerceptionBench ( https://www.kimi.ai/blog/perception-bench ) is a benchmark that focuses on atomic visual perception capabilities. Limitations Sensitivity to thinking history. K3 was trained in the preserved thinking history mode. If the agent harness fails to pass back all the historical thinking content as required, or if an ongoing session with another model is switched over to K3, generation quality may become highly unstable. We recommend using a harness with verified compatibility, such as Kimi Code, and avoiding switching to K3 in the middle of a session. Excessive proactiveness. K3's training places particular emphasis on long-horizon, challenging tasks. As a result, when it encounters minor issues or ambiguous user intent during task execution, it may make unexpected decisions on the user's behalf. If your application requires the agent to operate within well-defined boundaries and refrain from excessive improvisation, please impose more explicit behavioral constraints on K3 in the system prompt or in AGENTS.md . Despite being a highly competitive model overall, K3 nonetheless exhibits a noticeable gap in user experience compared with Claude Fable 5 and GPT 5.6 Sol.",
+      "contentTruncated": false,
+      "contentFingerprint": "ffb43a6c0a8e32107b828ac93fe64a0a46490748f7023ece619adfc2fe82534c"
     }
   ],
   "schemaVersion": "1.0"

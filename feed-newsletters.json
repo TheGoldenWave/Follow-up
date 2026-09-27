@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "1.0",
-  "generatedAt": "2026-08-28T06:10:33.830Z",
+  "generatedAt": "2026-09-27T05:15:39.150Z",
   "lookbackHours": 72,
   "newsletters": [
     {
+      "sourceId": "newsletter:stratechery",
       "source": "Stratechery (Ben Thompson)",
       "url": "https://stratechery.com/",
       "tags": [
@@ -13,10 +13,11 @@
       ],
       "items": [
         {
-          "title": "Apple Updates Mini and Studio, AI Computers, OpenAI Jalapeño",
-          "url": "https://stratechery.com/2026/apple-updates-mini-and-studio-ai-computers-openai-jalapeno/",
-          "publishedAt": "2026-08-26T10:00:00.000Z",
-          "guid": "https://stratechery.com/?p=19806",
+          "sourceId": "newsletter:stratechery",
+          "title": "2026.39: Begun, the Aggregator Wars Have",
+          "url": "https://stratechery.com/2026/begun-the-aggregator-wars-have/",
+          "publishedAt": "2026-09-25T17:00:00.000Z",
+          "guid": "https://stratechery.com/?p=20104",
           "source": "Stratechery (Ben Thompson)",
           "language": "en"
         }
@@ -24,11 +25,12 @@
     }
   ],
   "stats": {
-    "newsletterSources": 1
+    "sources": 1
   },
   "errors": [
-    "RSS: Error fetching One Useful Thing (Ethan Mollick): fetch failed",
+    "RSS: Failed to fetch AI Snake Oil: HTTP 403",
     "RSS: Error fetching The Algorithmic Bridge: fetch failed",
-    "RSS: Error fetching AI Snake Oil: fetch failed"
-  ]
+    "RSS: Error fetching One Useful Thing (Ethan Mollick): fetch failed"
+  ],
+  "schemaVersion": "1.0"
 }
