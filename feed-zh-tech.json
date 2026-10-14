@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T04:26:23.970Z",
+  "generatedAt": "2026-10-14T11:59:09.985Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "魔法原子具身Agent框架拿下MolmoSpaces全球第一",
-          "url": "https://www.qbitai.com/2026/10/503107.html",
-          "publishedAt": "2026-10-13T11:05:39.000Z",
-          "guid": "https://www.qbitai.com/?p=503107",
+          "title": "抢先盘点2026全球开发者先锋大会暨国际具身智能技能大赛十大亮点！",
+          "url": "https://www.qbitai.com/2026/10/503294.html",
+          "publishedAt": "2026-10-14T10:41:47.000Z",
+          "guid": "https://www.qbitai.com/?p=503294",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "梁文锋投了Swin Transformer作者！DeepSeek开始布局具身大脑",
-          "url": "https://www.qbitai.com/2026/10/503093.html",
-          "publishedAt": "2026-10-13T09:33:37.000Z",
-          "guid": "https://www.qbitai.com/?p=503093",
+          "title": "阶跃终端首款「Agent手机」STEPX Neo正式发布，创客先行",
+          "url": "https://www.qbitai.com/2026/10/503244.html",
+          "publishedAt": "2026-10-14T08:01:18.000Z",
+          "guid": "https://www.qbitai.com/?p=503244",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "中国车企反攻德系车心脏！巴黎车展国产品牌独占三成，大众CEO连忙呼吁抱团迎战",
-          "url": "https://www.qbitai.com/2026/10/502992.html",
-          "publishedAt": "2026-10-13T07:20:23.000Z",
-          "guid": "https://www.qbitai.com/?p=502992",
+          "title": "智能不出彩的「领克」，刚靠一次坠崖事故出圈了",
+          "url": "https://www.qbitai.com/2026/10/503231.html",
+          "publishedAt": "2026-10-14T07:12:02.000Z",
+          "guid": "https://www.qbitai.com/?p=503231",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,28 +53,28 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "已经能测夜间体征的 Apple Watch，为什么要再做一个睡眠呼吸暂停提醒",
-          "url": "https://sspai.com/post/92653",
-          "publishedAt": "2026-10-14T02:00:04.000Z",
-          "guid": "https://sspai.com/post/92653",
+          "title": "认知心理学背后的播客剪辑技巧",
+          "url": "https://sspai.com/post/114861",
+          "publishedAt": "2026-10-14T09:33:49.000Z",
+          "guid": "https://sspai.com/post/114861",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "派早报：Apple 发布 HomePod mini 2、HomeView 等新品",
-          "url": "https://sspai.com/post/116138",
-          "publishedAt": "2026-10-14T00:40:39.000Z",
-          "guid": "https://sspai.com/post/116138",
+          "title": "带给摄影师更多自由：Austin Mann 评 iPhone 18 Pro 影像体验",
+          "url": "https://sspai.com/post/115426",
+          "publishedAt": "2026-10-14T07:00:00.000Z",
+          "guid": "https://sspai.com/post/115426",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "社区速递 161 | 小米手表 S5、EVA 联名香水与换机热议",
-          "url": "https://sspai.com/post/116068",
-          "publishedAt": "2026-10-13T09:00:00.000Z",
-          "guid": "https://sspai.com/post/116068",
+          "title": "家中、这里、那里——Sonos Play 体验",
+          "url": "https://sspai.com/post/115382",
+          "publishedAt": "2026-10-14T04:10:30.000Z",
+          "guid": "https://sspai.com/post/115382",
           "source": "少数派",
           "language": "zh"
         }
