@@ -105,7 +105,7 @@ test('manifest records non-circular tracked content and critical-file integrity'
 }, async () => {
   const manifest = await readJson('release-manifest.json');
 
-  assert.equal(manifest.integrity.trackedContent.algorithm, 'git-ls-tree-sha256-v1');
+  assert.equal(manifest.integrity.trackedContent.algorithm, 'git-ls-tree-sha256-v2');
   assert.match(manifest.integrity.trackedContent.digest, /^[a-f0-9]{64}$/);
   assert.equal(manifest.integrity.criticalFiles.algorithm, 'sha256');
   assert.equal(Object.hasOwn(manifest.integrity.criticalFiles.files, 'release-manifest.json'), false);
@@ -288,6 +288,33 @@ test('tracked content digest changes for tracked add, remove, content, and mode 
   assert.notEqual(modeChanged.digest, contentChanged.digest);
   assert.notEqual(added.digest, modeChanged.digest);
   assert.equal(removed.digest, modeChanged.digest);
+});
+
+test('tracked content digest ignores the CI-republished feed artifacts', {
+  skip: validationMode === 'archive' ? 'Git object mutation is checkout-only' : false,
+}, async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'follow-up-feed-integrity-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await execFileAsync('git', ['init', '-q'], { cwd: root });
+  await execFileAsync('git', ['config', 'user.name', 'Integrity Test'], { cwd: root });
+  await execFileAsync('git', ['config', 'user.email', 'integrity@example.invalid'], { cwd: root });
+  await writeFile(join(root, 'tracked.txt'), 'original\n');
+  await writeFile(join(root, 'release-manifest.json'), '{}\n');
+  await writeFile(join(root, 'feed-candidates.json'), '{"candidates":[]}\n');
+  await execFileAsync('git', ['add', '.'], { cwd: root });
+  await execFileAsync('git', ['commit', '-qm', 'baseline'], { cwd: root });
+  const baseline = await computeTrackedContentDigest(root);
+
+  // The daily `chore: update feeds` commit must not invalidate the sealed inventory,
+  // otherwise the test step that gates Feed generation can never go green.
+  await writeFile(join(root, 'feed-candidates.json'), '{"candidates":[{"id":"new"}]}\n');
+  await execFileAsync('git', ['commit', '-qam', 'update feeds'], { cwd: root });
+  assert.equal((await computeTrackedContentDigest(root)).digest, baseline.digest);
+
+  // Release content still has to move the digest.
+  await writeFile(join(root, 'tracked.txt'), 'changed\n');
+  await execFileAsync('git', ['commit', '-qam', 'content'], { cwd: root });
+  assert.notEqual((await computeTrackedContentDigest(root)).digest, baseline.digest);
 });
 
 test('validator rejects malformed and mismatched product versions', async () => {

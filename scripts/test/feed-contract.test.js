@@ -298,7 +298,12 @@ test('digest feed loader uses canonical URLs and replaces each invalid feed with
   });
 
   assert.deepEqual(result.data.academic, []);
-  assert.ok(result.data.x.length > 0);
+  // X is published as an explicitly empty Feed whenever the X credential is not
+  // configured, so this check compares the loaded payload with the checked-in one
+  // instead of demanding a non-empty payload, and the non-empty assertion moves to
+  // a credential-free channel.
+  assert.deepEqual(result.data.x, (await readJson('feed-x.json')).x);
+  assert.ok(result.data.blogs.length > 0);
   assert.ok(result.errors.some((error) => (
     error.includes('Academic feed is invalid')
     && error.includes('compatible schema 1.x')

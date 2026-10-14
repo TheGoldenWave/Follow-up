@@ -1,6 +1,6 @@
 # Follow-up 项目进度
 
-更新日期：2026-09-27
+更新日期：2026-10-14
 
 ## 当前状态
 
@@ -54,6 +54,40 @@
 两项覆盖校验和绑定）；Python `unittest discover -s tests` 全量通过；跨运行时用例在全新空
 解释器（未安装任何第三方包）下同样通过。修复提交后仍需一次定时任务或手动触发确认 Feed
 真正落地，本文不把这视为已恢复的证据。
+
+### 中央 Feed 发布死锁与修复（2026-10-14）
+
+2026-10-06 至 2026-10-13，`Generate Feeds` 连续 8 次在 Test 步骤失败，中央 Feed 自
+2026-09-27 起 17 天没有更新（`feed-candidates.json.generatedAt` 停在
+`2026-09-27T05:15:39.150Z`）。这一轮和 09-27 那两轮不同：生成脚本本身没有报错，是发布链路
+把自己锁死了。
+
+死锁链条：`release-manifest.json` 的 `integrity.trackedContent.digest` 覆盖 `git ls-tree`
+的整棵受版本控制文件树；publish 作业每天把 8 个 Feed 文件提交到 `main`，于是这个密封值每天
+被提交本身作废；`release-manifest.test.js` 判红；Test 步骤排在 Generate feeds 之前，
+`npm test` 一红整个作业就中止，Feed 永远等不到重新生成。
+
+三处缺陷分别修复：
+
+- 发布清单不再密封 CI 每天重写的数据。`computeTrackedContentDigest()` 排除
+  `ARTIFACT_FILES` 与 `feed-artifact-checksums.txt`，算法随之升到
+  `git-ls-tree-sha256-v2`（schema 与 validator 同步放宽为枚举并校验新值）。Feed 产物自身的
+  完整性继续由 `scripts/validate-feed-artifact.js` 的校验和门禁负责。新增回归用例锁定
+  “改 Feed 不动 digest、改发布内容必动 digest”。
+- `scripts/test/collect-and-prepare.test.js` 的四个统一入口用例把时钟冻结在 `2026-09-09`，
+  却用仓库里签入的 `feed-candidates.json` 当夹具。Feed 每天前进，候选的 `lastSeenAt` 很快晚于
+  这个冻结时间，触发 `lastSeenAt must not be later than /generatedAt`，central、shadow、
+  hybrid 三个模式随即返回 1（local 不读中央 Feed，所以一直绿）。现在夹具的观测时间戳统一
+  归一到冻结时钟，不再随时间腐烂。
+- `scripts/test/feed-contract.test.js` 断言 `result.data.x.length > 0`。X 渠道在缺少
+  `X_BEARER_TOKEN` 时按设计发布空 Feed，这条断言把测试与仓库是否配置凭据绑在一起。改为与
+  签入文件逐项比对，非空断言移到不依赖凭据的 blogs 渠道。
+
+本地验证（提交前，工作区 `fix/central-feed-restore`）：Node 全量 729 项，728 通过、0 失败、
+1 跳过；`test/release-manifest.test.js` 与 `test/release-build.test.js` 合计 28 项全通过
+（含 `npm run test:archive`）。发布清单用
+`node release/validate-release.js --write-integrity --treeish <staged tree>` 从提交内容重算。
+修复合入后仍需一次定时任务或手动触发确认 Feed 真正恢复更新，本文不把这视为已恢复的证据。
 
 `v0.4.0-beta.1`–`v0.4.0-beta.4` 的 build 作业均在
 `Verify Python acquisition and isolated installation` 失败，未产出任何公开资产；

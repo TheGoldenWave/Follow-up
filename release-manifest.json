@@ -41,8 +41,8 @@
   },
   "integrity": {
     "trackedContent": {
-      "algorithm": "git-ls-tree-sha256-v1",
-      "digest": "c6d74b7ffddf7ef5ed634ff5d41ef8742b7546ce9463792b61116a3c68fb4759"
+      "algorithm": "git-ls-tree-sha256-v2",
+      "digest": "1baf6d3f0a97bb68aa2a1dc74778d9492254e4340ad6617dddcd4e41d171cbba"
     },
     "criticalFiles": {
       "algorithm": "sha256",
@@ -60,11 +60,11 @@
         "contracts/community-evidence.schema.json": "9f0db3a846fd0b3f068e3a07939cbaa27738f872122218ecd1fa741aebf836bd",
         "contracts/digest-curation-request.schema.json": "af4f261adcaaa9240da70013cc869fcd81372528edcc02c15c3ed404453df7d3",
         "contracts/digest-selection.schema.json": "5e08c383fe9755975e5e661f648d5a829e72f063f6dd42a8751aa7eecb121e3c",
-        "contracts/release-manifest.schema.json": "6208cb515d8111d023e64e6d0459eb84891a6d0728247ccf85f5a229b41fd443",
+        "contracts/release-manifest.schema.json": "0b8899a74eff74978fd2b772fac1f7ad56bc453c6c69d683cb40e70dd3bb2167",
         "contracts/review-candidates.schema.json": "cba51dad9891eb444db9ddf46b230e51cfebd9e88a14a8081699519a4a34b06e",
         "contracts/signal-batch.schema.json": "98d1764a53ffc4241ce4972977eaf79c243580579dc696799d97c346ff0aaa45",
         "contracts/v0.4-source-smoke.schema.json": "348bc6564a9dc23eaca740cd549c749b788e7b272dde64ac52e054bf4fb96a10",
-        "docs/project-progress.md": "85f04bafa9f8b53711d3ec8353926ad53f90c080686b798e7f53ddf015266a17",
+        "docs/project-progress.md": "528ddb4e5fe2a9728c12dcbbdf65d983ae58a5a1a01991b4c0fab7b9ce957f65",
         "docs/source-catalog.md": "0ea374956d3b2b79f5dc3483d3d1eade0dd349cb47d0985b3d6244d5efc4c70f",
         "docs/third-party/v0.1.0-dependencies.md": "177423f7323b5d25b89773254b5adf59b20dd6836a86752e867a7a35c36ca290",
         "prompts/curate-digest.md": "76f256d6d4335f0bc414288557a3f11a4b7cb5671eb27cb396385cede7cbaeb8",
@@ -124,7 +124,7 @@
         "scripts/release/build-release.sh": "dd7153a86876e78dcf45ffb76f82aa7a2d078a9ddfe3069a5634af33203a3c50",
         "scripts/release/check-provenance.js": "a8faf3a4d809c820d45012e3e3f58881dc7cdbe09e9ebd7af49d1fa5f9eea437",
         "scripts/release/scan-secrets.js": "03c239bccbe497d700ec3c3ed74b8e0c67216d274c6cc3652b871e4b08749482",
-        "scripts/release/validate-release.js": "83b3bc8f7fa9741e62bb84a4d43df3993e9374225e19d63b5a74aec3c781520c",
+        "scripts/release/validate-release.js": "d11329ca4b2620674c8d00e1f052f0433a151afc4ccd8318c08f58ce9f53a0c7",
         "scripts/release/verify-dependency-licenses.js": "f4b2603095df4651a54f7deeee741b697301a9672ee1c48cf61f8419325f1572",
         "scripts/release/verify-v0.4-source-smoke.js": "a568874744969b058eec3d8582913781816d88943d0fdbaa6b0aa282aaee6476",
         "scripts/report-shadow.js": "60f79f2fbad74917c2b0e1198e5584ce0ec29572a0672d416df11eadb3932a51",

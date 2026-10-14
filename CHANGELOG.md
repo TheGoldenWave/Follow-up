@@ -4,6 +4,19 @@ All notable changes to Follow-up are documented in this file.
 
 ## [Unreleased]
 
+- 修复中央 Feed 发布死锁：`release-manifest.json` 的 `integrity.trackedContent.digest` 覆盖
+  整棵受版本控制文件树，而 publish 作业每天把 8 个 Feed 文件提交到 `main`，使这个密封值每天
+  被提交本身作废，`release-manifest.test.js` 判红，排在 Generate feeds 之前的 Test 步骤随之中止
+  整个作业——中央 Feed 自 2026-09-27 起 17 天没有更新。现在该 digest 排除 `ARTIFACT_FILES` 与
+  `feed-artifact-checksums.txt`（算法升到 `git-ls-tree-sha256-v2`），Feed 产物自身的完整性仍由
+  `scripts/validate-feed-artifact.js` 的校验和门禁负责。
+- 修复 `scripts/test/collect-and-prepare.test.js` 统一入口用例的时间炸弹：时钟冻结在
+  `2026-09-09`，却用仓库签入的 `feed-candidates.json` 当夹具，Feed 前进后候选 `lastSeenAt`
+  晚于 `generatedAt`，central/shadow/hybrid 三个模式返回 1。夹具观测时间戳现在归一到冻结时钟。
+- 修复 `scripts/test/feed-contract.test.js` 断言 `result.data.x.length > 0`：X 渠道缺
+  `X_BEARER_TOKEN` 时按设计发布空 Feed，该断言把测试与仓库凭据绑定。改为与签入文件逐项比对，
+  非空断言移到不依赖凭据的 blogs 渠道。
+
 - 修复中央 Feed 发布作业从未真正可用的缺陷：`Generate Feeds` 的 publish 作业按设计不安装依赖、
   也不执行测试，但它调用的 `scripts/validate-feed-artifact.js` 需要 `ajv`。由于生成环节自
   2026-09-06 起一直在失败，该缺陷始终没有暴露；2026-09-27 生成第一次成功后，publish 作业以

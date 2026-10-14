@@ -7,7 +7,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
+import { ARTIFACT_FILES, CHECKSUM_FILE } from '../validate-feed-artifact.js';
+
 const execFileAsync = promisify(execFile);
+
+export const TRACKED_CONTENT_ALGORITHM = 'git-ls-tree-sha256-v2';
+
+// The Generate Feeds workflow republishes these files on `main` every day. They are
+// published data rather than release content, and their integrity is already covered by
+// `scripts/validate-feed-artifact.js`, so they stay out of the release inventory: sealing
+// them into the digest made every scheduled Feed commit invalidate the manifest, which
+// turned the test step that gates Feed generation permanently red.
+const GENERATED_FEED_ARTIFACTS = new Set([...ARTIFACT_FILES, CHECKSUM_FILE]);
 
 export const EXPECTED_FEEDS = [
   'x',
@@ -238,11 +249,16 @@ export async function computeTrackedContentDigest(root, treeish = 'HEAD') {
     if (index > start) records.push(output.subarray(start, index));
     start = index + 1;
   }
-  const manifestSuffix = Buffer.from('\trelease-manifest.json');
-  const included = records.filter((record) => !record.subarray(-manifestSuffix.length).equals(manifestSuffix));
+  const manifestName = 'release-manifest.json';
+  const included = records.filter((record) => {
+    const separator = record.indexOf(9);
+    if (separator === -1) return true;
+    const path = record.subarray(separator + 1).toString('utf8');
+    return !path.endsWith(manifestName) && !GENERATED_FEED_ARTIFACTS.has(path);
+  });
   const canonicalStream = Buffer.concat(included.flatMap((record) => [record, Buffer.from([0])]));
   return {
-    algorithm: 'git-ls-tree-sha256-v1',
+    algorithm: TRACKED_CONTENT_ALGORITHM,
     digest: sha256(canonicalStream),
   };
 }
@@ -422,8 +438,8 @@ export function validateManifest(manifest, repositoryVersion) {
       ['algorithm', 'digest'],
       errors,
     )) {
-      if (manifest.integrity.trackedContent.algorithm !== 'git-ls-tree-sha256-v1') {
-        errors.push('manifest.integrity.trackedContent.algorithm must be git-ls-tree-sha256-v1');
+      if (manifest.integrity.trackedContent.algorithm !== TRACKED_CONTENT_ALGORITHM) {
+        errors.push(`manifest.integrity.trackedContent.algorithm must be ${TRACKED_CONTENT_ALGORITHM}`);
       }
       if (!/^[a-f0-9]{64}$/.test(manifest.integrity.trackedContent.digest ?? '')) {
         errors.push('manifest.integrity.trackedContent.digest must be a lowercase SHA-256 digest');
