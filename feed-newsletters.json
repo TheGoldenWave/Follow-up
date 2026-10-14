@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-27T05:15:39.150Z",
+  "generatedAt": "2026-10-14T04:26:23.970Z",
   "lookbackHours": 72,
   "newsletters": [
     {
@@ -14,10 +14,10 @@
       "items": [
         {
           "sourceId": "newsletter:stratechery",
-          "title": "2026.39: Begun, the Aggregator Wars Have",
-          "url": "https://stratechery.com/2026/begun-the-aggregator-wars-have/",
-          "publishedAt": "2026-09-25T17:00:00.000Z",
-          "guid": "https://stratechery.com/?p=20104",
+          "title": "SpaceX Buys More Spectrum, Musk and Market Structure, Distributed Cellular",
+          "url": "https://stratechery.com/2026/spacex-buys-more-spectrum-musk-and-market-structure-distributed-cellular/",
+          "publishedAt": "2026-10-13T10:00:00.000Z",
+          "guid": "https://stratechery.com/?p=20297",
           "source": "Stratechery (Ben Thompson)",
           "language": "en"
         }
