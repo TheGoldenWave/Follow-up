@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T11:59:09.985Z",
+  "generatedAt": "2026-10-15T11:35:24.800Z",
   "lookbackHours": 168,
   "papers": [
     {
@@ -14,46 +14,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Artificiality's First Exam: An LLM-Referenced C-test for Supraintelligence",
-          "url": "https://arxiv.org/abs/2610.14005",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14005v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "The Silent Failures in Agentic Data Science",
-          "url": "https://arxiv.org/abs/2610.14115",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14115v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "ClawLoop: Self-Improving Agents via Harness-Native Training Loop",
-          "url": "https://arxiv.org/abs/2610.14118",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14118v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
           "title": "Correction Training for Diffusion Models",
           "url": "https://arxiv.org/abs/2610.14136",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14136v1",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.14136v2",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Long-Horizon-Terminal-Bench 2.0: Automating Diverse Task Construction and Measuring Sustained Agent Progress",
-          "url": "https://arxiv.org/abs/2610.14146",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14146v1",
+          "title": "Visualizing the World Model in an Agent's Value Function",
+          "url": "https://arxiv.org/abs/2610.14186",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.14186v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Should SLMs be in the Driver's Seat? A Study of Local Models as Interpreters in Cloud-Written Agent Programs",
+          "url": "https://arxiv.org/abs/2610.14209",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.14209v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Harness^2: Recursive Agent Harnessing for an Open World",
+          "url": "https://arxiv.org/abs/2610.14224",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.14224v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Echo: Error-Compensated 4-Bit Tensor-Parallel Communication for LLM Training and Inference",
+          "url": "https://arxiv.org/abs/2610.14277",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.14277v1",
           "source": "arXiv cs.AI",
           "language": "en"
         }
@@ -71,46 +71,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-cl",
-          "title": "PsyBer-Agent: A Psychology-Driven User Agent for Recommender Systems",
-          "url": "https://arxiv.org/abs/2610.13989",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13989v1",
+          "title": "Following the Flow the Law Requires: Training Voice Agents to Transfer to Unseen Regulated Procedures in Debt Collection",
+          "url": "https://arxiv.org/abs/2610.18881",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.18881v1",
           "source": "arXiv cs.CL",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cl",
-          "title": "Loose Lips: Understanding Privacy Leakage in Agentic Dialogue",
-          "url": "https://arxiv.org/abs/2610.14071",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14071v1",
+          "title": "Can LLMs Access their World Knowledge for Event Prediction?",
+          "url": "https://arxiv.org/abs/2610.19021",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19021v1",
           "source": "arXiv cs.CL",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cl",
-          "title": "Is the Future Predictable? Modeling Future Predictability for Reliable Temporal Reasoning",
-          "url": "https://arxiv.org/abs/2610.14073",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14073v1",
+          "title": "DUALVIEW: Leveraging Broad and Output-Specific Evidence for LLM-based Multi-Output Text Regression",
+          "url": "https://arxiv.org/abs/2610.19206",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19206v1",
           "source": "arXiv cs.CL",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cl",
-          "title": "Fin_Agent at FinEval 2026: Task-Aware Methods for Multilingual Financial NLP",
-          "url": "https://arxiv.org/abs/2610.14101",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14101v1",
+          "title": "Titan-Llama: Retrofitting Pre-trained LLMs with External Neural Memory Modules",
+          "url": "https://arxiv.org/abs/2610.19210",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19210v1",
           "source": "arXiv cs.CL",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cl",
-          "title": "Agentic Data Engineering for LLMs: System Design and a Controlled Empirical Study",
-          "url": "https://arxiv.org/abs/2610.14238",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14238v1",
+          "title": "Can LLM Agents Efficiently Identify Appliance Faults? Insights From Diagnosing a Simulated Appliance",
+          "url": "https://arxiv.org/abs/2610.19291",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19291v1",
           "source": "arXiv cs.CL",
           "language": "en"
         }
@@ -128,46 +128,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-cr",
-          "title": "An Empirical Case Study of Prompt Engineering Strategies for Bypassing Multi-Layer Agent Security Defenses",
-          "url": "https://arxiv.org/abs/2610.14116",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14116v1",
+          "title": "Limits of Statistical Assurance for Embodied and Agentic AI under Adaptive Adversaries",
+          "url": "https://arxiv.org/abs/2610.18948",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.18948v1",
           "source": "arXiv cs.CR (AI Security)",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cr",
-          "title": "Physical Side-Channel Attacks on Edge LLMs: Extracting Output Tokens and User Prompts",
-          "url": "https://arxiv.org/abs/2610.14215",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14215v1",
+          "title": "CyberArena: Benchmarking AI Agents in Live Symmetric Attack-and-Defense Combat",
+          "url": "https://arxiv.org/abs/2610.19005",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19005v1",
           "source": "arXiv cs.CR (AI Security)",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cr",
-          "title": "Watermarking for Byzantine Robust LLM Training",
-          "url": "https://arxiv.org/abs/2610.14289",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14289v1",
+          "title": "Beyond Maliciousness: Static and Runtime Attack-Surface Profiling of Agent Skills",
+          "url": "https://arxiv.org/abs/2610.19264",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19264v1",
           "source": "arXiv cs.CR (AI Security)",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cr",
-          "title": "Natural Code Transformation Confuses Agents in Vulnerability Analysis",
-          "url": "https://arxiv.org/abs/2610.14350",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14350v1",
+          "title": "MMA-SafetyBench: A Benchmark for Multimodal Agent Safety Evaluation",
+          "url": "https://arxiv.org/abs/2610.19384",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19384v1",
           "source": "arXiv cs.CR (AI Security)",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cr",
-          "title": "Tokenization-Invariant Watermarking: A Byte-Local Method for LLM Text",
-          "url": "https://arxiv.org/abs/2610.14378",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14378v1",
+          "title": "What You Sign Is Not What You Run: The Verifiability Gap in Quantized LLM Supply Chains",
+          "url": "https://arxiv.org/abs/2610.19498",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19498v1",
           "source": "arXiv cs.CR (AI Security)",
           "language": "en"
         }
@@ -185,46 +185,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-cv",
-          "title": "How Vision Transformers Represent Position: A Mechanistic Comparison of Absolute and Rotary Positional Encodings",
-          "url": "https://arxiv.org/abs/2610.13992",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13992v1",
+          "title": "How Far Can Coding Agents Go in Visual Generation?",
+          "url": "https://arxiv.org/abs/2610.19025",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19025v1",
           "source": "arXiv cs.CV",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cv",
-          "title": "SharedSAE: a unified sparse dictionary across u-net blocks and denoising time for diffusion models",
-          "url": "https://arxiv.org/abs/2610.13997",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13997v1",
+          "title": "Why Do VLMs Fail at Remote Physiological Measurement? Rethinking with Physiological Grounding and Numerical Alignment",
+          "url": "https://arxiv.org/abs/2610.19052",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19052v1",
           "source": "arXiv cs.CV",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cv",
-          "title": "Scenes as an Attack Surface: Uncovering Scene-Grounded Safety Failures in MLLMs",
-          "url": "https://arxiv.org/abs/2610.14094",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14094v1",
+          "title": "WorldMemBench: A Comprehensive Benchmark for Memory of Video World Models",
+          "url": "https://arxiv.org/abs/2610.19063",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19063v1",
           "source": "arXiv cs.CV",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cv",
-          "title": "Latent World Action Model for GUI Agents",
-          "url": "https://arxiv.org/abs/2610.14228",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14228v1",
+          "title": "Towards a Data-Centric Understanding of Spatial Reasoning in Multimodal Large Language Models",
+          "url": "https://arxiv.org/abs/2610.19108",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19108v1",
           "source": "arXiv cs.CV",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-cv",
-          "title": "Image Diffusion Models Are Good 3D Human Motion Generators",
-          "url": "https://arxiv.org/abs/2610.14254",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14254v1",
+          "title": "Into the LidarVerse: A Real-Time Unified LiDAR World Model Across Tasks and Sensors",
+          "url": "https://arxiv.org/abs/2610.19201",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19201v1",
           "source": "arXiv cs.CV",
           "language": "en"
         }
@@ -242,46 +242,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-lg",
-          "title": "MDN-VJEPA: Multimodal Probabilistic Joint-Embedding World Models",
-          "url": "https://arxiv.org/abs/2610.13956",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13956v1",
+          "title": "Inverse Reasoning Models for Efficient Post-Training and Verification from Answer-Only Data",
+          "url": "https://arxiv.org/abs/2610.18878",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.18878v1",
           "source": "arXiv cs.LG",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-lg",
-          "title": "LACRM: LLM-Guided Mining of Directed Advertiser Competition Relationships in E-Commerce Advertising",
-          "url": "https://arxiv.org/abs/2610.13959",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13959v1",
+          "title": "Do Perturbation Predictors Learn Gene Interactions? Diagnosing Extrapolation in Agentic Screening",
+          "url": "https://arxiv.org/abs/2610.18880",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.18880v1",
           "source": "arXiv cs.LG",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-lg",
-          "title": "Predict Before You Modify: Learning Improvement Dynamics for Self-Evolving Agents",
-          "url": "https://arxiv.org/abs/2610.13991",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13991v1",
+          "title": "Data Density Scaling Laws for Image Self-Distillation",
+          "url": "https://arxiv.org/abs/2610.19013",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19013v1",
           "source": "arXiv cs.LG",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-lg",
-          "title": "GameSmith: Scaling Zero-Sum Self-Play with Synthesised Games",
-          "url": "https://arxiv.org/abs/2610.13995",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13995v1",
+          "title": "Scaling Cheap Synthetic Pretraining Improves Indoor Radio-Map Prediction",
+          "url": "https://arxiv.org/abs/2610.19015",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19015v1",
           "source": "arXiv cs.LG",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-lg",
-          "title": "Splicing Hints into Reasoning Traces: Learning from Demonstrator Failures",
-          "url": "https://arxiv.org/abs/2610.13996",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.13996v1",
+          "title": "Who Should We Listen to More? Welfare-Aware Preference Acquisition for Pluralistic Alignment",
+          "url": "https://arxiv.org/abs/2610.19035",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19035v1",
           "source": "arXiv cs.LG",
           "language": "en"
         }
@@ -299,46 +299,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-ro",
-          "title": "RoboHarness: A Simple Harness Outperforms VLA and World Actions Models",
-          "url": "https://arxiv.org/abs/2610.14018",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14018v1",
+          "title": "$\\lambda_0$: Scaling Open-World Egocentric Human Data for Humanoid Loco-Manipulation",
+          "url": "https://arxiv.org/abs/2610.18950",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.18950v1",
           "source": "arXiv cs.RO",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ro",
-          "title": "Building Trustworthy Household Robots through Open-World Safety",
-          "url": "https://arxiv.org/abs/2610.14034",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14034v1",
+          "title": "Contact-UAN: Unsupervised Actuator Networks as a Residual World Model for Humanoid Control",
+          "url": "https://arxiv.org/abs/2610.18991",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.18991v1",
           "source": "arXiv cs.RO",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ro",
-          "title": "From bits to atoms: A survey of cross-layer safety in Embodied AI",
-          "url": "https://arxiv.org/abs/2610.14038",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14038v1",
+          "title": "FACT: A Multimodal Force-Action-Track Foundation Model for Human-to-Robot Dexterity",
+          "url": "https://arxiv.org/abs/2610.19155",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19155v1",
           "source": "arXiv cs.RO",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ro",
-          "title": "Do My Samples Help? Compute Budget Allocation for Real-World Sampling-Based MPC in Contact-Rich Manipulation",
-          "url": "https://arxiv.org/abs/2610.14064",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14064v1",
+          "title": "Full-Order Safety for Nonlinear Reduced-Order MPC",
+          "url": "https://arxiv.org/abs/2610.19250",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19250v1",
           "source": "arXiv cs.RO",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ro",
-          "title": "Safety-Oriented Trajectory Ranking from BEV Perception Outputs",
-          "url": "https://arxiv.org/abs/2610.14066",
-          "publishedAt": "2026-10-14T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.14066v1",
+          "title": "Topology-Preserving Multi-Usage Pipe Centerline Refinement under Permanent Tubular Occupancy",
+          "url": "https://arxiv.org/abs/2610.19403",
+          "publishedAt": "2026-10-15T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.19403v1",
           "source": "arXiv cs.RO",
           "language": "en"
         }

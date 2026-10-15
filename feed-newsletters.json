@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T11:59:09.985Z",
+  "generatedAt": "2026-10-15T11:35:24.800Z",
   "lookbackHours": 72,
   "newsletters": [
     {
@@ -14,10 +14,10 @@
       "items": [
         {
           "sourceId": "newsletter:stratechery",
-          "title": "Apple HomeView, The New Apple TV, The App Story",
-          "url": "https://stratechery.com/2026/apple-homeview-the-new-apple-tv-the-app-story/",
-          "publishedAt": "2026-10-14T10:00:00.000Z",
-          "guid": "https://stratechery.com/?p=20306",
+          "title": "A Conversation With Ari Emanuel About Entertainment and AI",
+          "url": "https://stratechery.com/2026/a-conversation-with-ari-emanuel-about-entertainment-and-ai/",
+          "publishedAt": "2026-10-15T10:00:00.000Z",
+          "guid": "https://stratechery.com/?p=20319",
           "source": "Stratechery (Ben Thompson)",
           "language": "en"
         }

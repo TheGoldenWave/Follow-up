@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T11:59:09.985Z",
+  "generatedAt": "2026-10-15T11:35:24.800Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "抢先盘点2026全球开发者先锋大会暨国际具身智能技能大赛十大亮点！",
-          "url": "https://www.qbitai.com/2026/10/503294.html",
-          "publishedAt": "2026-10-14T10:41:47.000Z",
-          "guid": "https://www.qbitai.com/?p=503294",
+          "title": "7天几百元开一家店！用千问办公电商版，立省启动资金5万元",
+          "url": "https://www.qbitai.com/2026/10/503303.html",
+          "publishedAt": "2026-10-15T01:56:20.000Z",
+          "guid": "https://www.qbitai.com/?p=503303",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "阶跃终端首款「Agent手机」STEPX Neo正式发布，创客先行",
-          "url": "https://www.qbitai.com/2026/10/503244.html",
-          "publishedAt": "2026-10-14T08:01:18.000Z",
-          "guid": "https://www.qbitai.com/?p=503244",
+          "title": "《变形计》综艺赛博复活，AI版MrBeast爆火，LibTV下场「造星」了",
+          "url": "https://www.qbitai.com/2026/10/503211.html",
+          "publishedAt": "2026-10-14T07:03:44.000Z",
+          "guid": "https://www.qbitai.com/?p=503211",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "智能不出彩的「领克」，刚靠一次坠崖事故出圈了",
-          "url": "https://www.qbitai.com/2026/10/503231.html",
-          "publishedAt": "2026-10-14T07:12:02.000Z",
-          "guid": "https://www.qbitai.com/?p=503231",
+          "title": "STEPX首款大模型原生智能体手机STEPX Neo正式发布",
+          "url": "https://www.qbitai.com/2026/10/503201.html",
+          "publishedAt": "2026-10-14T06:45:38.000Z",
+          "guid": "https://www.qbitai.com/?p=503201",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,28 +53,28 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "认知心理学背后的播客剪辑技巧",
-          "url": "https://sspai.com/post/114861",
-          "publishedAt": "2026-10-14T09:33:49.000Z",
-          "guid": "https://sspai.com/post/114861",
+          "title": "新玩意 253｜少数派的编辑们最近买了啥？",
+          "url": "https://sspai.com/post/116246",
+          "publishedAt": "2026-10-15T09:10:14.000Z",
+          "guid": "https://sspai.com/post/116246",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "带给摄影师更多自由：Austin Mann 评 iPhone 18 Pro 影像体验",
-          "url": "https://sspai.com/post/115426",
-          "publishedAt": "2026-10-14T07:00:00.000Z",
-          "guid": "https://sspai.com/post/115426",
+          "title": "顺应变化，重申标准：《少数派创作手册》修订说明",
+          "url": "https://sspai.com/post/116181",
+          "publishedAt": "2026-10-15T08:09:12.000Z",
+          "guid": "https://sspai.com/post/116181",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "家中、这里、那里——Sonos Play 体验",
-          "url": "https://sspai.com/post/115382",
-          "publishedAt": "2026-10-14T04:10:30.000Z",
-          "guid": "https://sspai.com/post/115382",
+          "title": "学得会的快捷指令，零基础入门苹果效率魔法",
+          "url": "https://sspai.com/post/116182",
+          "publishedAt": "2026-10-15T06:30:00.000Z",
+          "guid": "https://sspai.com/post/116182",
           "source": "少数派",
           "language": "zh"
         }
