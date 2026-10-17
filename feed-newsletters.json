@@ -1,9 +1,31 @@
 {
-  "generatedAt": "2026-10-16T11:29:57.188Z",
+  "generatedAt": "2026-10-17T10:49:50.943Z",
   "lookbackHours": 72,
-  "newsletters": [],
+  "newsletters": [
+    {
+      "sourceId": "newsletter:stratechery",
+      "source": "Stratechery (Ben Thompson)",
+      "url": "https://stratechery.com/",
+      "tags": [
+        "newsletter",
+        "tech-strategy",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "newsletter:stratechery",
+          "title": "2026.42: Home At Last",
+          "url": "https://stratechery.com/2026/home-at-last/",
+          "publishedAt": "2026-10-16T17:42:42.000Z",
+          "guid": "https://stratechery.com/?p=20315",
+          "source": "Stratechery (Ben Thompson)",
+          "language": "en"
+        }
+      ]
+    }
+  ],
   "stats": {
-    "sources": 0
+    "sources": 1
   },
   "errors": [
     "RSS: Failed to fetch AI Snake Oil: HTTP 403",

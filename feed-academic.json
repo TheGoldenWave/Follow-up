@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T11:29:57.188Z",
+  "generatedAt": "2026-10-17T10:49:50.943Z",
   "lookbackHours": 168,
   "papers": [
     {
@@ -14,339 +14,54 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "The World Won't Wait: Evaluating and Teaching Agents Under a Live Clock",
-          "url": "https://arxiv.org/abs/2610.20665",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20665v1",
+          "title": "L2G-SR: Learning to Guide LLM-based Symbolic Regression",
+          "url": "https://arxiv.org/abs/2610.20685",
+          "publishedAt": "2026-10-17T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.20685v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Value-Informed Schedule Trimming for Accelerated Sequential Monte Carlo Guidance in Discrete Diffusion",
-          "url": "https://arxiv.org/abs/2610.20669",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20669v1",
+          "title": "When Reality Outpaces Cognition: A New Scaling Principle for Reliable Intelligence",
+          "url": "https://arxiv.org/abs/2610.20764",
+          "publishedAt": "2026-10-17T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.20764v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "AlphaDiana: A Measurement System for Agents in Verifiable Reasoning Tasks",
-          "url": "https://arxiv.org/abs/2610.20675",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20675v1",
+          "title": "ARIA: Runtime Inspection and Amendment for Multi-Agent Systems",
+          "url": "https://arxiv.org/abs/2610.20780",
+          "publishedAt": "2026-10-17T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.20780v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Counterfactual Neighborhood Risk Fields: Evidence-Grounded Selective Safety for Vision-Language Models",
-          "url": "https://arxiv.org/abs/2610.20679",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20679v1",
+          "title": "Open-world AI: a Tale of Three Requirements",
+          "url": "https://arxiv.org/abs/2610.20782",
+          "publishedAt": "2026-10-17T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.20782v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "IneqAgent: Agentic Inequality Proving in Lean with Symbolic Computation",
-          "url": "https://arxiv.org/abs/2610.20681",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20681v1",
+          "title": "EvolvingBrain: An Adaptive Skill System for Multi-modal Agents Self-Evolution in Open Worlds",
+          "url": "https://arxiv.org/abs/2610.20786",
+          "publishedAt": "2026-10-17T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.20786v1",
           "source": "arXiv cs.AI",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-cl",
-      "source": "arXiv cs.CL",
-      "url": "https://arxiv.org/list/cs.CL/recent",
-      "tags": [
-        "academic",
-        "nlp",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "PRISM: PRIvileged Sibling-guided Multi-Agent Topology Design",
-          "url": "https://arxiv.org/abs/2610.20628",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20628v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "Jev-as-a-Judge for RAG Claim Verification: Confidence-Gated Cascading Between a Non-Generative Verifier and a Frontier LLM",
-          "url": "https://arxiv.org/abs/2610.20634",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20634v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "Exploring the Design Space of Permutation Diffusion LLMs",
-          "url": "https://arxiv.org/abs/2610.20635",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20635v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "AbridgeKV: Compressing Long Reasoning into the KV Cache of Learned Pause Tokens",
-          "url": "https://arxiv.org/abs/2610.20641",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20641v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "CoTS: Competitive Token Selection for Latent Reasoning in Large Language Models",
-          "url": "https://arxiv.org/abs/2610.20642",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20642v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-cr",
-      "source": "arXiv cs.CR (AI Security)",
-      "url": "https://arxiv.org/list/cs.CR/recent",
-      "tags": [
-        "academic",
-        "security",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "CascadeLedger: Counterfactual Auditing of Information and Resource Integrity in LLM Cascades",
-          "url": "https://arxiv.org/abs/2610.20668",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20668v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "INFUSE: A Unified Surface Benchmark for Indirect Prompt Injection in Agentic Systems",
-          "url": "https://arxiv.org/abs/2610.20776",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20776v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "Thinking in Graphs: Neo4j-Backed Exploit-Chain Reasoning for LLM Penetration-Testing Agents",
-          "url": "https://arxiv.org/abs/2610.20902",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20902v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "Approve What, Exactly? Effect Binding and Trusted Rendering for Agent Step-Up Authorization",
-          "url": "https://arxiv.org/abs/2610.21063",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.21063v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "Stronger Judges Do Not See More: Deployment-Integrity Blindness in LLM Evaluation",
-          "url": "https://arxiv.org/abs/2610.21135",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.21135v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-cv",
-      "source": "arXiv cs.CV",
-      "url": "https://arxiv.org/list/cs.CV/recent",
-      "tags": [
-        "academic",
-        "vision",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "Orbia: Do Generated Videos Form a Consistent 3D World?",
-          "url": "https://arxiv.org/abs/2610.20693",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20693v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "WorldCast: Exploring Intelligent Visual Generation in World State Prediction",
-          "url": "https://arxiv.org/abs/2610.20731",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20731v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "Purify Before You Align: Improving Representation Alignment for Diffusion Models",
-          "url": "https://arxiv.org/abs/2610.20761",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20761v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "ReasonUni: Reasoning-Augmented Reconstruction Advances Unified Multimodal Models",
-          "url": "https://arxiv.org/abs/2610.20781",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20781v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "Intern Lumina U2: A Multi-Codebook Diffusion Large Language Model for Omni-Visual Understanding and Image Generation",
-          "url": "https://arxiv.org/abs/2610.20818",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20818v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-lg",
-      "source": "arXiv cs.LG",
-      "url": "https://arxiv.org/list/cs.LG/recent",
-      "tags": [
-        "academic",
-        "ml",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Expanding Attention: A Taylor-Series Route to Linear-Time Transformers with a Fixed Number of Recurrent States",
-          "url": "https://arxiv.org/abs/2610.20637",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20637v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Feature Elicitation for SAE Steering of Deceptive Behaviour in Small LLMs",
-          "url": "https://arxiv.org/abs/2610.20638",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20638v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Same Answer, New Box: How Much of RLVR's Out-of-Domain Gain Is Answer Format?",
-          "url": "https://arxiv.org/abs/2610.20639",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20639v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "On-Policy Residual Learning for Diffusion Language Models",
-          "url": "https://arxiv.org/abs/2610.20687",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20687v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Quantile-Guided Diffusion for Probabilistic Time-Series Forecasting",
-          "url": "https://arxiv.org/abs/2610.20739",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20739v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-ro",
-      "source": "arXiv cs.RO",
-      "url": "https://arxiv.org/list/cs.RO/recent",
-      "tags": [
-        "academic",
-        "robotics",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "Race to Recovery: Designing Advanced Safety Systems for Autonomous Driving via Learning Autonomous Racing",
-          "url": "https://arxiv.org/abs/2610.20873",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20873v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "BubbleCBF: Constructive Safety for Second-Order Systems and Application to Autonomous Robot Navigation in Unknown Environments",
-          "url": "https://arxiv.org/abs/2610.20895",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20895v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "KODA: Kinematics--Observation Data Alignment for Humanoid Learning from Human Egocentric Demonstration",
-          "url": "https://arxiv.org/abs/2610.21152",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.21152v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "An Agentic Framework for Proactive Robots with Procedural Assistance Memory",
-          "url": "https://arxiv.org/abs/2610.21211",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.21211v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "From Optical Flow to Safety: Visual Safety Certification via Scale-Free Relative Motion",
-          "url": "https://arxiv.org/abs/2610.21374",
-          "publishedAt": "2026-10-16T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.21374v1",
-          "source": "arXiv cs.RO",
           "language": "en"
         }
       ]
     }
   ],
   "stats": {
-    "sources": 6
+    "sources": 1
   },
   "schemaVersion": "1.0"
 }
