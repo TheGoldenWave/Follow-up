@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-17T10:49:50.943Z",
+  "generatedAt": "2026-10-18T11:13:09.031Z",
   "initializedAt": "2026-09-06T00:00:00.000Z",
   "continuousHistorySince": "2026-09-06T00:00:00.000Z",
   "retention": {
@@ -544,17 +544,77 @@
       "channel": "zh-tech",
       "sourceName": "量子位",
       "status": "ok",
-      "candidateCount": 21
+      "candidateCount": 24
     },
     {
       "sourceId": "zh-tech:sspai",
       "channel": "zh-tech",
       "sourceName": "少数派",
       "status": "ok",
-      "candidateCount": 21
+      "candidateCount": 22
     }
   ],
   "candidates": [
+    {
+      "candidateId": "6abe8d45405dc44183fbfc75311221bd59930fa699767b3dcca256d6318e8a62",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/115241",
+      "canonicalUrl": "https://sspai.com/post/115241",
+      "title": "Quote/0 妙用 +1，把墨水屏变成点餐助手",
+      "author": "少数派",
+      "publishedAt": "2026-10-18T07:01:02.000Z",
+      "firstSeenAt": "2026-10-18T11:13:09.031Z",
+      "lastSeenAt": "2026-10-18T11:13:09.031Z",
+      "summarizationContent": "Quote/0 妙用 +1，把墨水屏变成点餐助手",
+      "contentTruncated": false,
+      "contentFingerprint": "09a15be057f2a493cd9488ef24cdc76e3bcceb0f57089d3b64425b2b61fb9f3e"
+    },
+    {
+      "candidateId": "1cea1eae854c92395373db9eda38ba1eaf2cfba0638f735797855508db7c5198",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=504067",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/504067.html",
+      "title": "突发！DeepSeek新模型发布，超级性价比斩杀一切",
+      "author": "量子位",
+      "publishedAt": "2026-10-17T12:21:09.000Z",
+      "firstSeenAt": "2026-10-18T11:13:09.031Z",
+      "lastSeenAt": "2026-10-18T11:13:09.031Z",
+      "summarizationContent": "突发！DeepSeek新模型发布，超级性价比斩杀一切",
+      "contentTruncated": false,
+      "contentFingerprint": "8eea192aa2410d1bb146d14c9c69fe0d4a5694e4dbb11dcfcf9ebbdcad0e944e"
+    },
+    {
+      "candidateId": "17b758fea884b00c72bcd4dd3fc3639621c1b82d107ccc984f5eb79729131af4",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=503965",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/503965.html",
+      "title": "智谱新模型，懂法方面全球第一了",
+      "author": "量子位",
+      "publishedAt": "2026-10-17T12:13:45.000Z",
+      "firstSeenAt": "2026-10-18T11:13:09.031Z",
+      "lastSeenAt": "2026-10-18T11:13:09.031Z",
+      "summarizationContent": "智谱新模型，懂法方面全球第一了",
+      "contentTruncated": false,
+      "contentFingerprint": "69c231660b45060b061089efb6a85c4f2d466227ff464ba699e685dfd91a9163"
+    },
+    {
+      "candidateId": "34f8562e9d745db437b54e10acb354d3d3b581f489d2f154d9951100a2e3ff6e",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=503935",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/503935.html",
+      "title": "清华开源！智能体操作系统任务成本降83%，AI记忆可查可改",
+      "author": "量子位",
+      "publishedAt": "2026-10-17T12:10:35.000Z",
+      "firstSeenAt": "2026-10-18T11:13:09.031Z",
+      "lastSeenAt": "2026-10-18T11:13:09.031Z",
+      "summarizationContent": "清华开源！智能体操作系统任务成本降83%，AI记忆可查可改",
+      "contentTruncated": false,
+      "contentFingerprint": "e9e3ade6ebbfdace4ef2ba26e68b1da920f047d06fe18a9360315b8696a26798"
+    },
     {
       "candidateId": "8e874c592345228ad23a17475b457fdd3ef5780bc2a4ea9fb687a5c8a532d6fa",
       "channel": "zh-tech",

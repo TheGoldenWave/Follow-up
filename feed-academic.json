@@ -1,67 +1,9 @@
 {
-  "generatedAt": "2026-10-17T10:49:50.943Z",
+  "generatedAt": "2026-10-18T11:13:09.031Z",
   "lookbackHours": 168,
-  "papers": [
-    {
-      "sourceId": "academic:arxiv-cs-ai",
-      "source": "arXiv cs.AI",
-      "url": "https://arxiv.org/list/cs.AI/recent",
-      "tags": [
-        "academic",
-        "ai",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "L2G-SR: Learning to Guide LLM-based Symbolic Regression",
-          "url": "https://arxiv.org/abs/2610.20685",
-          "publishedAt": "2026-10-17T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20685v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "When Reality Outpaces Cognition: A New Scaling Principle for Reliable Intelligence",
-          "url": "https://arxiv.org/abs/2610.20764",
-          "publishedAt": "2026-10-17T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20764v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "ARIA: Runtime Inspection and Amendment for Multi-Agent Systems",
-          "url": "https://arxiv.org/abs/2610.20780",
-          "publishedAt": "2026-10-17T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20780v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "Open-world AI: a Tale of Three Requirements",
-          "url": "https://arxiv.org/abs/2610.20782",
-          "publishedAt": "2026-10-17T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20782v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "EvolvingBrain: An Adaptive Skill System for Multi-modal Agents Self-Evolution in Open Worlds",
-          "url": "https://arxiv.org/abs/2610.20786",
-          "publishedAt": "2026-10-17T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.20786v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        }
-      ]
-    }
-  ],
+  "papers": [],
   "stats": {
-    "sources": 1
+    "sources": 0
   },
   "schemaVersion": "1.0"
 }

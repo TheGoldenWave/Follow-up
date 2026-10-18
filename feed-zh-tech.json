@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-17T10:49:50.943Z",
+  "generatedAt": "2026-10-18T11:13:09.031Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "清华特奖得主AI创业再+1：GeoPT一作入局物理世界模型",
-          "url": "https://www.qbitai.com/2026/10/503880.html",
-          "publishedAt": "2026-10-16T12:54:54.000Z",
-          "guid": "https://www.qbitai.com/?p=503880",
+          "title": "突发！DeepSeek新模型发布，超级性价比斩杀一切",
+          "url": "https://www.qbitai.com/2026/10/504067.html",
+          "publishedAt": "2026-10-17T12:21:09.000Z",
+          "guid": "https://www.qbitai.com/?p=504067",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "从“看懂世界”到“预演下一步”：世界模型与 VLA，如何让机器人拥有真正的“具身大脑”？",
-          "url": "https://www.qbitai.com/2026/10/503865.html",
-          "publishedAt": "2026-10-16T08:12:01.000Z",
-          "guid": "https://www.qbitai.com/?p=503865",
+          "title": "智谱新模型，懂法方面全球第一了",
+          "url": "https://www.qbitai.com/2026/10/503965.html",
+          "publishedAt": "2026-10-17T12:13:45.000Z",
+          "guid": "https://www.qbitai.com/?p=503965",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "说真话就能拿10万？网易叭哥说重金求“真需求”，不卡专业学历",
-          "url": "https://www.qbitai.com/2026/10/503861.html",
-          "publishedAt": "2026-10-16T08:07:33.000Z",
-          "guid": "https://www.qbitai.com/?p=503861",
+          "title": "清华开源！智能体操作系统任务成本降83%，AI记忆可查可改",
+          "url": "https://www.qbitai.com/2026/10/503935.html",
+          "publishedAt": "2026-10-17T12:10:35.000Z",
+          "guid": "https://www.qbitai.com/?p=503935",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,28 +53,10 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "被量化的心跳：HRV 是身体的晴雨表，还是制造焦虑的数字游戏？",
-          "url": "https://sspai.com/post/104231",
-          "publishedAt": "2026-10-17T06:58:04.000Z",
-          "guid": "https://sspai.com/post/104231",
-          "source": "少数派",
-          "language": "zh"
-        },
-        {
-          "sourceId": "zh-tech:sspai",
-          "title": "让读书笔记不再吃灰：我做了一款跨平台书摘管理工具",
-          "url": "https://sspai.com/post/115688",
-          "publishedAt": "2026-10-16T02:18:38.000Z",
-          "guid": "https://sspai.com/post/115688",
-          "source": "少数派",
-          "language": "zh"
-        },
-        {
-          "sourceId": "zh-tech:sspai",
-          "title": "派早报：Apple 智能国行 Beta 版本将于本月晚些时候上线测试版本",
-          "url": "https://sspai.com/post/116355",
-          "publishedAt": "2026-10-16T00:23:12.000Z",
-          "guid": "https://sspai.com/post/116355",
+          "title": "Quote/0 妙用 +1，把墨水屏变成点餐助手",
+          "url": "https://sspai.com/post/115241",
+          "publishedAt": "2026-10-18T07:01:02.000Z",
+          "guid": "https://sspai.com/post/115241",
           "source": "少数派",
           "language": "zh"
         }
