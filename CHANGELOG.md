@@ -4,6 +4,16 @@ All notable changes to Follow-up are documented in this file.
 
 ## [Unreleased]
 
+- 修复中央 Feed 第二次自锁：`feed-contract.test.js` 断言仓库当次发布的 `feed-blogs.json` 非空。
+  2026-10-18 博客源当天没有新增，按设计发布了一份合法的空 blogs Feed 并提交到 `main`；次日起
+  预检必然读红，排在 Generate feeds 之前的 Test 步骤中止整个作业，空 Feed 永远等不到被替换，
+  中央 Feed 停在 `2026-10-18T11:13:09.031Z`，10-19 至 10-28 连续 10 次定时任务失败。现在改为
+  与该签入文件逐项比对，并断言不存在 `Blog feed is invalid` 错误——与 X 渠道「凭证缺失发布空
+  Feed」的处理同形，空发布与非空发布都成立，测试不再依赖上一次运行发布了什么。
+- 新增 `Feed Freshness` 定时工作流：每天读取已发布 `feed-candidates.json` 的 `generatedAt`，
+  超过 48 小时即开或更新一条 issue 并让作业失败，把下一次静默停更的发现时间从「数周」缩短到
+  「一天」。
+
 - 修复中央 Feed 发布死锁：`release-manifest.json` 的 `integrity.trackedContent.digest` 覆盖
   整棵受版本控制文件树，而 publish 作业每天把 8 个 Feed 文件提交到 `main`，使这个密封值每天
   被提交本身作废，`release-manifest.test.js` 判红，排在 Generate feeds 之前的 Test 步骤随之中止

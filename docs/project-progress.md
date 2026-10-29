@@ -202,6 +202,28 @@ smoke 或 shadow 门禁通过。
   尚未完成；至少 14 天从首个有效真实运行起算，不能用 fixture 或提交日期替代。
 - Task 21 中心来源下线尚未执行；必须逐来源积累观察证据、通过门禁后单独操作。
 
+### 中央 Feed 第二次自锁与修复（2026-10-29）
+
+10-19 至 10-28，`Generate Feeds` 连续 10 次在 Test 步骤失败，中央 Feed 停在
+`2026-10-18T11:13:09.031Z`。与 10-14 那次不同，这次不在发布清单：`feed-contract.test.js`
+在修好 X 渠道后，把「非空」断言移到了 blogs 渠道，理由是 blogs 不依赖凭据。但 blogs 也依赖
+当天有没有新文章：10-18 当天博客源无新增（唯一 error 是 Perplexity 403），作业按设计发布了
+一份合法的空 blogs Feed 并提交到 `main`。
+
+死锁链条：次日预检读仓库里这份空 `feed-blogs.json`，`blogs.length > 0` 必然判红；Test 排在
+Generate feeds 之前，`npm test` 一红整个作业中止；生成步骤永不执行，空 Feed 也就永远等不到
+被合法的非空发布替换。
+
+修复：该断言改为与签入 payload 逐项比对，并断言 `errors` 中不存在 `Blog feed is invalid`。
+这样「有效 Feed 不被误判为空」仍被锁定，而空发布与非空发布都不会让下一次预检失败——与 X
+渠道已有的处理同形。另新增 `Feed Freshness` 工作流，每日读取已发布 `feed-candidates.json`
+的 `generatedAt`，超过 48 小时即开或更新 issue 并让作业失败，避免下一次停更再静默十天。
+
+本地验证：Node 全量 729 项，727 通过、1 项因未提供 `FOLLOW_UP_TEST_PYTHON` 失败（CI 会
+provision 隔离解释器）、1 跳过；`feed-contract.test.js` 32 项、`release-manifest.test.js`
+与 `feed-contract.test.js` 合计 51 项全通过。修复后手动触发两次均成功，中央 Feed 恢复为
+`2026-10-29T11:58:17.147Z`、263 条候选，`Feed Freshness` 首跑绿。
+
 ## 当前 v0.4.0 剩余工作
 
 - 执行六类真实来源 smoke，并记录人工相关性、secret 检查和回滚证据。
