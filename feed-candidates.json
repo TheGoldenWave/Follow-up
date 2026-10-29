@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T12:06:27.381Z",
+  "generatedAt": "2026-10-29T13:08:29.374Z",
   "initializedAt": "2026-09-06T00:00:00.000Z",
   "continuousHistorySince": "2026-09-06T00:00:00.000Z",
   "retention": {
@@ -23,7 +23,7 @@
       "channel": "academic",
       "sourceName": "arXiv cs.AI",
       "status": "ok",
-      "candidateCount": 34
+      "candidateCount": 39
     },
     {
       "sourceId": "academic:arxiv-cs-cl",
@@ -213,7 +213,7 @@
       "channel": "newsletters",
       "sourceName": "Stratechery (Ben Thompson)",
       "status": "ok",
-      "candidateCount": 8
+      "candidateCount": 9
     },
     {
       "sourceId": "podcast:acquired",
@@ -548,14 +548,14 @@
       "channel": "zh-tech",
       "sourceName": "量子位",
       "status": "ok",
-      "candidateCount": 30
+      "candidateCount": 33
     },
     {
       "sourceId": "zh-tech:sspai",
       "channel": "zh-tech",
       "sourceName": "少数派",
       "status": "ok",
-      "candidateCount": 28
+      "candidateCount": 31
     }
   ],
   "candidates": [
@@ -603,6 +603,81 @@
       "summarizationContent": "如何成为不吃压力的「大心脏」？",
       "contentTruncated": false,
       "contentFingerprint": "163fdfcadcb792579f06130e42e378bbe4191169a8ada4ac115beefd9c6f41ca"
+    },
+    {
+      "candidateId": "035d38b6b66f6f145cd91369ebb398eeb0d7cecd510c5544f44dbd00be4bf9af",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.36435v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.36435",
+      "title": "Your Agent Acts Differently When You're Around: How User Presence Changes Agent Behavior in Negotiation",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-29T04:00:00.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "Your Agent Acts Differently When You're Around: How User Presence Changes Agent Behavior in Negotiation",
+      "contentTruncated": false,
+      "contentFingerprint": "5ccf9dca936f711055c1e6e5afb811862bd946edbfa98ffdd664a1e049b2c8eb"
+    },
+    {
+      "candidateId": "45d5ce0e8db6b4287e903512185b05267626e7fca694ad6daa45559f22f8fe6f",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.36445v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.36445",
+      "title": "From Solver Trajectories to Teaching Trajectories: Cognition-Aligned Reasoning Distillation",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-29T04:00:00.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "From Solver Trajectories to Teaching Trajectories: Cognition-Aligned Reasoning Distillation",
+      "contentTruncated": false,
+      "contentFingerprint": "5cce4cd3626df34768931ffc770e73a1ec77e9e5f2be349b5c44426b32a769b5"
+    },
+    {
+      "candidateId": "698973cdd86faba26ec04edc6e0af4b719005763141dd030edb6544b6329b910",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.36453v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.36453",
+      "title": "Correction or Manipulation? Measuring Epistemic Vigilance in LLM Agents Under User Pressure",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-29T04:00:00.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "Correction or Manipulation? Measuring Epistemic Vigilance in LLM Agents Under User Pressure",
+      "contentTruncated": false,
+      "contentFingerprint": "39c41e5f66e540b7d23faeba9adf7a5e679e52483f59a9dfd5fc1daf709e2247"
+    },
+    {
+      "candidateId": "9e23d00e940691878ecfcaf14801bfdb8cfff2031aaa55da283913a50d20690c",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.36433v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.36433",
+      "title": "LM-DSB: A Lightweight Multi-agent System for Automated Daily Safety Bulletin Generation in Construction",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-29T04:00:00.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "LM-DSB: A Lightweight Multi-agent System for Automated Daily Safety Bulletin Generation in Construction",
+      "contentTruncated": false,
+      "contentFingerprint": "0e05ce5c397a92d42fa57bba81f90d173825e9db6f83c0747f922e1ebefbd5c8"
+    },
+    {
+      "candidateId": "ebd87fa10b9f117668f71500c93ef904ea647884de98cb9c7fd301ac86b9d273",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.36444v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.36444",
+      "title": "RouteDRAG: Learning to Route and Control Agentic Execution for Multimodal Document RAG",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-29T04:00:00.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "RouteDRAG: Learning to Route and Control Agentic Execution for Multimodal Document RAG",
+      "contentTruncated": false,
+      "contentFingerprint": "e9f1153133c5e82b486bc7a72e64439fae0465467de214bdad077dbfd7bb7a29"
     },
     {
       "candidateId": "0cc005b6e4e8dc6188ed5d67d89bd23cd07e2aee995da37772ea8a91ca17503f",
@@ -890,6 +965,21 @@
       "contentFingerprint": "6dfe8ad56c929bc62d0678ac2088ae8f6324fa4b4ba9965cbb0786c4c2f20518"
     },
     {
+      "candidateId": "e05e98fd1b2ecda0b9e265efe82f7865d9821c1fdc1b997d00871b6c62c16376",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=506098",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/506098.html",
+      "title": "工程能力一键复用，专心卷新能力！轮子造一次就够了｜详解FluxVLA Engine技术报告",
+      "author": "量子位",
+      "publishedAt": "2026-10-28T10:32:39.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "工程能力一键复用，专心卷新能力！轮子造一次就够了｜详解FluxVLA Engine技术报告",
+      "contentTruncated": false,
+      "contentFingerprint": "07c3794c72a073597decaf6b2764ecf35c53d4e633080094d300954e37ea3712"
+    },
+    {
       "candidateId": "f2dba9797fdf147127a0ba47ff1897ae39d07391c1f066bee10935c737da9e24",
       "channel": "newsletters",
       "sourceId": "newsletter:stratechery",
@@ -920,6 +1010,81 @@
       "contentFingerprint": "43d9f5efb72754adeeb72e8c39a393e700a6f39c1f2ffa4456ec34b632762f22"
     },
     {
+      "candidateId": "c12f347ad32dff74526168736fc7bc060cbf233c138da44ea36eca99be8e47f6",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=506063",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/506063.html",
+      "title": "威卡：用数据集链接具身智能和工程机械",
+      "author": "量子位",
+      "publishedAt": "2026-10-28T09:01:27.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "威卡：用数据集链接具身智能和工程机械",
+      "contentTruncated": false,
+      "contentFingerprint": "bb9e82250e40c0453067350e15b96b4a39690edceaa33a2785dcee5ee0e21dfa"
+    },
+    {
+      "candidateId": "8acb8fa7e8282935f8305266ee49d286da6b68b71e311c81a14ecb791b667536",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=506055",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/506055.html",
+      "title": "19个项目18个成功，6个GPCR靶点全获命中！国产AI制药再破技术天花板",
+      "author": "量子位",
+      "publishedAt": "2026-10-28T08:59:00.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "19个项目18个成功，6个GPCR靶点全获命中！国产AI制药再破技术天花板",
+      "contentTruncated": false,
+      "contentFingerprint": "444b76f24b0cdda47c3108c14da16d5cc966363f27b707ab742e480c74b4296b"
+    },
+    {
+      "candidateId": "0f47fac3be509dd6b7dbeabc9df0e9c0bcec6abdb03d6ac35ad3552999b786fa",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/116990",
+      "canonicalUrl": "https://sspai.com/post/116990",
+      "title": "断舍离只是起点：打造能长期经营的实用主义衣柜",
+      "author": "少数派",
+      "publishedAt": "2026-10-28T07:00:00.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "断舍离只是起点：打造能长期经营的实用主义衣柜",
+      "contentTruncated": false,
+      "contentFingerprint": "703cf301c3f27ad1ad594410a4a245467afa1449eee984d422cdb6ab3ee96810"
+    },
+    {
+      "candidateId": "48d1a5567455c4b05b85ba7d2a6ca6dd089a5e3c53bd11fafed8fe5dc0271a7f",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/115533",
+      "canonicalUrl": "https://sspai.com/post/115533",
+      "title": "怀旧手记｜坚果 Pro2 与 R1：当「理想」和「现实」碰撞会发生什么？",
+      "author": "少数派",
+      "publishedAt": "2026-10-28T02:22:57.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "怀旧手记｜坚果 Pro2 与 R1：当「理想」和「现实」碰撞会发生什么？",
+      "contentTruncated": false,
+      "contentFingerprint": "8548d7a51c46105a7ca9d8f8cc8dc60753199b7c5efe02856f1e12afa38cd582"
+    },
+    {
+      "candidateId": "434a1444c49971bdc23cf15b5f471937328cdd393e9fc49adef6e998c0d8fb7a",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/117684",
+      "canonicalUrl": "https://sspai.com/post/117684",
+      "title": "派早报：Apple 发布 M6 版 iMac 和 MacBook Pro 等",
+      "author": "少数派",
+      "publishedAt": "2026-10-28T00:37:25.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "派早报：Apple 发布 M6 版 iMac 和 MacBook Pro 等",
+      "contentTruncated": false,
+      "contentFingerprint": "51cdf7c7e20ba68e4df9575699e54f0758cd0cc903bf71f2fbcfa8614a77ead8"
+    },
+    {
       "candidateId": "d0e5a61d0b90c80f6aff0435a835ae9bb2bccf4526ddb461a06f3eb4b0dc666e",
       "channel": "blogs",
       "sourceId": "blog:google-research",
@@ -946,6 +1111,21 @@
       "summarizationContent": "ScarfBench (Self-Contained Application Refactoring Benchmark) is an open IBM benchmark for evaluating whether coding agents can successfully migrate enterprise Java applications across frameworks while preserving working application behavior. Across Jakarta EE, Quarkus, and Spring migrations, it tests whether generated applications build, start, and continue to behave as expected, using both focused workloads and whole applications Modernizing an enterprise application is not a single-file coding task. Moving an application between frameworks can require coordinated changes to dependency injection, persistence, database access, web endpoints, build systems, framework descriptors, and deployment infrastructure. A coding agent can produce a migration that looks plausible, or even compiles, while the application still fails when deployed or exercised against its expected behavior. ScarfBench asks a practical question: Can an agent take an unfamiliar application, migrate it across framework boundaries, and leave behind software that still works? IBM introduced ScarfBench earlier in 2026 as a reproducible benchmark for AI-driven migrations. Now IBM and Kaggle are partnering to make that evaluation easier to reproduce, compare, and extend over time. Kaggle consulted on the evaluation design, independently reproduced and ran ScarfBench on its platform while sponsoring the compute, and will maintain the benchmark as new models are released. The collaboration turns ScarfBench from a published benchmark into a continuously updated view of progress in agentic software modernization. The original ScarfBench announcement described the benchmark design, developer-verified workloads, and reproducible evaluation approach in detail. This post focuses on what the latest evaluation tells us about model-and-agent-harness combinations, where they fail, and how the benchmark is evolving with Kaggle. Evaluating model-and-harness combinations ScarfBench evaluates an agentic system rather than a language model in isolation. Each result reflects a model paired with a coding-agent harness that determines how it interacts with the repository and development environment. The results should therefore be read as model/harness results, not as measurements of the underlying model alone. Across 204 migration tasks, Gemini 4 Argon with Antigravity ranked first on the primary smoke-test metric at 75.2%, followed by Claude Opus 5.5 with Claude Code at 70.5% and Claude Opus 5 with Claude Code at 69.8%. Ten model-and-harness configurations were evaluated. Rank Model Harness Smoke % All pass % Mean % 1 Gemini 4 Argon Antigravity 75.2 71.1 85.9 2 Claude Opus 5.5 Claude Code 70.5 72.1 82.0 3 Claude Opus 5 Claude Code 69.8 60.8 79.7 4 GPT-6.1 Sol Codex 68.4 62.7 76.8 5 Gemini 3.8 Flash mini-swe 66.0 62.3 77.6 6 GPT-6 Astra Codex 65.4 61.4 75.4 7 Qwen 3.8 Max qwen-code 63.7 59.3 76.1 8 Kimi K3 kimi-code 61.1 50.7 71.2 9 Gemini 3.1 Pro OpenHands 39.5 35.1 50.5 10 Gemma 4 26B-A4B mini-swe 24.5 17.6 30.8 The three metrics reveal an important nuance. The smoke score, the leaderboard metric, awards partial credit and gives larger test suites more weight. On that measure, the Gemini 4 Argon + Antigravity combination had the strongest result. But Claude Opus 5.5 + Claude Code had the highest all-tests-pass rate at 72.1%, narrowly ahead of Gemini 4 Argon. In other words, the Argon/Antigravity combination earned the most partial credit across the benchmark, while the Opus 5.5/Claude Code combination converted slightly more individual migration tasks into completely green test suites. The ranking remains stable under a sensitivity analysis. Four of the 204 migration tasks received zero behavioral-test credit from every evaluated model/harness combination. Excluding those four tasks raised the absolute scores but did not change the ordering at the top: Gemini 4 Argon + Antigravity scored 79.4%, followed by Claude Opus 5.5 + Claude Code at 74.5% and Claude Opus 5 + Claude Code at 73.7%. This result suggests that the relative ranking is not driven by this small set of uniformly difficult tasks. Even the strongest combination leaves substantial headroom: The best overall smoke score was 75.2% across the full benchmark, and no configuration fully passed more than about three-quarters of the migrations. The biggest differentiator is behavioral fidelity, not compilation The clearest result is the gap between code that builds and software that behaves correctly. After excluding the four all-zero tasks, Claude Opus 5 + Claude Code, Gemini 4 Argon + Antigravity and Gemini 3.8 Flash + mini-swe each compiled 100% of tasks, GPT-6 Astra + Codex and Kimi K3 + kimi-code compiled 99.0% and 98.5%, and Claude Opus 5.5 + Claude Code and GPT-6.1 Sol + Codex compiled 98.0% and 98.5%. Yet smoke-test scores remained much lower. Across the 10 configurations, compile success among solvable tasks spanned about 25 percentage points, but most configurations cluster near the top, with 8 of 10 compiling 97% or more; smoke-test performance spanned more than 50 points. Among applications that successfully deployed, the leading configurations clustered at roughly 63 to 76% for fully passing tests; Kimi K3 + kimi-code fell to 53%, Gemini 3.1 Pro + OpenHands to 42%, and Gemma 4 26B-A4B + mini-swe to 26%. In this evaluation, preserving behavior was a much stronger discriminator than getting the migrated application to compile. Where agent configurations fail Of 745 classified failing runs, 535 (approximately 72%) were runtime behavioral failures: The application built and often booted but failed behavioral validation. This group included 304 content or assertion mismatches and 210 lost-route/404 failures; 21 were explicit HTTP 500/405 errors. Compile or packaging failures accounted for roughly 20% (152 runs), and boot or dependency-injection crashes for roughly 8% (58 runs). Lost routes and HTTP semantics: In concurrency-taskcreator-quarkus-to-jakarta, Claude Opus 5 + Claude Code scored 0/6 after /taskinfo returned “File not found” and a test expecting HTTP 405 failed. In address-book-jakarta-to-quarkus, GPT-6 Astra + Codex scored 2/10 after list and create pages returned HTTP 404. Source-framework wiring surviving into the target: In cargotracker-jakarta-to-spring, Gemini 3.8 Flash + mini-swe retained JSF/JoinFaces wiring in the Spring Boot target, which then failed during startup while creating a facesContext bean. Packaging incompatible with the target runtime: In cart-spring-to-jakarta, GPT-6 Astra + Codex reached a deployment failure because the packaging type left by the migration was not supported by the target Liberty runtime. These failures illustrate why ScarfBench validates beyond compilation: Nearly three in four classified failures in this evaluation appeared at runtime. Agent efficiency reveals different operating profiles On the 200 tasks remaining after the four-task sensitivity exclusion, Claude Opus 5 + Claude Code used the fewest median turns at 32. GPT-6.1 Sol + Codex used 36, Gemma 4 26B-A4B + mini-swe 40, Gemini 4 Argon + Antigravity 42, GPT-6 Astra + Codex 45, Kimi K3 + kimi-code 47, Qwen 3.8 Max + qwen-code and Gemini 3.1 Pro + OpenHands 53, Claude Opus 5.5 + Claude Code 64, and Gemini 3.8 Flash + mini-swe 79. Where harness-reported cost was available — for the Claude Code, Codex, mini-swe and kimi-code harnesses; the Antigravity, qwen-code and OpenHands harnesses did not emit per-run cost — the configurations showed distinct cost profiles: Model / harness Median turns Turns, successful runs Cost / successful run Cost per solved task Claude Opus 5 / Claude Code 32 30 $1.76 $3.83 Claude Opus 5.5 / Claude Code 64 60 $5.98 $10.10 GPT-6.1 Sol / Codex 36 34 $0.64 $1.25 GPT-6 Astra / Codex 45 44 $3.55 $6.65 Gemini 3.8 Flash / mini-swe 79 74 $0.73 $1.59 Kimi K3 / kimi-code 47 44 $1.27 $3.21 IBM and Kaggle are building a living ScarfBench leaderboard The latest ScarfBench evaluation is also the start of a deeper collaboration between IBM and Kaggle. The two teams bring complementary strengths: IBM developed ScarfBench around enterprise Java modernization, while Kaggle brings independent evaluation infrastructure and long-term leaderboard maintenance. The collaboration is intended to make the benchmark reproducible outside its original development environment and useful as new model-and-agent configurations are released. The collaboration has three concrete parts. First, Kaggle consulted with IBM on the rigorous design of the benchmark and evaluation. Second, Kaggle independently reproduced and ran the evaluation on its platform and sponsored the compute. Third, Kaggle will maintain the benchmark long-term and add new models as they are released. The ScarfBench leaderboard provides the public view of these results. Public model submission is not available at launch but is on the roadmap. What we have learned so far ScarfBench was built around the demanding premise that coding agents participating meaningfully in enterprise modernization need to be evaluated on the outcome enterprises ultimately care about: working software. The latest evaluation reinforces that premise. Leading configurations can compile nearly every task in the sensitivity set, but compilation hides a harder problem. Routes disappear, HTTP behavior changes, source-framework wiring survives migrations, applications fail during startup, and business behavior diverges from the expected system. That gap between code that builds and software that works is where ScarfBench is most informative. As new model/harness combinations arrive, a maintained benchmark can show whether progress comes from better generated changes, more effective debugging and iteration, more efficient tool use, or a combination of these capabilities.",
       "contentTruncated": false,
       "contentFingerprint": "c71fb0b91fac060c924ba90b4760b33c958315371adec0cf3971c2cddfb637c1"
+    },
+    {
+      "candidateId": "5aa6f7157e7462929964feab5a65ca34b8a292479e9ec7f55578f4d900ee9210",
+      "channel": "newsletters",
+      "sourceId": "newsletter:stratechery",
+      "sourceNativeId": "https://stratechery.com/?p=20583",
+      "canonicalUrl": "https://stratechery.com/2026/anthropic-s-1-the-cost-of-compute-who-is-paying",
+      "title": "Anthropic S-1, The Cost of Compute, Who Is Paying?",
+      "author": "Stratechery (Ben Thompson)",
+      "publishedAt": "2026-10-27T10:32:57.000Z",
+      "firstSeenAt": "2026-10-29T13:08:29.374Z",
+      "lastSeenAt": "2026-10-29T13:08:29.374Z",
+      "summarizationContent": "Anthropic S-1, The Cost of Compute, Who Is Paying?",
+      "contentTruncated": false,
+      "contentFingerprint": "ff28fbe06a5d43b73f9d6167fe1715a1a2927e8df3dac7ea51c11cacf98fab01"
     },
     {
       "candidateId": "45a3c6f211658c926164caedca27cda40bc1b73df4a8a3b98e96afc46eed6654",

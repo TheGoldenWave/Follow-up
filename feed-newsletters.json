@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T12:06:27.381Z",
+  "generatedAt": "2026-10-29T13:08:29.374Z",
   "lookbackHours": 72,
   "newsletters": [
     {
@@ -14,10 +14,10 @@
       "items": [
         {
           "sourceId": "newsletter:stratechery",
-          "title": "Meta Earnings, Muse and the Frontier, Musebook",
-          "url": "https://stratechery.com/2026/meta-earnings-muse-and-the-frontier-musebook/",
-          "publishedAt": "2026-10-28T10:06:13.000Z",
-          "guid": "https://stratechery.com/?p=20613",
+          "title": "Anthropic S-1, The Cost of Compute, Who Is Paying?",
+          "url": "https://stratechery.com/2026/anthropic-s-1-the-cost-of-compute-who-is-paying/",
+          "publishedAt": "2026-10-27T10:32:57.000Z",
+          "guid": "https://stratechery.com/?p=20583",
           "source": "Stratechery (Ben Thompson)",
           "language": "en"
         }

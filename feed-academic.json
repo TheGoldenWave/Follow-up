@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T12:06:27.381Z",
+  "generatedAt": "2026-10-29T13:08:29.374Z",
   "lookbackHours": 168,
   "papers": [
     {
@@ -14,46 +14,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "How Stable Are LLM-Generated Proofs Under Program Refactoring? A Stress Test for Verifiable Code Generation",
-          "url": "https://arxiv.org/abs/2610.36328",
+          "title": "LM-DSB: A Lightweight Multi-agent System for Automated Daily Safety Bulletin Generation in Construction",
+          "url": "https://arxiv.org/abs/2610.36433",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36328v1",
+          "guid": "oai:arXiv.org:2610.36433v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "OA-RAG: Ontology-based Agentic RAG for Faithful LLM Reasoning",
-          "url": "https://arxiv.org/abs/2610.36335",
+          "title": "Your Agent Acts Differently When You're Around: How User Presence Changes Agent Behavior in Negotiation",
+          "url": "https://arxiv.org/abs/2610.36435",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36335v1",
+          "guid": "oai:arXiv.org:2610.36435v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "MAREval: A Multi-Agent Framework for Evaluating Natural Language Recommendation Explanations",
-          "url": "https://arxiv.org/abs/2610.36389",
+          "title": "RouteDRAG: Learning to Route and Control Agentic Execution for Multimodal Document RAG",
+          "url": "https://arxiv.org/abs/2610.36444",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36389v1",
+          "guid": "oai:arXiv.org:2610.36444v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "kw-bench: Breaking Frontier Harnesses on Real-World Tasks",
-          "url": "https://arxiv.org/abs/2610.36405",
+          "title": "From Solver Trajectories to Teaching Trajectories: Cognition-Aligned Reasoning Distillation",
+          "url": "https://arxiv.org/abs/2610.36445",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36405v1",
+          "guid": "oai:arXiv.org:2610.36445v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Verifiable Efficiency Limits of Innate LLM Planning in Sliding Puzzles",
-          "url": "https://arxiv.org/abs/2610.36415",
+          "title": "Correction or Manipulation? Measuring Epistemic Vigilance in LLM Agents Under User Pressure",
+          "url": "https://arxiv.org/abs/2610.36453",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36415v1",
+          "guid": "oai:arXiv.org:2610.36453v1",
           "source": "arXiv cs.AI",
           "language": "en"
         }

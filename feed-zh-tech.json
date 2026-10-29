@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T12:06:27.381Z",
+  "generatedAt": "2026-10-29T13:08:29.374Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "24万开卖！理想重造i6，李想：目标全球畅销",
-          "url": "https://www.qbitai.com/2026/10/506246.html",
-          "publishedAt": "2026-10-29T00:59:26.000Z",
-          "guid": "https://www.qbitai.com/?p=506246",
+          "title": "工程能力一键复用，专心卷新能力！轮子造一次就够了｜详解FluxVLA Engine技术报告",
+          "url": "https://www.qbitai.com/2026/10/506098.html",
+          "publishedAt": "2026-10-28T10:32:39.000Z",
+          "guid": "https://www.qbitai.com/?p=506098",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "刚刚，Gemini 4 Carbon全面超越Opus 5.5！首发Token半价",
-          "url": "https://www.qbitai.com/2026/10/506227.html",
-          "publishedAt": "2026-10-29T00:03:58.000Z",
-          "guid": "https://www.qbitai.com/?p=506227",
+          "title": "威卡：用数据集链接具身智能和工程机械",
+          "url": "https://www.qbitai.com/2026/10/506063.html",
+          "publishedAt": "2026-10-28T09:01:27.000Z",
+          "guid": "https://www.qbitai.com/?p=506063",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "【图片中转测试，未发布】工程能力一键复用，专心卷新能力！轮子造一次就够了｜详解FluxVLA Engine技术报告",
-          "url": "https://www.qbitai.com/2026/10/506194.html",
-          "publishedAt": "2026-10-28T11:09:10.000Z",
-          "guid": "https://www.qbitai.com/?p=506194",
+          "title": "19个项目18个成功，6个GPCR靶点全获命中！国产AI制药再破技术天花板",
+          "url": "https://www.qbitai.com/2026/10/506055.html",
+          "publishedAt": "2026-10-28T08:59:00.000Z",
+          "guid": "https://www.qbitai.com/?p=506055",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,28 +53,28 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "一日一技｜iPhone 恶意被锁，线上移除流程拆招",
-          "url": "https://sspai.com/post/116686",
-          "publishedAt": "2026-10-29T03:00:00.000Z",
-          "guid": "https://sspai.com/post/116686",
+          "title": "断舍离只是起点：打造能长期经营的实用主义衣柜",
+          "url": "https://sspai.com/post/116990",
+          "publishedAt": "2026-10-28T07:00:00.000Z",
+          "guid": "https://sspai.com/post/116990",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "派早报：Apple 推出触控款 MacBook Pro、华为发布多款新品等",
-          "url": "https://sspai.com/post/117750",
-          "publishedAt": "2026-10-29T00:26:49.000Z",
-          "guid": "https://sspai.com/post/117750",
+          "title": "怀旧手记｜坚果 Pro2 与 R1：当「理想」和「现实」碰撞会发生什么？",
+          "url": "https://sspai.com/post/115533",
+          "publishedAt": "2026-10-28T02:22:57.000Z",
+          "guid": "https://sspai.com/post/115533",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "备受期待的国产 3A 游戏新作：《影之刃零》游玩体验",
-          "url": "https://sspai.com/post/117725",
-          "publishedAt": "2026-10-28T09:37:22.000Z",
-          "guid": "https://sspai.com/post/117725",
+          "title": "派早报：Apple 发布 M6 版 iMac 和 MacBook Pro 等",
+          "url": "https://sspai.com/post/117684",
+          "publishedAt": "2026-10-28T00:37:25.000Z",
+          "guid": "https://sspai.com/post/117684",
           "source": "少数派",
           "language": "zh"
         }
