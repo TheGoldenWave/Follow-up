@@ -1,0 +1,86 @@
+name: Feed Freshness
+
+# The daily digest reads only the published `feed-candidates.json`. When the
+# generation job stops publishing, the digest keeps running against a frozen
+# snapshot and degrades silently: it still produces a delivery, just from stale
+# candidates. Keep the failure loud and one day old instead of discovering it
+# weeks later.
+on:
+  schedule:
+    # Well after the 06:17 UTC generation window and its queue delay.
+    - cron: '30 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: central-feed-freshness
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Measure the age of the published candidate Feed
+        id: check
+        run: |
+          node --input-type=module -e '
+          import { appendFile } from "node:fs/promises";
+
+          const url = "https://raw.githubusercontent.com/TheGoldenWave/Follow-up/main/feed-candidates.json";
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`candidate Feed fetch failed: HTTP ${response.status}`);
+          const feed = await response.json();
+          const generatedAt = Date.parse(feed.generatedAt);
+          if (!Number.isFinite(generatedAt)) throw new Error("candidate Feed has no parsable generatedAt");
+          const ageHours = (Date.now() - generatedAt) / 3_600_000;
+          const candidates = Array.isArray(feed.candidates) ? feed.candidates.length : 0;
+          const stale = ageHours > 48;
+
+          console.log(`generatedAt=${feed.generatedAt} ageHours=${ageHours.toFixed(1)} candidates=${candidates} stale=${stale}`);
+          await appendFile(process.env.GITHUB_OUTPUT, [
+            `age_hours=${ageHours.toFixed(1)}`,
+            `generated_at=${feed.generatedAt}`,
+            `candidates=${candidates}`,
+            `stale=${stale}`,
+            "",
+          ].join("\n"));
+          await appendFile(process.env.GITHUB_STEP_SUMMARY, [
+            "## Central Feed freshness",
+            "",
+            "| field | value |",
+            "|---|---|",
+            `| generatedAt | ${feed.generatedAt} |`,
+            `| age | ${ageHours.toFixed(1)} h |`,
+            `| candidates | ${candidates} |`,
+            `| stale (>48h) | ${stale} |`,
+            "",
+          ].join("\n"));
+          '
+
+      - name: Open or bump the stale-Feed issue
+        if: steps.check.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AGE_HOURS: ${{ steps.check.outputs.age_hours }}
+          GENERATED_AT: ${{ steps.check.outputs.generated_at }}
+        run: |
+          title='Central Feed has stopped updating'
+          body=$(printf 'The published `feed-candidates.json` is %s hours old (generatedAt `%s`).\n\nDaily digests will keep running against this frozen snapshot until a generation run succeeds. Check the latest `Generate Feeds` run: a failing pre-flight test blocks generation entirely.\n' "$AGE_HOURS" "$GENERATED_AT")
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "$title in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body" --label 'feed-stale' \
+              || gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
+          echo "::error::Central Feed is stale (${AGE_HOURS} h old, generatedAt ${GENERATED_AT})"
+          exit 1
+
+      - name: Report the fresh Feed
+        if: steps.check.outputs.stale != 'true'
+        run: echo "Central Feed is ${AGE_HOURS} h old." 
+        env:
+          AGE_HOURS: ${{ steps.check.outputs.age_hours }}

@@ -303,7 +303,15 @@ test('digest feed loader uses canonical URLs and replaces each invalid feed with
   // instead of demanding a non-empty payload, and the non-empty assertion moves to
   // a credential-free channel.
   assert.deepEqual(result.data.x, (await readJson('feed-x.json')).x);
-  assert.ok(result.data.blogs.length > 0);
+  // Blogs is the other credential-free channel, but a quiet day legitimately
+  // publishes an empty blogs Feed. Demanding a non-empty payload made this
+  // pre-flight test depend on what the previous run published: once an empty
+  // blogs Feed was committed, every later run failed the gate before it could
+  // generate a replacement, and the central Feed stayed frozen indefinitely.
+  // Assert content fidelity and "a valid Feed is not rejected" instead, which
+  // holds for both empty and non-empty publishes.
+  assert.deepEqual(result.data.blogs, (await readJson('feed-blogs.json')).blogs);
+  assert.ok(!result.errors.some((error) => error.includes('Blog feed is invalid')));
   assert.ok(result.errors.some((error) => (
     error.includes('Academic feed is invalid')
     && error.includes('compatible schema 1.x')
