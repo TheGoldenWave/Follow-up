@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-18T11:13:09.031Z",
+  "generatedAt": "2026-10-29T11:58:17.148Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "突发！DeepSeek新模型发布，超级性价比斩杀一切",
-          "url": "https://www.qbitai.com/2026/10/504067.html",
-          "publishedAt": "2026-10-17T12:21:09.000Z",
-          "guid": "https://www.qbitai.com/?p=504067",
+          "title": "文远知行001号员工带队，景烁科技首轮融资数千万美元",
+          "url": "https://www.qbitai.com/2026/10/506281.html",
+          "publishedAt": "2026-10-29T03:27:50.000Z",
+          "guid": "https://www.qbitai.com/?p=506281",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "智谱新模型，懂法方面全球第一了",
-          "url": "https://www.qbitai.com/2026/10/503965.html",
-          "publishedAt": "2026-10-17T12:13:45.000Z",
-          "guid": "https://www.qbitai.com/?p=503965",
+          "title": "小雨智造与国家钢结构质检中心共建实验室，乔忠良：具身智能新质生产力已成事实",
+          "url": "https://www.qbitai.com/2026/10/506273.html",
+          "publishedAt": "2026-10-29T02:51:45.000Z",
+          "guid": "https://www.qbitai.com/?p=506273",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "清华开源！智能体操作系统任务成本降83%，AI记忆可查可改",
-          "url": "https://www.qbitai.com/2026/10/503935.html",
-          "publishedAt": "2026-10-17T12:10:35.000Z",
-          "guid": "https://www.qbitai.com/?p=503935",
+          "title": "刚刚，扩散模型杀进Agent主场！350亿参数，速度比Jev快一倍",
+          "url": "https://www.qbitai.com/2026/10/505934.html",
+          "publishedAt": "2026-10-29T02:18:28.000Z",
+          "guid": "https://www.qbitai.com/?p=505934",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,10 +53,28 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "Quote/0 妙用 +1，把墨水屏变成点餐助手",
-          "url": "https://sspai.com/post/115241",
-          "publishedAt": "2026-10-18T07:01:02.000Z",
-          "guid": "https://sspai.com/post/115241",
+          "title": "新玩意 254｜少数派的编辑们最近买了啥？",
+          "url": "https://sspai.com/post/117791",
+          "publishedAt": "2026-10-29T09:26:58.000Z",
+          "guid": "https://sspai.com/post/117791",
+          "source": "少数派",
+          "language": "zh"
+        },
+        {
+          "sourceId": "zh-tech:sspai",
+          "title": "如何成为不吃压力的「大心脏」？",
+          "url": "https://sspai.com/post/117244",
+          "publishedAt": "2026-10-29T09:05:38.000Z",
+          "guid": "https://sspai.com/post/117244",
+          "source": "少数派",
+          "language": "zh"
+        },
+        {
+          "sourceId": "zh-tech:sspai",
+          "title": "让 Agent 读懂你的身体：数据处理篇",
+          "url": "https://sspai.com/prime/story/how-to-analyze-health-data-with-agent",
+          "publishedAt": "2026-10-29T03:29:46.000Z",
+          "guid": "https://sspai.com/prime/story/how-to-analyze-health-data-with-agent",
           "source": "少数派",
           "language": "zh"
         }

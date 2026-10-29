@@ -1,9 +1,67 @@
 {
-  "generatedAt": "2026-10-18T11:13:09.031Z",
+  "generatedAt": "2026-10-29T11:58:17.148Z",
   "lookbackHours": 168,
-  "papers": [],
+  "papers": [
+    {
+      "sourceId": "academic:arxiv-cs-ai",
+      "source": "arXiv cs.AI",
+      "url": "https://arxiv.org/list/cs.AI/recent",
+      "tags": [
+        "academic",
+        "ai",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "The Trinity:Capability-Driven Recursive Self-Improvement for Multimodal Agents",
+          "url": "https://arxiv.org/abs/2610.36077",
+          "publishedAt": "2026-10-29T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.36077v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "CohortFlow: A Steerable Clinical Cohort Curation Agent with Localized Semantic Correction",
+          "url": "https://arxiv.org/abs/2610.36100",
+          "publishedAt": "2026-10-29T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.36100v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "MARQ: A Modular, LLM-Agnostic Requirement Quality Assessor Infused with Systems Engineering Knowledge",
+          "url": "https://arxiv.org/abs/2610.36234",
+          "publishedAt": "2026-10-29T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.36234v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "When Retrieval Is Not Enough: Obsolete Facts in Agent Memory",
+          "url": "https://arxiv.org/abs/2610.36308",
+          "publishedAt": "2026-10-29T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.36308v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Ontology-guided multi-agent reasoning for explainable differential diagnosis",
+          "url": "https://arxiv.org/abs/2610.36325",
+          "publishedAt": "2026-10-29T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.36325v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        }
+      ]
+    }
+  ],
   "stats": {
-    "sources": 0
+    "sources": 1
   },
   "schemaVersion": "1.0"
 }
