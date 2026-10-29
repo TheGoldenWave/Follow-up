@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T11:59:41.338Z",
+  "generatedAt": "2026-10-29T12:06:27.381Z",
   "lookbackHours": 168,
   "papers": [
     {
@@ -14,46 +14,46 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "The Trinity:Capability-Driven Recursive Self-Improvement for Multimodal Agents",
-          "url": "https://arxiv.org/abs/2610.36077",
+          "title": "How Stable Are LLM-Generated Proofs Under Program Refactoring? A Stress Test for Verifiable Code Generation",
+          "url": "https://arxiv.org/abs/2610.36328",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36077v1",
+          "guid": "oai:arXiv.org:2610.36328v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "CohortFlow: A Steerable Clinical Cohort Curation Agent with Localized Semantic Correction",
-          "url": "https://arxiv.org/abs/2610.36100",
+          "title": "OA-RAG: Ontology-based Agentic RAG for Faithful LLM Reasoning",
+          "url": "https://arxiv.org/abs/2610.36335",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36100v1",
+          "guid": "oai:arXiv.org:2610.36335v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "MARQ: A Modular, LLM-Agnostic Requirement Quality Assessor Infused with Systems Engineering Knowledge",
-          "url": "https://arxiv.org/abs/2610.36234",
+          "title": "MAREval: A Multi-Agent Framework for Evaluating Natural Language Recommendation Explanations",
+          "url": "https://arxiv.org/abs/2610.36389",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36234v1",
+          "guid": "oai:arXiv.org:2610.36389v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "When Retrieval Is Not Enough: Obsolete Facts in Agent Memory",
-          "url": "https://arxiv.org/abs/2610.36308",
+          "title": "kw-bench: Breaking Frontier Harnesses on Real-World Tasks",
+          "url": "https://arxiv.org/abs/2610.36405",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36308v1",
+          "guid": "oai:arXiv.org:2610.36405v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Ontology-guided multi-agent reasoning for explainable differential diagnosis",
-          "url": "https://arxiv.org/abs/2610.36325",
+          "title": "Verifiable Efficiency Limits of Innate LLM Planning in Sliding Puzzles",
+          "url": "https://arxiv.org/abs/2610.36415",
           "publishedAt": "2026-10-29T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.36325v1",
+          "guid": "oai:arXiv.org:2610.36415v1",
           "source": "arXiv cs.AI",
           "language": "en"
         }

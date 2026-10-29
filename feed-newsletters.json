@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T11:59:41.338Z",
+  "generatedAt": "2026-10-29T12:06:27.381Z",
   "lookbackHours": 72,
   "newsletters": [
     {
@@ -14,10 +14,10 @@
       "items": [
         {
           "sourceId": "newsletter:stratechery",
-          "title": "An Interview with Palantir CTO Shyam Sankar About the AI Religious War",
-          "url": "https://stratechery.com/2026/an-interview-with-palantir-cto-shyam-sankar-about-the-ai-religious-war/",
-          "publishedAt": "2026-10-29T10:00:00.000Z",
-          "guid": "https://stratechery.com/?p=20633",
+          "title": "Meta Earnings, Muse and the Frontier, Musebook",
+          "url": "https://stratechery.com/2026/meta-earnings-muse-and-the-frontier-musebook/",
+          "publishedAt": "2026-10-28T10:06:13.000Z",
+          "guid": "https://stratechery.com/?p=20613",
           "source": "Stratechery (Ben Thompson)",
           "language": "en"
         }

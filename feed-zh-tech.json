@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T11:59:41.338Z",
+  "generatedAt": "2026-10-29T12:06:27.381Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "文远知行001号员工带队，景烁科技首轮融资数千万美元",
-          "url": "https://www.qbitai.com/2026/10/506281.html",
-          "publishedAt": "2026-10-29T03:27:50.000Z",
-          "guid": "https://www.qbitai.com/?p=506281",
+          "title": "24万开卖！理想重造i6，李想：目标全球畅销",
+          "url": "https://www.qbitai.com/2026/10/506246.html",
+          "publishedAt": "2026-10-29T00:59:26.000Z",
+          "guid": "https://www.qbitai.com/?p=506246",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "小雨智造与国家钢结构质检中心共建实验室，乔忠良：具身智能新质生产力已成事实",
-          "url": "https://www.qbitai.com/2026/10/506273.html",
-          "publishedAt": "2026-10-29T02:51:45.000Z",
-          "guid": "https://www.qbitai.com/?p=506273",
+          "title": "刚刚，Gemini 4 Carbon全面超越Opus 5.5！首发Token半价",
+          "url": "https://www.qbitai.com/2026/10/506227.html",
+          "publishedAt": "2026-10-29T00:03:58.000Z",
+          "guid": "https://www.qbitai.com/?p=506227",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "刚刚，扩散模型杀进Agent主场！350亿参数，速度比Jev快一倍",
-          "url": "https://www.qbitai.com/2026/10/505934.html",
-          "publishedAt": "2026-10-29T02:18:28.000Z",
-          "guid": "https://www.qbitai.com/?p=505934",
+          "title": "【图片中转测试，未发布】工程能力一键复用，专心卷新能力！轮子造一次就够了｜详解FluxVLA Engine技术报告",
+          "url": "https://www.qbitai.com/2026/10/506194.html",
+          "publishedAt": "2026-10-28T11:09:10.000Z",
+          "guid": "https://www.qbitai.com/?p=506194",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,28 +53,28 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "新玩意 254｜少数派的编辑们最近买了啥？",
-          "url": "https://sspai.com/post/117791",
-          "publishedAt": "2026-10-29T09:26:58.000Z",
-          "guid": "https://sspai.com/post/117791",
+          "title": "一日一技｜iPhone 恶意被锁，线上移除流程拆招",
+          "url": "https://sspai.com/post/116686",
+          "publishedAt": "2026-10-29T03:00:00.000Z",
+          "guid": "https://sspai.com/post/116686",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "如何成为不吃压力的「大心脏」？",
-          "url": "https://sspai.com/post/117244",
-          "publishedAt": "2026-10-29T09:05:38.000Z",
-          "guid": "https://sspai.com/post/117244",
+          "title": "派早报：Apple 推出触控款 MacBook Pro、华为发布多款新品等",
+          "url": "https://sspai.com/post/117750",
+          "publishedAt": "2026-10-29T00:26:49.000Z",
+          "guid": "https://sspai.com/post/117750",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "让 Agent 读懂你的身体：数据处理篇",
-          "url": "https://sspai.com/prime/story/how-to-analyze-health-data-with-agent",
-          "publishedAt": "2026-10-29T03:29:46.000Z",
-          "guid": "https://sspai.com/prime/story/how-to-analyze-health-data-with-agent",
+          "title": "备受期待的国产 3A 游戏新作：《影之刃零》游玩体验",
+          "url": "https://sspai.com/post/117725",
+          "publishedAt": "2026-10-28T09:37:22.000Z",
+          "guid": "https://sspai.com/post/117725",
           "source": "少数派",
           "language": "zh"
         }
