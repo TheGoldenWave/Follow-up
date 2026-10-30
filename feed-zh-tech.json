@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T13:08:29.374Z",
+  "generatedAt": "2026-10-30T13:00:45.429Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "工程能力一键复用，专心卷新能力！轮子造一次就够了｜详解FluxVLA Engine技术报告",
-          "url": "https://www.qbitai.com/2026/10/506098.html",
-          "publishedAt": "2026-10-28T10:32:39.000Z",
-          "guid": "https://www.qbitai.com/?p=506098",
+          "title": "英伟达团队基于 MiniMax H3 开源视频增强方案，最高支持 4K 重生成",
+          "url": "https://www.qbitai.com/2026/10/506743.html",
+          "publishedAt": "2026-10-30T07:31:11.000Z",
+          "guid": "https://www.qbitai.com/?p=506743",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "威卡：用数据集链接具身智能和工程机械",
-          "url": "https://www.qbitai.com/2026/10/506063.html",
-          "publishedAt": "2026-10-28T09:01:27.000Z",
-          "guid": "https://www.qbitai.com/?p=506063",
+          "title": "RSI立大功！国产开源登顶全球第一，1.3B OXR重塑OCR",
+          "url": "https://www.qbitai.com/2026/10/506686.html",
+          "publishedAt": "2026-10-30T05:52:47.000Z",
+          "guid": "https://www.qbitai.com/?p=506686",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "19个项目18个成功，6个GPCR靶点全获命中！国产AI制药再破技术天花板",
-          "url": "https://www.qbitai.com/2026/10/506055.html",
-          "publishedAt": "2026-10-28T08:59:00.000Z",
-          "guid": "https://www.qbitai.com/?p=506055",
+          "title": "Claude新模型曝光：新Fable，新Opus…",
+          "url": "https://www.qbitai.com/2026/10/506674.html",
+          "publishedAt": "2026-10-30T05:50:44.000Z",
+          "guid": "https://www.qbitai.com/?p=506674",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,28 +53,28 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "断舍离只是起点：打造能长期经营的实用主义衣柜",
-          "url": "https://sspai.com/post/116990",
-          "publishedAt": "2026-10-28T07:00:00.000Z",
-          "guid": "https://sspai.com/post/116990",
+          "title": "本周看什么 | 最近值得一看的 9 部作品",
+          "url": "https://sspai.com/post/117867",
+          "publishedAt": "2026-10-30T09:57:11.000Z",
+          "guid": "https://sspai.com/post/117867",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "怀旧手记｜坚果 Pro2 与 R1：当「理想」和「现实」碰撞会发生什么？",
-          "url": "https://sspai.com/post/115533",
-          "publishedAt": "2026-10-28T02:22:57.000Z",
-          "guid": "https://sspai.com/post/115533",
+          "title": "App+1｜该吃药了：一片小药板，让吃药提醒变得轻松有趣",
+          "url": "https://sspai.com/post/116047",
+          "publishedAt": "2026-10-30T06:59:21.000Z",
+          "guid": "https://sspai.com/post/116047",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "派早报：Apple 发布 M6 版 iMac 和 MacBook Pro 等",
-          "url": "https://sspai.com/post/117684",
-          "publishedAt": "2026-10-28T00:37:25.000Z",
-          "guid": "https://sspai.com/post/117684",
+          "title": "《久坐健康指南》作者、运动健康领域创作者阿帅装了啥？",
+          "url": "https://sspai.com/prime/story/zhuanglesha-261030",
+          "publishedAt": "2026-10-30T03:30:43.000Z",
+          "guid": "https://sspai.com/prime/story/zhuanglesha-261030",
           "source": "少数派",
           "language": "zh"
         }

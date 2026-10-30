@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-29T13:08:29.374Z",
+  "generatedAt": "2026-10-30T13:00:45.429Z",
   "lookbackHours": 72,
   "newsletters": [
     {
@@ -14,10 +14,10 @@
       "items": [
         {
           "sourceId": "newsletter:stratechery",
-          "title": "Anthropic S-1, The Cost of Compute, Who Is Paying?",
-          "url": "https://stratechery.com/2026/anthropic-s-1-the-cost-of-compute-who-is-paying/",
-          "publishedAt": "2026-10-27T10:32:57.000Z",
-          "guid": "https://stratechery.com/?p=20583",
+          "title": "Sharp Tech on Video: Anthropic&#8217;s S-1 and What It Means for Meta and Muse, You Can See Everything, and Brewers!",
+          "url": "https://stratechery.com/2026/sharp-tech-on-video-anthropics-s-1-and-what-it-means-for-meta-and-muse-you-can-see-everything-and-brewers/",
+          "publishedAt": "2026-10-30T10:00:00.000Z",
+          "guid": "https://stratechery.com/?p=20681",
           "source": "Stratechery (Ben Thompson)",
           "language": "en"
         }
