@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-30T13:00:45.429Z",
+  "generatedAt": "2026-10-31T12:39:19.918Z",
   "lookbackHours": 168,
   "papers": [
     {
@@ -14,339 +14,54 @@
       "items": [
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "WebAnything: From the Wild Web to Scalable Agent Environments",
-          "url": "https://arxiv.org/abs/2610.37786",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37786v1",
+          "title": "The Anatomy of Socio-Demographics in Pluralistic Offensiveness Modeling: When and Where It Helps, and the Role of Reasoning",
+          "url": "https://arxiv.org/abs/2610.37896",
+          "publishedAt": "2026-10-31T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.37896v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "What Does an Ontology Catch? Curated, LLM-Generated and Data-Derived Ontologies as Checkers of LLM Agents over Knowledge Graphs",
-          "url": "https://arxiv.org/abs/2610.37809",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37809v1",
+          "title": "FilingLoop: Evaluating and Evolving LLM Agents for Corporate Disclosure Review and Revision",
+          "url": "https://arxiv.org/abs/2610.37905",
+          "publishedAt": "2026-10-31T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.37905v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Measuring Where Intent Gets Lost in Agentic Smart Contract Synthesis",
-          "url": "https://arxiv.org/abs/2610.37830",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37830v1",
+          "title": "SciGame: Let Agents Play the Scientific Discovery Games in the Real and Counterfactual World",
+          "url": "https://arxiv.org/abs/2610.37919",
+          "publishedAt": "2026-10-31T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.37919v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Detecting Covert Collusion between AI Agents through Partner-Outsider Positive Listening",
-          "url": "https://arxiv.org/abs/2610.37849",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37849v1",
+          "title": "GARDEN: Generalist Autonomous Reward Design Through Evidence Navigation for Cooperative Multi-Agent Reinforcement Learning",
+          "url": "https://arxiv.org/abs/2610.37926",
+          "publishedAt": "2026-10-31T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.37926v1",
           "source": "arXiv cs.AI",
           "language": "en"
         },
         {
           "sourceId": "academic:arxiv-cs-ai",
-          "title": "Evaluating and improving AI agents for sequencing protocol understanding",
-          "url": "https://arxiv.org/abs/2610.37851",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37851v1",
+          "title": "SkillMem: Compact External Skill Memory for Latent Multi-Agent Reasoning",
+          "url": "https://arxiv.org/abs/2610.37935",
+          "publishedAt": "2026-10-31T04:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.37935v1",
           "source": "arXiv cs.AI",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-cl",
-      "source": "arXiv cs.CL",
-      "url": "https://arxiv.org/list/cs.CL/recent",
-      "tags": [
-        "academic",
-        "nlp",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "The FlightFinder Occurrence Corpus: harmonising 128 aviation-safety source codes into one deduplicated cross-national accident dataset",
-          "url": "https://arxiv.org/abs/2610.37671",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37671v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "Exposure Is Not Commitment: Double-Stratified Evaluation of Latent Monitors for Tool-Using Agents",
-          "url": "https://arxiv.org/abs/2610.37679",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37679v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "Supervised Fine-Tuning for Reasoning Large Language Models: A Survey",
-          "url": "https://arxiv.org/abs/2610.37681",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37681v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "Rank-Aware Differentially Private Release of Listwise Preferences for LLM Alignment",
-          "url": "https://arxiv.org/abs/2610.37682",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37682v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cl",
-          "title": "From Geometry to Behavior: How Instruction Exposure Unlocks Latent Rhetorical Directions in LLMs",
-          "url": "https://arxiv.org/abs/2610.37685",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37685v1",
-          "source": "arXiv cs.CL",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-cr",
-      "source": "arXiv cs.CR (AI Security)",
-      "url": "https://arxiv.org/list/cs.CR/recent",
-      "tags": [
-        "academic",
-        "security",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "Generation, Not Selection: LLM Proposals for Certified Access-Control Policy Mining",
-          "url": "https://arxiv.org/abs/2610.37716",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37716v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "FVH-Bench: Evaluating Image Generator Safety Beyond Overtly Harmful Imagery",
-          "url": "https://arxiv.org/abs/2610.37722",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37722v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "When Skills Tell Agents Not to Ask: A Large-Scale Study of Oversight Directives in Agent Skills",
-          "url": "https://arxiv.org/abs/2610.37734",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37734v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "Poisoned Skills: Propagating Jailbreaks Through Agent Markdown Files",
-          "url": "https://arxiv.org/abs/2610.37738",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37738v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cr",
-          "title": "Agentic Backdoors via Pretraining Poisoning",
-          "url": "https://arxiv.org/abs/2610.37741",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37741v1",
-          "source": "arXiv cs.CR (AI Security)",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-cv",
-      "source": "arXiv cs.CV",
-      "url": "https://arxiv.org/list/cs.CV/recent",
-      "tags": [
-        "academic",
-        "vision",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "PairCLIP-SWA: Similarity-Guided Balancing and Stochastic Weight Averaging for Generalized Deepfake Image Detection with OpenCLIP",
-          "url": "https://arxiv.org/abs/2610.37874",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37874v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "Venus-DefakerOne2: A Vision-Forensics Foundation Model with Broader Coverage",
-          "url": "https://arxiv.org/abs/2610.37918",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37918v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "Hierarchical Diffusion for Camera-controlled Autoregressive Video Generation",
-          "url": "https://arxiv.org/abs/2610.37983",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37983v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "Where Can We Fool the Model's Mind? Response-Guided Semantic Probing and Adaptive Routing for Transferable Attacks on Black-Box MLLMs",
-          "url": "https://arxiv.org/abs/2610.38013",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.38013v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-cv",
-          "title": "Classifying Urban Locations by Cyclist Facility Usage and Directional Alignment: A Validated Camera-Based Framework from Multi-Site Observations",
-          "url": "https://arxiv.org/abs/2610.38045",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.38045v1",
-          "source": "arXiv cs.CV",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-lg",
-      "source": "arXiv cs.LG",
-      "url": "https://arxiv.org/list/cs.LG/recent",
-      "tags": [
-        "academic",
-        "ml",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "What a Weight Update Buys: Leverage Across Training Stages",
-          "url": "https://arxiv.org/abs/2610.37719",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37719v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Improving Data-Constrained Scaling with Hyperparameter Transfer and Ensembling",
-          "url": "https://arxiv.org/abs/2610.37842",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37842v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Self-Supervised Latent Action-Conditioned World Modeling for Time Series",
-          "url": "https://arxiv.org/abs/2610.37963",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37963v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Sometimes less is more: Investigating inductive biases of MLPs and Transformers on noisy k-parity features",
-          "url": "https://arxiv.org/abs/2610.37976",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37976v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-lg",
-          "title": "Preserving Safety During Sequential Fine-Tuning: A Factorial and Geometric Analysis of Replay",
-          "url": "https://arxiv.org/abs/2610.38001",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.38001v1",
-          "source": "arXiv cs.LG",
-          "language": "en"
-        }
-      ]
-    },
-    {
-      "sourceId": "academic:arxiv-cs-ro",
-      "source": "arXiv cs.RO",
-      "url": "https://arxiv.org/list/cs.RO/recent",
-      "tags": [
-        "academic",
-        "robotics",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "Echo: Scaling Visual Reinforcement Learning with Off-policy Experience",
-          "url": "https://arxiv.org/abs/2610.37865",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37865v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "When More Planning Hurts: Learned Planners for World Models",
-          "url": "https://arxiv.org/abs/2610.37891",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37891v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "Active Constraints for Simultaneous Guidance and Safety in Handheld Micromanipulation",
-          "url": "https://arxiv.org/abs/2610.37981",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37981v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "Compositional Diffusion Planning with Chunk Selection and Reachability Measure",
-          "url": "https://arxiv.org/abs/2610.38291",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.38291v1",
-          "source": "arXiv cs.RO",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ro",
-          "title": "CSO: Refining Robotic Policies via Skill Distribution Alignment and Skill-Grained Optimization",
-          "url": "https://arxiv.org/abs/2610.38357",
-          "publishedAt": "2026-10-30T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.38357v1",
-          "source": "arXiv cs.RO",
           "language": "en"
         }
       ]
     }
   ],
   "stats": {
-    "sources": 6
+    "sources": 1
   },
   "schemaVersion": "1.0"
 }

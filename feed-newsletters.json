@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-30T13:00:45.429Z",
+  "generatedAt": "2026-10-31T12:39:19.918Z",
   "lookbackHours": 72,
   "newsletters": [
     {
@@ -14,10 +14,10 @@
       "items": [
         {
           "sourceId": "newsletter:stratechery",
-          "title": "Sharp Tech on Video: Anthropic&#8217;s S-1 and What It Means for Meta and Muse, You Can See Everything, and Brewers!",
-          "url": "https://stratechery.com/2026/sharp-tech-on-video-anthropics-s-1-and-what-it-means-for-meta-and-muse-you-can-see-everything-and-brewers/",
-          "publishedAt": "2026-10-30T10:00:00.000Z",
-          "guid": "https://stratechery.com/?p=20681",
+          "title": "2026.44: At Long Last&#8230;",
+          "url": "https://stratechery.com/2026/at-long-last/",
+          "publishedAt": "2026-10-30T17:00:00.000Z",
+          "guid": "https://stratechery.com/?p=20650",
           "source": "Stratechery (Ben Thompson)",
           "language": "en"
         }

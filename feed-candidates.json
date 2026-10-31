@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-30T13:00:45.429Z",
+  "generatedAt": "2026-10-31T12:39:19.918Z",
   "initializedAt": "2026-09-06T00:00:00.000Z",
   "continuousHistorySince": "2026-09-06T00:00:00.000Z",
   "retention": {
@@ -23,7 +23,7 @@
       "channel": "academic",
       "sourceName": "arXiv cs.AI",
       "status": "ok",
-      "candidateCount": 44
+      "candidateCount": 49
     },
     {
       "sourceId": "academic:arxiv-cs-cl",
@@ -151,7 +151,7 @@
       "channel": "blogs",
       "sourceName": "Microsoft Research Blog",
       "status": "ok",
-      "candidateCount": 2
+      "candidateCount": 3
     },
     {
       "sourceId": "blog:minimax-blog",
@@ -211,7 +211,7 @@
       "channel": "newsletters",
       "sourceName": "Stratechery (Ben Thompson)",
       "status": "ok",
-      "candidateCount": 10
+      "candidateCount": 11
     },
     {
       "sourceId": "podcast:acquired",
@@ -546,17 +546,196 @@
       "channel": "zh-tech",
       "sourceName": "量子位",
       "status": "ok",
-      "candidateCount": 36
+      "candidateCount": 39
     },
     {
       "sourceId": "zh-tech:sspai",
       "channel": "zh-tech",
       "sourceName": "少数派",
       "status": "ok",
-      "candidateCount": 34
+      "candidateCount": 37
     }
   ],
   "candidates": [
+    {
+      "candidateId": "2bd925a94c877d04724bebe9db4e543eb8c5a0e37a6228c001eabb64f0e7251d",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/117960",
+      "canonicalUrl": "https://sspai.com/post/117960",
+      "title": "本月玩什么｜影之刃零、战争机器：事变日等",
+      "author": "少数派",
+      "publishedAt": "2026-10-31T05:29:19.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "本月玩什么｜影之刃零、战争机器：事变日等",
+      "contentTruncated": false,
+      "contentFingerprint": "89879031fc855dd1191a1959e5a36a5f77c2a1b293ecdf446ab0a637c071097a"
+    },
+    {
+      "candidateId": "cf61ca8871019370aea8a4eb8e5947c9cab10b2ddb82b9e6bd03c890c9c32f8f",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=506884",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/506884.html",
+      "title": "你的8G iPad里有12G内存！库克走了但他的刀法追着我砍",
+      "author": "量子位",
+      "publishedAt": "2026-10-31T05:17:50.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "你的8G iPad里有12G内存！库克走了但他的刀法追着我砍",
+      "contentTruncated": false,
+      "contentFingerprint": "fdfda3671a74350f5c0f425d6c7584de41d4bf6c2e52f62fb91476abf4bb8847"
+    },
+    {
+      "candidateId": "a531763e545ba1fa6bc7cabcae477c1d5fc1173a57351820c34352ba2002d5f3",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=506866",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/506866.html",
+      "title": "世界模型首次指导设计芯片！超大核NPU700TOPS，99%算力可用",
+      "author": "量子位",
+      "publishedAt": "2026-10-31T05:11:19.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "世界模型首次指导设计芯片！超大核NPU700TOPS，99%算力可用",
+      "contentTruncated": false,
+      "contentFingerprint": "41df7e3df568a45baadb90aca0e08023a42ae7ae081c165a8bb1d1283cb52c9a"
+    },
+    {
+      "candidateId": "cd91803bd19299fbac37ee653d605b09b8c5521e63862a9089f385902168954b",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=506855",
+      "canonicalUrl": "https://www.qbitai.com/2026/10/506855.html",
+      "title": "刚刚，Claude宣布取消5小时限制！首批Ultra用户已「解封」",
+      "author": "量子位",
+      "publishedAt": "2026-10-31T05:05:29.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "刚刚，Claude宣布取消5小时限制！首批Ultra用户已「解封」",
+      "contentTruncated": false,
+      "contentFingerprint": "24e0219177ed62be5383c400439fec01b17d9f6925a64a6eed42268c7361b58c"
+    },
+    {
+      "candidateId": "e6cf5bb274a5648f8dfb3e53f3fd217fb916169a78680aeb136d73456bb01775",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/117953",
+      "canonicalUrl": "https://sspai.com/post/117953",
+      "title": "一图流 | 一张图看懂中国版 Apple 智能",
+      "author": "少数派",
+      "publishedAt": "2026-10-31T04:10:39.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "一图流 | 一张图看懂中国版 Apple 智能",
+      "contentTruncated": false,
+      "contentFingerprint": "94630c5a649de70f72aa2a25ace153a30582874bc77f9f4b2d3ffd7e84a5f20c"
+    },
+    {
+      "candidateId": "11e008d6c5821ddd20680dc12400dfc75bb93f055c987540427835a2a5481b0e",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.37935v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.37935",
+      "title": "SkillMem: Compact External Skill Memory for Latent Multi-Agent Reasoning",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-31T04:00:00.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "SkillMem: Compact External Skill Memory for Latent Multi-Agent Reasoning",
+      "contentTruncated": false,
+      "contentFingerprint": "302928353bbdb113c664c0330ff3db6024e7e64f3407bab65f0c43e4b5b80f58"
+    },
+    {
+      "candidateId": "3ddec60f0d34462ab8d2e738c676fe6332789e8c67c0a4a9c847a606d4f2ad42",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.37919v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.37919",
+      "title": "SciGame: Let Agents Play the Scientific Discovery Games in the Real and Counterfactual World",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-31T04:00:00.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "SciGame: Let Agents Play the Scientific Discovery Games in the Real and Counterfactual World",
+      "contentTruncated": false,
+      "contentFingerprint": "9a5ad6ae9ab405181edfe1d6e4c0ed1af7c93bb0c5fdd169e26bcce7639fe584"
+    },
+    {
+      "candidateId": "ba9bbb2bba902e47184e931f884054f265223c123b20b1ed372fb963cfe04773",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.37896v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.37896",
+      "title": "The Anatomy of Socio-Demographics in Pluralistic Offensiveness Modeling: When and Where It Helps, and the Role of Reasoning",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-31T04:00:00.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "The Anatomy of Socio-Demographics in Pluralistic Offensiveness Modeling: When and Where It Helps, and the Role of Reasoning",
+      "contentTruncated": false,
+      "contentFingerprint": "2cfbae58eba78e4ac341d8c32acc42f8cb624a8b8736b37d2077922db2a29315"
+    },
+    {
+      "candidateId": "e4da542b860642f9a2d45d664f0c063d7415f6b523e75bfbc4aec8d42d1d0d8c",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.37905v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.37905",
+      "title": "FilingLoop: Evaluating and Evolving LLM Agents for Corporate Disclosure Review and Revision",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-31T04:00:00.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "FilingLoop: Evaluating and Evolving LLM Agents for Corporate Disclosure Review and Revision",
+      "contentTruncated": false,
+      "contentFingerprint": "ff7feda57e308d741a6f311f3b7d2d8177238800e60c6580797a7f760dbc6ec1"
+    },
+    {
+      "candidateId": "f792eaf1aa857f364316e87ebe47a6bf842d2218eb55e707527da6cd36e1e435",
+      "channel": "academic",
+      "sourceId": "academic:arxiv-cs-ai",
+      "sourceNativeId": "oai:arXiv.org:2610.37926v1",
+      "canonicalUrl": "https://arxiv.org/abs/2610.37926",
+      "title": "GARDEN: Generalist Autonomous Reward Design Through Evidence Navigation for Cooperative Multi-Agent Reinforcement Learning",
+      "author": "arXiv cs.AI",
+      "publishedAt": "2026-10-31T04:00:00.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "GARDEN: Generalist Autonomous Reward Design Through Evidence Navigation for Cooperative Multi-Agent Reinforcement Learning",
+      "contentTruncated": false,
+      "contentFingerprint": "60551f96465bf444dc9f325da317d6f7ed9c222c76026d3cc9368831ecb1a582"
+    },
+    {
+      "candidateId": "ee5d50940ad047a06ac172d0fd448b58956cd32574baf905a6dd734d31dd1e75",
+      "channel": "newsletters",
+      "sourceId": "newsletter:stratechery",
+      "sourceNativeId": "https://stratechery.com/?p=20650",
+      "canonicalUrl": "https://stratechery.com/2026/at-long-last",
+      "title": "2026.44: At Long Last&#8230;",
+      "author": "Stratechery (Ben Thompson)",
+      "publishedAt": "2026-10-30T17:00:00.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "2026.44: At Long Last&#8230;",
+      "contentTruncated": false,
+      "contentFingerprint": "bf229dd00888a74317bb0d243558bbede5e46cc67413be69efb0117d1901af2b"
+    },
+    {
+      "candidateId": "c3c7335f0511ac2dc960ff0431b28fdce475db41263e44d74e07657dcbc34181",
+      "channel": "blogs",
+      "sourceId": "blog:microsoft-research",
+      "canonicalUrl": "https://www.microsoft.com/en-us/research/blog/from-synthetic-enterprise-data-evaluations-to-real-microsoft-copilot-ai-confidence",
+      "title": "From synthetic enterprise data evaluations to real Microsoft Copilot AI confidence",
+      "author": "Brenda Potts",
+      "publishedAt": "2026-10-30T13:05:28.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "At a glance Evaluating Microsoft Copilot at enterprise scale requires test data that captures the full complexity of real organizations, yet real enterprise data contains sensitive information that cannot be used for evaluation under any circumstances. To resolve this tension, we built Industry Evaluation Data Generation Platform: full-scale synthetic enterprise environments grounded in publicly available real-world data sources such as O*NET occupational data, online job postings, and SEC filings. The synthetic environments mimic real business workflows, helping Microsoft find issues that generic benchmarks would miss. Safety and privacy are built into the platform by design. Every environment is fully synthetic and automated content-safety checks keep the generated data free of harmful or personally identifiable material. Every day, millions of knowledge workers around the world rely on Microsoft Copilot to draft documents, summarize meetings, surface relevant information, and accelerate productivity. Behind the scenes, this is powered by a network of AI systems, and ensuring they work as intended requires a thoughtful approach to evaluation. At Microsoft, we know that high performance doesn’t come from guesswork. It comes from testing, measuring, and iterating constantly. Healthcare organizations are constantly synthesizing safety signals from across teams so that they can make faster, better decisions that directly influence patient outcomes and regulatory confidence. They may ask Copilot to summarize a meeting and extract action items for their teams. Within seconds, Copilot delivers a structured summary citing specific discussion points from the transcript. But how do we ensure this response is accurate, complete, and properly grounded in the meeting content? This is where our evaluation system comes in. We’ve developed a structured evaluation strategy called Industry Evaluation Data Generation Platform , which includes industry specific evaluation datasets designed to test AI systems against realistic enterprise scenarios, grounded in three core pillars: Synthetic enterprise environments : simulated Microsoft Copilot environments with realistic users, meetings, emails, documents, and organizational structures that replicate the complexity of real organizations without using any customer data Automated query generation pipelines for rapid, reproducible creation of evaluation datasets Structured quality frameworks to ensure synthetic data meets the bar for meaningful evaluation Figure 1: Components of Industry Evaluation Data Generation Platform Together, these pillars help us answer two fundamental questions: Is Microsoft Copilot actually doing what our users need it to do, and can we prove it without ever touching their data ? In this blog post, we’ll walk through our evaluation system and processes, from synthetic environment generation to automated query pipelines, and how it all comes together to establish the first standardized evaluation baseline for Microsoft Copilot. Synthetic enterprise environments Evaluating enterprise AI requires test data that captures the full complexity of real organizations: reporting structures, project histories, communication patterns, and domain specific workflows. But real enterprise data contains sensitive information that cannot be used for evaluation under any circumstances. This is the central tension we set out to resolve. Rather than relying on small, manually curated test fixtures, we generate full scale synthetic environments : simulated enterprise workspaces, each with realistic organizational structures, communication histories, and work artifacts. In Microsoft terminology, each of these simulated workspaces is called a “tenant”. A tenant is an isolated organizational environment with its own users, data, and configurations. These environments are scalable baselines that teams and organizations can build off of however they want. They are designed to exhibit the same structural and behavioral properties that make enterprise AI evaluation meaningful. Grounding in real world signals To ensure our synthetic environments are realistic, we grounded them in publicly available real world data sources. O*NET data from the U.S. Department of Labor’s occupational database was used to make synthetic employee roles and responsibilities realistic, calibrate the mix and frequency of work activities assigned to different roles, and tailor industry specific workflows such as clinical trial reviews or portfolio updates. Online job postings provide realistic role titles, reporting hierarchies, and departmental compositions. SEC filings inform organizational scale, business unit structures, and financial contexts. All of these sources are publicly available and have been reviewed and approved by Microsoft’s legal and policy organization. Figure 2: Real signals from public datasets that are used to ground the evaluation data generation Importantly, these synthetic environments are not static snapshots. They simulate dynamic, time-evolving organizations with meeting histories, project timelines, email threads that develop over weeks, and organizational changes that unfold naturally. This temporal dimension is essential because a large class of Copilot queries are inherently time aware. Questions like “What did the team decide last Thursday?” or “What’s changed since the last quarterly review?” only produce meaningful evaluations if the underlying data has a genuine temporal structure. Industry specific simulation We generated three synthetic environments across multiple industries, each with distinct characteristics that mirror real world usage: A pharmaceutical environment that includes regulatory submission workflows, clinical trial discussions, and cross functional safety review meetings A capital markets environment featuring deal pipelines, compliance communications, and client portfolio reviews An IT/software company that simulates sprint planning, code review discussions, and product launch coordination Figure 3: Industries targeted for industry evaluation data generation This industry specificity ensures that our evaluation queries test Copilot against the kinds of questions real users in those domains actually ask, rather than relying on generic test cases that may not surface domain specific failure modes. Automated query generation While synthetic environments provide the substrate for evaluation, they face a key limitation: we still need realistic evaluation queries. These are the questions that test whether Copilot can surface the right information, synthesize it correctly, and present it helpfully. Manually writing thousands of grounded, industry specific queries is prohibitively expensive and slow. That’s where our automated pipeline comes in. The six-stage pipeline Figure 4: Query customization pipeline that turns generic query templates into realistic, industry-specific queries We built an automated pipeline that turns simple, generic query ideas into realistic, industry-specific questions for Copilot. It starts with a large library of common workplace tasks, narrows them down to what’s relevant for a given industry, and adapts them using domain-specific language and context. The system then uses AI to generate queries grounded in the synthetic environment’s data, rewrites them to sound more natural and human, and validates each one for accuracy and uniqueness. The result is a rich set of high-quality, lifelike queries that enable scalable and reliable evaluation of Copilot across real-world scenarios. Validating synthetic quality Of course, generating synthetic data is only part of the challenge. We also need to ensure the data is good enough to produce meaningful evaluations. We assess synthetic environment quality using our internal semantic evaluation framework which measures quality across three dimensions: Structural fidelity : Does the organizational structure reflect realistic reporting hierarchies, team sizes, and cross functional relationships? Contextual relevance : Are the queries and workflows representative of actual enterprise usage patterns? Behavioral realism : Do the simulated users exhibit human-like communication patterns and collaboration dynamics? Content safety : Is the generated content free of harmful, offensive, or personally identifiable material, and does it avoid impersonating real individuals? End-to-end automation While our synthetic environments and query pipelines provide the methodology, they face several practical limitations without proper automation, including: Reproducibility : Manual processes produce subtly different results each time, making it difficult to compare evaluations across releases. Scale : The number of industry verticals and configuration variants exceeds what any team can reasonably produce by hand. Iteration speed : Manual creation takes days, delaying essential feedback and slowing down development cycles. Cross-team consistency : Without standardized tooling, different teams produce evaluation datasets with incompatible formats and quality levels. This automation reduced evaluation dataset creation from a multi-day manual process to automated runs. We estimate savings of approximately $100,000 per evaluation dataset and $300,000 in total project savings. But the more important outcome is that any team can now regenerate an evaluation dataset from the same configuration and get identical results. Microsoft Research StorY OptiMind: When the system meets the floor A three‑month pilot in a Midwestern bottling plant shows what happens when AI moves beyond chat and into decision-making, where constraints shift, stakes are real, and answers must hold. Learn more Opens in a new tab Privacy and safety by design Enterprise grade evaluation demands more than good methodology. It requires a privacy posture that allows teams to move fast without compromising user trust. A non-negotiable design principle of our industry evaluation datasets is that no real customer data is used at any stage of the pipeline . Every element, from organizational structures to email content to meeting transcripts, is synthetically generated, with no customer data inputs. Because the data is both fully synthetic and safety-screened, teams can share and reuse it widely without introducing reputational, compliance, or Responsible AI risk. Our safeguards include privacy preserving aggregation techniques where real-world statistical distributions are referenced, expert legal review and approval of all public data sources, and clear data provenance and lineage tracking throughout the pipeline. This means teams across Microsoft can use these evaluation datasets freely for experimentation, benchmarking, and regression testing without privacy review overhead or data handling restrictions that would otherwise slow down iteration. The privacy design is not a constraint on the system. It is what makes broad adoption possible. Results and impact Since starting this project, we have observed significant improvements across multiple dimensions. On synthetic data quality , our internal scoring system showed significant quality gains in the structural, contextual, and statistical fidelity of the generated data. Across our composite quality metric (which measures how closely synthetic data mirrors the complexity and patterns of real enterprise environments), scores improved 39% compared to our initial generation approach. Some industry-specific environments reached quality scores above 0.9 out of 1.0, demonstrating that domain focused generation produces highly realistic evaluation environments. The improvements were obtained in part by incorporating realistic, industry signals and in part by automating quality improvements via key composite quality metrics that help improve the structural integrity, contextual coherence and statistical diversity of our synthetic industry environments. On scale and efficiency , each synthetic environment now contains hundreds of users with complete communication histories across three industry verticals. Evaluation dataset creation has gone from multi-day manual effort to automated pipeline runs. On organizational adoption , our industry evaluation data generation platforms have been published to an internal shared catalog for cross-team reuse and established as the first standardized evaluation baseline for Microsoft Copilot. The difference wasn’t just incremental. It was a shift in how teams approach evaluation: from ad hoc, manual processes to standardized, reproducible infrastructure. Conclusion As we continue to expand what Microsoft Copilot can do, from single turn Q&A to agentic multi-step workflows, our commitment to evaluation remains at the heart of our approach. In enterprise AI, quality isn’t just about accuracy or speed. It’s about trust. Organizations need confidence that AI systems handle their information correctly, and that confidence can only come from thorough, repeatable evaluation. That trust rests on two commitments woven through everything we build: rigorous privacy protection and proactive content safety. Looking ahead, Microsoft Copilot is tackling even more exciting evaluation challenges: How do we assess the quality of multi-turn agentic interactions? How do we extend synthetic environments to capture organizational dynamics evolving over months or years? How do we build evaluation frameworks for AI systems that take actions, not just generate text? These are the kinds of questions our team is working on next. At Microsoft, we’re not just building AI. We’re building the infrastructure to ensure it works reliably for every enterprise, in every industry, at every scale . Thanks to everyone who’s worked on Industry Evaluation Datasets ! Opens in a new tab Meet the authors Somya Chatterjee Learn more Harshita Sahijwani Applied Scientist 2 Learn more Min Chen Software Engineer 2 Learn more Sushmitha Rajeswari Muppa Software Engineer 2 Learn more Dayquan Julienne Product Manager 2 Learn more Irene Shaffer Principal Machine Learning PM Manager Learn more Chandra Inguva Principal Product Builder Learn more Jenny Chen Principal Applied Science Manager Learn more Minha Hwang Principal Applied Scientist Learn more Sam Ade Jacobs Principal Researcher Learn more Research Areas Artificial intelligence Data platforms and analytics",
+      "contentTruncated": false,
+      "contentFingerprint": "58c484578ac075049d3fe96a703bcca297641de26b40267e0a9ca342de1c0d1f"
+    },
     {
       "candidateId": "fe72d22d6c1b89d946c04554487238a2434705754486b181119c351c1317288e",
       "channel": "newsletters",
@@ -1111,6 +1290,21 @@
       "summarizationContent": "《久坐健康指南》作者、运动健康领域创作者阿帅装了啥？",
       "contentTruncated": false,
       "contentFingerprint": "25efab4934a17c7514f055d4dd86d6b01072566397defd56500dda999b5e575d"
+    },
+    {
+      "candidateId": "124c839e9666af9cfa4d3bbba8769d84d7eb33938ca5415f656908b1ab6875de",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/116435",
+      "canonicalUrl": "https://sspai.com/post/116435",
+      "title": "精确到秒的时间记录是怎样的？我的柳比歇夫法半年实践",
+      "author": "少数派",
+      "publishedAt": "2026-10-30T03:13:40.000Z",
+      "firstSeenAt": "2026-10-31T12:39:19.918Z",
+      "lastSeenAt": "2026-10-31T12:39:19.918Z",
+      "summarizationContent": "精确到秒的时间记录是怎样的？我的柳比歇夫法半年实践",
+      "contentTruncated": false,
+      "contentFingerprint": "b31d6094d7885c9bb3829af113046a39c3a651da557032f8fc075ed8d94d4fee"
     },
     {
       "candidateId": "88715c12268f37476ad4f3a28d47b02792163148b78f418ca38e959db07be7c1",
