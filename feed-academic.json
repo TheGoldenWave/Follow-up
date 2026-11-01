@@ -1,67 +1,9 @@
 {
-  "generatedAt": "2026-10-31T12:39:19.918Z",
+  "generatedAt": "2026-11-01T13:30:39.488Z",
   "lookbackHours": 168,
-  "papers": [
-    {
-      "sourceId": "academic:arxiv-cs-ai",
-      "source": "arXiv cs.AI",
-      "url": "https://arxiv.org/list/cs.AI/recent",
-      "tags": [
-        "academic",
-        "ai",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "The Anatomy of Socio-Demographics in Pluralistic Offensiveness Modeling: When and Where It Helps, and the Role of Reasoning",
-          "url": "https://arxiv.org/abs/2610.37896",
-          "publishedAt": "2026-10-31T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37896v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "FilingLoop: Evaluating and Evolving LLM Agents for Corporate Disclosure Review and Revision",
-          "url": "https://arxiv.org/abs/2610.37905",
-          "publishedAt": "2026-10-31T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37905v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "SciGame: Let Agents Play the Scientific Discovery Games in the Real and Counterfactual World",
-          "url": "https://arxiv.org/abs/2610.37919",
-          "publishedAt": "2026-10-31T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37919v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "GARDEN: Generalist Autonomous Reward Design Through Evidence Navigation for Cooperative Multi-Agent Reinforcement Learning",
-          "url": "https://arxiv.org/abs/2610.37926",
-          "publishedAt": "2026-10-31T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37926v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        },
-        {
-          "sourceId": "academic:arxiv-cs-ai",
-          "title": "SkillMem: Compact External Skill Memory for Latent Multi-Agent Reasoning",
-          "url": "https://arxiv.org/abs/2610.37935",
-          "publishedAt": "2026-10-31T04:00:00.000Z",
-          "guid": "oai:arXiv.org:2610.37935v1",
-          "source": "arXiv cs.AI",
-          "language": "en"
-        }
-      ]
-    }
-  ],
+  "papers": [],
   "stats": {
-    "sources": 1
+    "sources": 0
   },
   "schemaVersion": "1.0"
 }

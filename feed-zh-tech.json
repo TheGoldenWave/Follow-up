@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-31T12:39:19.918Z",
+  "generatedAt": "2026-11-01T13:30:39.488Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "你的8G iPad里有12G内存！库克走了但他的刀法追着我砍",
-          "url": "https://www.qbitai.com/2026/10/506884.html",
-          "publishedAt": "2026-10-31T05:17:50.000Z",
-          "guid": "https://www.qbitai.com/?p=506884",
+          "title": "Claude紧急叫停！暗改Harness禁止逆向游戏",
+          "url": "https://www.qbitai.com/2026/11/507038.html",
+          "publishedAt": "2026-11-01T13:09:55.000Z",
+          "guid": "https://www.qbitai.com/?p=507038",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "世界模型首次指导设计芯片！超大核NPU700TOPS，99%算力可用",
-          "url": "https://www.qbitai.com/2026/10/506866.html",
-          "publishedAt": "2026-10-31T05:11:19.000Z",
-          "guid": "https://www.qbitai.com/?p=506866",
+          "title": "清华姚期智团队新作：代数世界模型，让AI像牛顿一样思考",
+          "url": "https://www.qbitai.com/2026/11/507031.html",
+          "publishedAt": "2026-11-01T08:02:37.000Z",
+          "guid": "https://www.qbitai.com/?p=507031",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "刚刚，Claude宣布取消5小时限制！首批Ultra用户已「解封」",
-          "url": "https://www.qbitai.com/2026/10/506855.html",
-          "publishedAt": "2026-10-31T05:05:29.000Z",
-          "guid": "https://www.qbitai.com/?p=506855",
+          "title": "老牌便利店机器人售货折戟：实验室锤炼上万次，货架前还是摔瓶子",
+          "url": "https://www.qbitai.com/2026/11/506990.html",
+          "publishedAt": "2026-11-01T07:50:57.000Z",
+          "guid": "https://www.qbitai.com/?p=506990",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,28 +53,19 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "本月玩什么｜影之刃零、战争机器：事变日等",
-          "url": "https://sspai.com/post/117960",
-          "publishedAt": "2026-10-31T05:29:19.000Z",
-          "guid": "https://sspai.com/post/117960",
+          "title": "怀旧手记｜夏普 Telios：20 多年前，Handheld PC 中的「少数派」",
+          "url": "https://sspai.com/post/116991",
+          "publishedAt": "2026-11-01T07:02:46.000Z",
+          "guid": "https://sspai.com/post/116991",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "一图流 | 一张图看懂中国版 Apple 智能",
-          "url": "https://sspai.com/post/117953",
-          "publishedAt": "2026-10-31T04:10:39.000Z",
-          "guid": "https://sspai.com/post/117953",
-          "source": "少数派",
-          "language": "zh"
-        },
-        {
-          "sourceId": "zh-tech:sspai",
-          "title": "精确到秒的时间记录是怎样的？我的柳比歇夫法半年实践",
-          "url": "https://sspai.com/post/116435",
-          "publishedAt": "2026-10-30T03:13:40.000Z",
-          "guid": "https://sspai.com/post/116435",
+          "title": "派早报：全球首款 Android XR 有线眼镜 XREAL AURA 发售等",
+          "url": "https://sspai.com/post/117827",
+          "publishedAt": "2026-10-30T00:13:38.000Z",
+          "guid": "https://sspai.com/post/117827",
           "source": "少数派",
           "language": "zh"
         }

@@ -1,31 +1,9 @@
 {
-  "generatedAt": "2026-10-31T12:39:19.918Z",
+  "generatedAt": "2026-11-01T13:30:39.488Z",
   "lookbackHours": 72,
-  "newsletters": [
-    {
-      "sourceId": "newsletter:stratechery",
-      "source": "Stratechery (Ben Thompson)",
-      "url": "https://stratechery.com/",
-      "tags": [
-        "newsletter",
-        "tech-strategy",
-        "daily"
-      ],
-      "items": [
-        {
-          "sourceId": "newsletter:stratechery",
-          "title": "2026.44: At Long Last&#8230;",
-          "url": "https://stratechery.com/2026/at-long-last/",
-          "publishedAt": "2026-10-30T17:00:00.000Z",
-          "guid": "https://stratechery.com/?p=20650",
-          "source": "Stratechery (Ben Thompson)",
-          "language": "en"
-        }
-      ]
-    }
-  ],
+  "newsletters": [],
   "stats": {
-    "sources": 1
+    "sources": 0
   },
   "errors": [
     "RSS: Failed to fetch AI Snake Oil: HTTP 403",

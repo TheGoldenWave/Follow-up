@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-31T12:39:19.918Z",
+  "generatedAt": "2026-11-01T13:30:39.487Z",
   "initializedAt": "2026-09-06T00:00:00.000Z",
   "continuousHistorySince": "2026-09-06T00:00:00.000Z",
   "retention": {
@@ -546,17 +546,77 @@
       "channel": "zh-tech",
       "sourceName": "量子位",
       "status": "ok",
-      "candidateCount": 39
+      "candidateCount": 42
     },
     {
       "sourceId": "zh-tech:sspai",
       "channel": "zh-tech",
       "sourceName": "少数派",
       "status": "ok",
-      "candidateCount": 37
+      "candidateCount": 39
     }
   ],
   "candidates": [
+    {
+      "candidateId": "16a45725c533410a3b5b347a9b2d5325fbbf2cbf2f03cadddab45ad126fb6639",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=507038",
+      "canonicalUrl": "https://www.qbitai.com/2026/11/507038.html",
+      "title": "Claude紧急叫停！暗改Harness禁止逆向游戏",
+      "author": "量子位",
+      "publishedAt": "2026-11-01T13:09:55.000Z",
+      "firstSeenAt": "2026-11-01T13:30:39.487Z",
+      "lastSeenAt": "2026-11-01T13:30:39.487Z",
+      "summarizationContent": "Claude紧急叫停！暗改Harness禁止逆向游戏",
+      "contentTruncated": false,
+      "contentFingerprint": "2dfc0039e6f80206d0324ea1592ba54899e3b0d42ab31b0bb89e4b997ddd21b3"
+    },
+    {
+      "candidateId": "95bab6afa91d900490046488d31f742d6965de76398c630356d9678d62cb85f8",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=507031",
+      "canonicalUrl": "https://www.qbitai.com/2026/11/507031.html",
+      "title": "清华姚期智团队新作：代数世界模型，让AI像牛顿一样思考",
+      "author": "量子位",
+      "publishedAt": "2026-11-01T08:02:37.000Z",
+      "firstSeenAt": "2026-11-01T13:30:39.487Z",
+      "lastSeenAt": "2026-11-01T13:30:39.487Z",
+      "summarizationContent": "清华姚期智团队新作：代数世界模型，让AI像牛顿一样思考",
+      "contentTruncated": false,
+      "contentFingerprint": "23c1ae09d7cdc36c1c82bfa0d745f214b911e837d8d7c5d3a6333e27117a799b"
+    },
+    {
+      "candidateId": "b58f4d34eaedb2aa3e0f550701d37ea97a65b16672ff95a131603bb4cd2eccba",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:qbitai",
+      "sourceNativeId": "https://www.qbitai.com/?p=506990",
+      "canonicalUrl": "https://www.qbitai.com/2026/11/506990.html",
+      "title": "老牌便利店机器人售货折戟：实验室锤炼上万次，货架前还是摔瓶子",
+      "author": "量子位",
+      "publishedAt": "2026-11-01T07:50:57.000Z",
+      "firstSeenAt": "2026-11-01T13:30:39.487Z",
+      "lastSeenAt": "2026-11-01T13:30:39.487Z",
+      "summarizationContent": "老牌便利店机器人售货折戟：实验室锤炼上万次，货架前还是摔瓶子",
+      "contentTruncated": false,
+      "contentFingerprint": "8638688901c70e547200d80d27e5c921907ff6bd49689bbc6ee4f1a830f81f57"
+    },
+    {
+      "candidateId": "1873ecac20016987548e15cd175d8eec93e1208c6b100e48485971ca6c7d329f",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/116991",
+      "canonicalUrl": "https://sspai.com/post/116991",
+      "title": "怀旧手记｜夏普 Telios：20 多年前，Handheld PC 中的「少数派」",
+      "author": "少数派",
+      "publishedAt": "2026-11-01T07:02:46.000Z",
+      "firstSeenAt": "2026-11-01T13:30:39.487Z",
+      "lastSeenAt": "2026-11-01T13:30:39.487Z",
+      "summarizationContent": "怀旧手记｜夏普 Telios：20 多年前，Handheld PC 中的「少数派」",
+      "contentTruncated": false,
+      "contentFingerprint": "ce0805e29575465841f968ceb7c8de0501d5320b0644f9a9ca1bdfeccef4a3f5"
+    },
     {
       "candidateId": "2bd925a94c877d04724bebe9db4e543eb8c5a0e37a6228c001eabb64f0e7251d",
       "channel": "zh-tech",
@@ -1305,6 +1365,21 @@
       "summarizationContent": "精确到秒的时间记录是怎样的？我的柳比歇夫法半年实践",
       "contentTruncated": false,
       "contentFingerprint": "b31d6094d7885c9bb3829af113046a39c3a651da557032f8fc075ed8d94d4fee"
+    },
+    {
+      "candidateId": "6f62db6de6fb7b80a25f8603fc837a57a236071128465f73f5e3b984f3d8b15e",
+      "channel": "zh-tech",
+      "sourceId": "zh-tech:sspai",
+      "sourceNativeId": "https://sspai.com/post/117827",
+      "canonicalUrl": "https://sspai.com/post/117827",
+      "title": "派早报：全球首款 Android XR 有线眼镜 XREAL AURA 发售等",
+      "author": "少数派",
+      "publishedAt": "2026-10-30T00:13:38.000Z",
+      "firstSeenAt": "2026-11-01T13:30:39.487Z",
+      "lastSeenAt": "2026-11-01T13:30:39.487Z",
+      "summarizationContent": "派早报：全球首款 Android XR 有线眼镜 XREAL AURA 发售等",
+      "contentTruncated": false,
+      "contentFingerprint": "e3873fb9e9105e88f84bddee1bf0a4922437e2141cae025c17d5891771efc3f0"
     },
     {
       "candidateId": "88715c12268f37476ad4f3a28d47b02792163148b78f418ca38e959db07be7c1",
