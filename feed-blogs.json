@@ -1,9 +1,32 @@
 {
-  "generatedAt": "2026-11-01T13:30:39.488Z",
+  "generatedAt": "2026-11-02T16:03:00.843Z",
   "lookbackHours": 72,
-  "blogs": [],
+  "blogs": [
+    {
+      "source": "blog",
+      "sourceId": "blog:apple-ml-research",
+      "name": "Apple Machine Learning Research",
+      "title": "Online Dense Reinforcement Learning with Planning-Grounding Agent for UI Navigation on Live iOS Apps",
+      "url": "https://machinelearning.apple.com/research/planning-grounding-ui-navigation",
+      "publishedAt": "2026-11-02T00:00:00.000Z",
+      "author": "",
+      "description": "While frontier vision-language models demonstrate strong capabilities in user interface (UI) navigation, their high inference costs prohibit…",
+      "content": "research area Human-Computer Interaction , research area Methods and Algorithms content type paper published November 2026 Online Dense Reinforcement Learning with Planning-Grounding Agent for UI Navigation on Live iOS Apps Authors Peitong Duan*, Seyed Khashaiar Gatmiry*, Jeff Nichols, Emmanuel Abbe, Samy Bengio View publication Copy Bibtex While frontier vision-language models demonstrate strong capabilities in user interface (UI) navigation, their high inference costs prohibit everyday use. Conversely, smaller models trained via supervised fine-tuning (SFT) or offline reinforcement learning often memorize static trajectories, leading to brittle execution and an inability to recover from errors. To address these limitations, we propose a novel online reinforcement learning framework that trains UI navigation agents directly on live iOS applications. Our framework decouples the agent into two specialized components: a Planning agent and a UI Grounding model. We rely on an LLM-as-a-Judge to provide comprehensive reward signals, combining dense, step-level feedback to evaluate intermediate progress with a terminal reward for overall task completion. To effectively leverage this dual reward structure, we optimize the agent using Proximal Policy Optimization (PPO) with step-level advantage estimation. Furthermore, we introduce GiGPPO, a novel neighbor-conditioned value estimation method that improves critic stability by leveraging reward signals from visually similar states across concurrent trajectories. To support this online training paradigm at scale, we introduce an efficient infrastructure that orchestrates hundreds of concurrent virtual iOS devices. Evaluations on rigorous benchmarks, including UINavBench, iOSWorld, and AndroidWorld, demonstrate that our online RL trained agents substantially outperform both SFT and terminal-only RL baselines while accelerating training convergence. Notably, our 8B RL agents achieve nearly a sevenfold improvement over the SFT baseline in out-of-distribution generalization to Android environments, while outperforming Gemini-3.5-Flash and tying with Gemini-3.1-Pro on real iOS applications. * Equal contribution Related readings and updates. ILuvUI: Instruction-Tuned Language-Vision Modeling of UIs from Machine Conversations July 14, 2025 research area Human-Computer Interaction conference IUI Multimodal Vision-Language Models (VLMs) enable powerful applications from their fused understanding of images and language, but many perform poorly on UI tasks due to the lack of UI training data. In this paper, we adapt a recipe for generating paired text-image training data for VLMs to the UI domain by combining existing pixel-based methods with a Large Language Model (LLM). Unlike prior art, our method requires no human-provided annotations,… Read more From Interaction to Impact: Towards Safer AI Agents Through Understanding and Evaluating Mobile UI Operation Impacts June 30, 2025 research area Human-Computer Interaction conference IUI With advances in generative AI, there is increasing work towards creating autonomous agents that can manage daily tasks by operating user interfaces (UIs). While prior research has studied the mechanics of how AI agents might navigate UIs and understand UI structure, the effects of agents and their autonomous actions—particularly those that may be risky or irreversible—remain under-explored. In this work, we investigate the real-world impacts and… Read more Discover opportunities in Machine Learning. Our research in machine learning breaks new ground every day. Work with us"
+    },
+    {
+      "source": "blog",
+      "sourceId": "blog:ibm-research",
+      "name": "IBM Research Blog",
+      "title": "Ponder This Challenge - November 2026 - The SumSum",
+      "url": "https://research.ibm.com/blog/ponder-this-november-2026",
+      "publishedAt": "2026-10-31T23:00:00.000Z",
+      "author": "Gadi Aleksandrowicz",
+      "description": "",
+      "content": "The SumSum Given a finite sequence of length N N N , a 0 , a 1 , a 2 , … , a N − 1 a_0,a_1, a_2,\\ldots,a_{N-1} a 0 ​ , a 1 ​ , a 2 ​ , … , a N − 1 ​ , let's first remove the sequence's first element. We then define the sequence of the partial sums of its remaining elements as a 1 , a 1 + a 2 , a 1 + a 2 + a 3 , … , ∑ i = 1 N − 1 a i a_1, a_1+a_2,a_1+a_2+a_3, \\ldots ,\\sum_{i=1}^{N-1} a_i a 1 ​ , a 1 ​ + a 2 ​ , a 1 ​ + a 2 ​ + a 3 ​ , … , ∑ i = 1 N − 1 ​ a i ​ . For this sequence of length N−1, let's repeat the \"remove first element\" and \"generate new sequence from the partial sums\" operations to obtain sequences of length N − 2 , N − 3 , N − 4 , … , N − ( N − 1 ) N-2, N-3, N-4, \\ldots,N-(N-1) N − 2 , N − 3 , N − 4 , … , N − ( N − 1 ) until we end up with a one-element sequence. We call this element The SumSum of the original sequence. For example, given the 10-element sequence 1 , 2 , 3 , 4 , 5 , 6 , 7 , 8 , 9 , 10 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 1 , 2 , 3 , 4 , 5 , 6 , 7 , 8 , 9 , 10 , the SumSum of the sequence is 16,796. Your goal : For N = 10 10 N=10^{10} N = 1 0 10 and p = 10 10 + 19 p=10^{10}+19 p = 1 0 10 + 19 , find the SumSum modulo p p p of the sequence a 0 , … , a N − 1 a_0,\\ldots,a_{N-1} a 0 ​ , … , a N − 1 ​ defined by a i = ( N i ) a_i={N \\choose i} a i ​ = ( i N ​ ) . A Bonus \"*\" will be given for finding for N = 10 11 N=10^{11} N = 1 0 11 and p = 10 11 + 3 p=10^{11}+3 p = 1 0 11 + 3 the SumSum modulo p p p of the sequence given by a i = 13 i a_i = 13^i a i ​ = 1 3 i ."
+    }
+  ],
   "stats": {
-    "blogPosts": 0
+    "blogPosts": 2
   },
   "errors": [
     "Blog: Google DeepMind Blog: article: Invalid or underlength article content",

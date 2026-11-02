@@ -1,9 +1,352 @@
 {
-  "generatedAt": "2026-11-01T13:30:39.488Z",
+  "generatedAt": "2026-11-02T16:03:00.843Z",
   "lookbackHours": 168,
-  "papers": [],
+  "papers": [
+    {
+      "sourceId": "academic:arxiv-cs-ai",
+      "source": "arXiv cs.AI",
+      "url": "https://arxiv.org/list/cs.AI/recent",
+      "tags": [
+        "academic",
+        "ai",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "More Rules, Longer Lists? Benchmarking Self-Evolving Agents on a Hidden-Rule Curriculum",
+          "url": "https://arxiv.org/abs/2610.40758",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40758v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Beyond Plausible Prediction: Safety Sufficiency in Web World Models",
+          "url": "https://arxiv.org/abs/2610.40798",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40798v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Circumventing the Computational Hardness of Computational Arbitrage",
+          "url": "https://arxiv.org/abs/2610.40831",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40831v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Incongruence-Aware Evaluation of Multimodal Speech Emotion Recognition in Audio Large Language Models",
+          "url": "https://arxiv.org/abs/2610.40883",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40883v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ai",
+          "title": "Does Recursive Knowledge Construction Help Agents Verify Consensus Claims in Science?",
+          "url": "https://arxiv.org/abs/2610.40906",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40906v1",
+          "source": "arXiv cs.AI",
+          "language": "en"
+        }
+      ]
+    },
+    {
+      "sourceId": "academic:arxiv-cs-cl",
+      "source": "arXiv cs.CL",
+      "url": "https://arxiv.org/list/cs.CL/recent",
+      "tags": [
+        "academic",
+        "nlp",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "academic:arxiv-cs-cl",
+          "title": "Li$^{2}$SAO: Lifting Light Singl-Rollout Asynchronous RL Optimization via Group-Relative Actor-Critic Bootstrapping",
+          "url": "https://arxiv.org/abs/2610.40726",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40726v1",
+          "source": "arXiv cs.CL",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cl",
+          "title": "The Generative Gap Between Speculative Drafter and Continuous Diffusion Language Model",
+          "url": "https://arxiv.org/abs/2610.40847",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40847v1",
+          "source": "arXiv cs.CL",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cl",
+          "title": "Better Retrievers, Worse Labels: How Incomplete Relevance Judgments Distort Abstention Evaluation in Conversational RAG",
+          "url": "https://arxiv.org/abs/2610.40966",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40966v1",
+          "source": "arXiv cs.CL",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cl",
+          "title": "Language Models Show Conformity Bias in RAG: When the Majority Endorses a Poisoned Claim",
+          "url": "https://arxiv.org/abs/2610.41012",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.41012v1",
+          "source": "arXiv cs.CL",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cl",
+          "title": "S2TDR: Structured Multimodal Reconstruction for Sticker-Aware Dialogue Understanding",
+          "url": "https://arxiv.org/abs/2610.41176",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.41176v1",
+          "source": "arXiv cs.CL",
+          "language": "en"
+        }
+      ]
+    },
+    {
+      "sourceId": "academic:arxiv-cs-cr",
+      "source": "arXiv cs.CR (AI Security)",
+      "url": "https://arxiv.org/list/cs.CR/recent",
+      "tags": [
+        "academic",
+        "security",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "academic:arxiv-cs-cr",
+          "title": "PrivacyFlow: Privacy in AI Agents through Information Flow Analysis and Consequence-Aware Risk Management",
+          "url": "https://arxiv.org/abs/2610.40714",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40714v1",
+          "source": "arXiv cs.CR (AI Security)",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cr",
+          "title": "Characterizing LLM Agent Behaviors in Module Shadowing Environments",
+          "url": "https://arxiv.org/abs/2610.40716",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40716v1",
+          "source": "arXiv cs.CR (AI Security)",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cr",
+          "title": "MetaVul: Agentic Harness Discovery for Vulnerability Detection",
+          "url": "https://arxiv.org/abs/2610.40721",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40721v1",
+          "source": "arXiv cs.CR (AI Security)",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cr",
+          "title": "RiskyPy: Toward Model-Calibrated Prompt Generation for Joint Security and Functionality Evaluation of LLM-Generated Code",
+          "url": "https://arxiv.org/abs/2610.40735",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40735v1",
+          "source": "arXiv cs.CR (AI Security)",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cr",
+          "title": "Prevented is Not Protected: What Attack Success Rate Hides about RAG",
+          "url": "https://arxiv.org/abs/2610.40742",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40742v1",
+          "source": "arXiv cs.CR (AI Security)",
+          "language": "en"
+        }
+      ]
+    },
+    {
+      "sourceId": "academic:arxiv-cs-cv",
+      "source": "arXiv cs.CV",
+      "url": "https://arxiv.org/list/cs.CV/recent",
+      "tags": [
+        "academic",
+        "vision",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "academic:arxiv-cs-cv",
+          "title": "DyCraft: An Agentic System for Long-Horizon 4D Scene Generation",
+          "url": "https://arxiv.org/abs/2610.40754",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40754v1",
+          "source": "arXiv cs.CV",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cv",
+          "title": "Drone-PUR: From Visual Clue Discovery to Understanding and Reasoning in UAV Scenes",
+          "url": "https://arxiv.org/abs/2610.40801",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40801v1",
+          "source": "arXiv cs.CV",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cv",
+          "title": "Coupled or Independent? Fault Coupling in Agentic Medical Vision Systems",
+          "url": "https://arxiv.org/abs/2610.40913",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40913v1",
+          "source": "arXiv cs.CV",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cv",
+          "title": "Let LiDAR Decide Where to Look: Geometry-Measured Token Selection for Efficient Sparse Latent World Models",
+          "url": "https://arxiv.org/abs/2610.40935",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40935v1",
+          "source": "arXiv cs.CV",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-cv",
+          "title": "FieldGuideRAG: Image-Grounded GraphRAG for Fine-Grained Recognition with Vision-Language Models",
+          "url": "https://arxiv.org/abs/2610.40971",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40971v1",
+          "source": "arXiv cs.CV",
+          "language": "en"
+        }
+      ]
+    },
+    {
+      "sourceId": "academic:arxiv-cs-lg",
+      "source": "arXiv cs.LG",
+      "url": "https://arxiv.org/list/cs.LG/recent",
+      "tags": [
+        "academic",
+        "ml",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "academic:arxiv-cs-lg",
+          "title": "Don't Just Impute, Detect: Task-Aware Diffusion Pipelines for Edge Anomaly Detection",
+          "url": "https://arxiv.org/abs/2610.40732",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40732v1",
+          "source": "arXiv cs.LG",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-lg",
+          "title": "TSFLab: A Self-Improving Agent-Agnostic Workbench for Time Series Forecasting Research",
+          "url": "https://arxiv.org/abs/2610.40901",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40901v1",
+          "source": "arXiv cs.LG",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-lg",
+          "title": "No Channels Left Behind: Understanding Diffusion Acceleration through Residual Gates",
+          "url": "https://arxiv.org/abs/2610.40914",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40914v1",
+          "source": "arXiv cs.LG",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-lg",
+          "title": "On the Origin and Evolution of Training-Inference Mismatch in LLM Reinforcement Learning",
+          "url": "https://arxiv.org/abs/2610.40945",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40945v1",
+          "source": "arXiv cs.LG",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-lg",
+          "title": "Monte Carlo Random Walk Kernel",
+          "url": "https://arxiv.org/abs/2610.40956",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40956v1",
+          "source": "arXiv cs.LG",
+          "language": "en"
+        }
+      ]
+    },
+    {
+      "sourceId": "academic:arxiv-cs-ro",
+      "source": "arXiv cs.RO",
+      "url": "https://arxiv.org/list/cs.RO/recent",
+      "tags": [
+        "academic",
+        "robotics",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "academic:arxiv-cs-ro",
+          "title": "WorldBridge: Bridging Video and Action for Task Generalization in World Action Models",
+          "url": "https://arxiv.org/abs/2610.40748",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40748v1",
+          "source": "arXiv cs.RO",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ro",
+          "title": "CaPtain: A Pipeline for Post-Training Code-as-Policy Robot Agents",
+          "url": "https://arxiv.org/abs/2610.40799",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40799v1",
+          "source": "arXiv cs.RO",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ro",
+          "title": "Confidence-Modulated Safety Filtering for End-to-End Policies",
+          "url": "https://arxiv.org/abs/2610.40922",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.40922v1",
+          "source": "arXiv cs.RO",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ro",
+          "title": "TinyAstral: Transferring Self-Evolving Harnesses to Tiny Generalist Manipulation Agents",
+          "url": "https://arxiv.org/abs/2610.41216",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.41216v1",
+          "source": "arXiv cs.RO",
+          "language": "en"
+        },
+        {
+          "sourceId": "academic:arxiv-cs-ro",
+          "title": "Cross-Embodiment Motion Planning by Coupling Body-Agnostic World Model with Differentiable Ego-Dynamics",
+          "url": "https://arxiv.org/abs/2610.41330",
+          "publishedAt": "2026-11-02T05:00:00.000Z",
+          "guid": "oai:arXiv.org:2610.41330v1",
+          "source": "arXiv cs.RO",
+          "language": "en"
+        }
+      ]
+    }
+  ],
   "stats": {
-    "sources": 0
+    "sources": 6
   },
   "schemaVersion": "1.0"
 }

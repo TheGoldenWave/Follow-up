@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-01T13:30:39.488Z",
+  "generatedAt": "2026-11-02T16:03:00.843Z",
   "lookbackHours": 72,
   "articles": [
     {
@@ -14,28 +14,28 @@
       "items": [
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "Claude紧急叫停！暗改Harness禁止逆向游戏",
-          "url": "https://www.qbitai.com/2026/11/507038.html",
-          "publishedAt": "2026-11-01T13:09:55.000Z",
-          "guid": "https://www.qbitai.com/?p=507038",
+          "title": "顶级AI翻车的活儿，被这个新出的免费国产AI接住了！",
+          "url": "https://www.qbitai.com/2026/11/507277.html",
+          "publishedAt": "2026-11-02T13:36:41.000Z",
+          "guid": "https://www.qbitai.com/?p=507277",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "清华姚期智团队新作：代数世界模型，让AI像牛顿一样思考",
-          "url": "https://www.qbitai.com/2026/11/507031.html",
-          "publishedAt": "2026-11-01T08:02:37.000Z",
-          "guid": "https://www.qbitai.com/?p=507031",
+          "title": "从“能调用”到“敢托付”：仪电智算云 Token 工厂的三重可信",
+          "url": "https://www.qbitai.com/2026/11/507260.html",
+          "publishedAt": "2026-11-02T07:47:38.000Z",
+          "guid": "https://www.qbitai.com/?p=507260",
           "source": "量子位",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:qbitai",
-          "title": "老牌便利店机器人售货折戟：实验室锤炼上万次，货架前还是摔瓶子",
-          "url": "https://www.qbitai.com/2026/11/506990.html",
-          "publishedAt": "2026-11-01T07:50:57.000Z",
-          "guid": "https://www.qbitai.com/?p=506990",
+          "title": "OpenAI重写大模型法则，第一条：忠于人类！！",
+          "url": "https://www.qbitai.com/2026/11/507225.html",
+          "publishedAt": "2026-11-02T07:27:54.000Z",
+          "guid": "https://www.qbitai.com/?p=507225",
           "source": "量子位",
           "language": "zh"
         }
@@ -53,19 +53,28 @@
       "items": [
         {
           "sourceId": "zh-tech:sspai",
-          "title": "怀旧手记｜夏普 Telios：20 多年前，Handheld PC 中的「少数派」",
-          "url": "https://sspai.com/post/116991",
-          "publishedAt": "2026-11-01T07:02:46.000Z",
-          "guid": "https://sspai.com/post/116991",
+          "title": "派评 | 近期值得关注的 App",
+          "url": "https://sspai.com/post/118240",
+          "publishedAt": "2026-11-02T09:57:55.000Z",
+          "guid": "https://sspai.com/post/118240",
           "source": "少数派",
           "language": "zh"
         },
         {
           "sourceId": "zh-tech:sspai",
-          "title": "派早报：全球首款 Android XR 有线眼镜 XREAL AURA 发售等",
-          "url": "https://sspai.com/post/117827",
-          "publishedAt": "2026-10-30T00:13:38.000Z",
-          "guid": "https://sspai.com/post/117827",
+          "title": "TDS REVIEW｜Apple AirPods 5 半入耳降噪真无线耳机体验",
+          "url": "https://sspai.com/post/118122",
+          "publishedAt": "2026-11-02T07:00:00.000Z",
+          "guid": "https://sspai.com/post/118122",
+          "source": "少数派",
+          "language": "zh"
+        },
+        {
+          "sourceId": "zh-tech:sspai",
+          "title": "Xnip 十周年：长截图的新生，也是新的起点",
+          "url": "https://sspai.com/post/115662",
+          "publishedAt": "2026-11-02T03:00:41.000Z",
+          "guid": "https://sspai.com/post/115662",
           "source": "少数派",
           "language": "zh"
         }

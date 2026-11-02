@@ -1,9 +1,31 @@
 {
-  "generatedAt": "2026-11-01T13:30:39.488Z",
+  "generatedAt": "2026-11-02T16:03:00.843Z",
   "lookbackHours": 72,
-  "newsletters": [],
+  "newsletters": [
+    {
+      "sourceId": "newsletter:stratechery",
+      "source": "Stratechery (Ben Thompson)",
+      "url": "https://stratechery.com/",
+      "tags": [
+        "newsletter",
+        "tech-strategy",
+        "daily"
+      ],
+      "items": [
+        {
+          "sourceId": "newsletter:stratechery",
+          "title": "Google Earnings, Facebook Déjà Vu, The Agent Play",
+          "url": "https://stratechery.com/2026/google-earnings-facebook-deja-vu-the-agent-play/",
+          "publishedAt": "2026-11-02T11:00:00.000Z",
+          "guid": "https://stratechery.com/?p=20740",
+          "source": "Stratechery (Ben Thompson)",
+          "language": "en"
+        }
+      ]
+    }
+  ],
   "stats": {
-    "sources": 0
+    "sources": 1
   },
   "errors": [
     "RSS: Failed to fetch AI Snake Oil: HTTP 403",
